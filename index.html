@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- CSP: запрещаем любые внешние подключения и запросы -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self';">
+    <title>Аналитика</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="top-bar" id="topBar">
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('all', this)">Все</div>
+        <div class="tab" onclick="switchTab('aug', this)">Гимнастки август</div>
+        <div class="tab" onclick="switchTab('prep', this)">Гимнастика. Подготовка выступлений</div>
+        <div class="tab" onclick="switchTab('prop', this)">Гимнастки разметка с предметом</div>
+    </div>
+</header>
+
+<div class="main-container">
+    <aside class="sidebar" id="sidebar">
+        <button class="nav-icon active" onclick="switchMenu('main', this)" title="Главная">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        </button>
+        <button class="nav-icon" onclick="switchMenu('errors', this)" title="Топ ошибок">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        </button>
+        <button class="nav-icon" onclick="switchMenu('feedback', this)" title="Обратная связь">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        </button>
+        <button class="nav-icon" onclick="switchMenu('data', this)" title="Управление данными">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        </button>
+    </aside>
+
+    <main class="content">
+
+        <section id="section-data" class="section">
+            <h2 style="margin-bottom: 20px;">Управление данными</h2>
+            <p style="color: var(--muted); margin-bottom: 20px;">Загружайте исходные файлы, импортируйте резервные копии или выгружайте результаты.</p>
+
+            <div class="card">
+                <div class="toolbar">
+                    <label class="file-btn" for="fileInput">📂 Загрузить Excel (исходники)</label>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" multiple>
+                    <button class="secondary" id="btnExport">💾 Экспорт в Excel</button>
+                    <label class="file-btn secondary" for="importInput">📥 Импорт из Excel</label>
+                    <input type="file" id="importInput" accept=".xlsx,.xls">
+                    <button class="success" id="btnGenerateReport">📄 Скачать HTML-отчет</button>
+                    <button class="secondary" id="btnRelink">🔄 Пересчитать</button>
+                    <button class="danger" id="btnClear">🗑 Очистить всё</button>
+                </div>
+
+                <div class="progress-wrap">
+                    <div class="progress-header">
+                        <span id="progressTitle">Готово</span>
+                        <span class="pct" id="progressPct">0%</span>
+                    </div>
+                    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+                    <div class="progress-stage" id="progressStage" style="font-size:0.75rem; color:var(--muted); margin-top:4px;"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px;">Формирование фидбека</h3>
+                <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                    <div class="filter-group" style="margin-bottom: 0; min-width: 300px;">
+                        <label>Выберите пулы</label>
+                        <div class="multi-select" id="msFbPool">
+                            <div class="ms-header" onclick="toggleDropdown('msFbPool')">
+                                <span class="ms-label empty" id="msFbPool_label">Все пулы</span>
+                                <span class="ms-arrow">▼</span>
+                            </div>
+                            <div class="ms-dropdown" id="msFbPool_dropdown">
+                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                <label class="ms-item ms-all"><input type="checkbox" id="msFbPool_all" onchange="toggleAll('msFbPool', 'feedbackPool')"> Выбрать все</label>
+                                <div id="msFbPool_options"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="success" id="btnGenerateFeedback" style="height: 38px;">Фидбек</button>
+                </div>
+            </div>
+
+            <div class="log" id="logBox"></div>
+        </section>
+
+        <section id="section-main" class="section active">
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Пул</label>
+                    <div class="multi-select" id="msPool">
+                        <div class="ms-header" onclick="toggleDropdown('msPool')">
+                            <span class="ms-label empty" id="msPool_label">Все пулы</span>
+                            <span class="ms-arrow">▼</span>
+                        </div>
+                        <div class="ms-dropdown" id="msPool_dropdown">
+                            <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                            <label class="ms-item ms-all"><input type="checkbox" id="msPool_all" onchange="toggleAll('msPool', 'pool')"> Выбрать все</label>
+                            <div id="msPool_options"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>Почта разметчика</label>
+                    <div class="multi-select" id="msMarker">
+                        <div class="ms-header" onclick="toggleDropdown('msMarker')">
+                            <span class="ms-label empty" id="msMarker_label">Все</span>
+                            <span class="ms-arrow">▼</span>
+                        </div>
+                        <div class="ms-dropdown" id="msMarker_dropdown">
+                            <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                            <label class="ms-item ms-all"><input type="checkbox" id="msMarker_all" onchange="toggleAll('msMarker', 'marker')"> Выбрать все</label>
+                            <div id="msMarker_options"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>Итог</label>
+                    <div class="multi-select" id="msResult">
+                        <div class="ms-header" onclick="toggleDropdown('msResult')">
+                            <span class="ms-label empty" id="msResult_label">Все</span>
+                            <span class="ms-arrow">▼</span>
+                        </div>
+                        <div class="ms-dropdown" id="msResult_dropdown">
+                            <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                            <label class="ms-item ms-all"><input type="checkbox" id="msResult_all" onchange="toggleAll('msResult', 'result')"> Выбрать все</label>
+                            <div id="msResult_options"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-group"><label>Дата с</label><input type="date" id="filterDateFrom"></div>
+                <div class="filter-group"><label>Дата по</label><input type="date" id="filterDateTo"></div>
+                <button id="btnResetFilters" style="height:38px; margin-bottom:1px;">Сбросить</button>
+            </div>
+
+            <div class="kpi-row">
+                <div class="kpi-card"><div class="label">Всего размеченных фрагментов</div><div class="value" id="kpiTotalFragments">0</div></div>
+                <div class="kpi-card"><div class="label">Разметчиков</div><div class="value" id="kpiTotalMarkers">0</div></div>
+                <div class="kpi-card"><div class="label">Ошибок</div><div class="value" id="kpiErrorsPercent">0%</div></div>
+                <div class="kpi-card"><div class="label">Качество</div><div class="value" id="kpiQuality">—</div></div>
+            </div>
+
+            <div class="table-card">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
+                            <th>Итог</th><th>Тип ошибки</th><th>Комментарий</th><th>Интервал</th>
+                            <th>Качество</th><th>Связь</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card"><h3>Среднее качество по разметчикам</h3><canvas id="chartQuality"></canvas></div>
+                <div class="chart-card"><h3>Распределение типов ошибок</h3><canvas id="chartErrors"></canvas></div>
+                <div class="chart-card"><h3>Качество по пулам</h3><canvas id="chartPoolQuality"></canvas></div>
+                <div class="chart-card"><h3>Качество по дням</h3><canvas id="chartDayQuality"></canvas></div>
+                <div class="chart-card"><h3>Типы ошибок по разметчикам</h3><canvas id="chartErrorsByMarker"></canvas></div>
+                <div class="chart-card"><h3>Динамика по датам</h3><canvas id="chartTrend"></canvas></div>
+            </div>
+        </section>
+
+        <section id="section-errors" class="section">
+            <h2 style="margin-bottom: 20px;">Топ ошибок разметчиков</h2>
+            <div class="filters" style="margin-bottom: 15px;">
+                <div class="filter-group"><label>Дата с</label><input type="date" id="errFilterDateFrom" onchange="renderErrorsTable()"></div>
+                <div class="filter-group"><label>Дата по</label><input type="date" id="errFilterDateTo" onchange="renderErrorsTable()"></div>
+                <button onclick="document.getElementById('errFilterDateFrom').value=''; document.getElementById('errFilterDateTo').value=''; renderErrorsTable();" style="height:38px;">Сбросить даты</button>
+            </div>
+            <div class="table-card" style="max-height: 600px;">
+                <table id="errorsTable">
+                    <thead><tr><th>Почта разметчика</th><th>Процент совершения ошибок</th></tr></thead>
+                    <tbody id="errorsTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="section-feedback" class="section">
+            <h2 style="margin-bottom: 20px;">Обратная связь</h2>
+            <div class="card" style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px;">Добавить запись</h3>
+                <div class="form-grid">
+                    <div class="form-group"><label>Разметчик</label><select id="fbMarker"></select></div>
+                    <div class="form-group"><label>Дата</label><input type="date" id="fbDate"></div>
+                    <div class="form-group">
+                        <label>Статус</label>
+                        <select id="fbStatus">
+                            <option value="Запланирована">Запланирована</option>
+                            <option value="Отменена">Отменена</option>
+                            <option value="Перенесена">Перенесена</option>
+                            <option value="Проведена">Проведена</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Тип ВКС</label>
+                        <select id="fbType">
+                            <option value="Общее обучение">Общее обучение</option>
+                            <option value="Индивидуальное обучение">Индивидуальное обучение</option>
+                            <option value="Общая ОС">Общая ОС</option>
+                            <option value="Индивидуальная ОС">Индивидуальная ОС</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Провел</label>
+                        <input type="text" id="fbConductor" list="conductorsList" placeholder="Введите или выберите">
+                        <datalist id="conductorsList"></datalist>
+                    </div>
+                    <div class="filter-group" style="margin-bottom:0;">
+                        <label>Пулы с ошибками</label>
+                        <div class="multi-select" id="msFbFormPools">
+                            <div class="ms-header" onclick="toggleDropdown('msFbFormPools')">
+                                <span class="ms-label empty" id="msFbFormPools_label">Выберите пулы</span>
+                                <span class="ms-arrow">▼</span>
+                            </div>
+                            <div class="ms-dropdown" id="msFbFormPools_dropdown">
+                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                <label class="ms-item ms-all"><input type="checkbox" id="msFbFormPools_all" onchange="toggleAll('msFbFormPools', 'fbFormPools')"> Выбрать все</label>
+                                <div id="msFbFormPools_options"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button id="btnAddFeedback" style="margin-top: 20px;">Добавить</button>
+            </div>
+
+            <div class="table-card">
+                <table id="fbTable">
+                    <thead>
+                        <tr>
+                            <th>Дата</th><th>Разметчик</th><th>Тип ВКС</th><th>Провел</th>
+                            <th>Статус</th><th>Пулы с ошибками</th><th>Ср. качество за период</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="fbTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- Локальные библиотеки (не CDN!) -->
+<script src="./xlsx.full.min.js"></script>
+<script src="./chart.umd.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
