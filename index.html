@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- CSP: запрещаем любые внешние подключения и запросы -->
     <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self';">
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self';">
     <title>Аналитика</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
     <link rel="stylesheet" href="css/styles.css">
@@ -166,6 +166,26 @@
                 <div class="chart-card"><h3>Типы ошибок по разметчикам</h3><canvas id="chartErrorsByMarker"></canvas></div>
                 <div class="chart-card"><h3>Динамика по датам</h3><canvas id="chartTrend"></canvas></div>
             </div>
+
+            <!-- ▼▼▼ НОВЫЙ БЛОК: Обратная связь на главной ▼▼▼ -->
+            <h2 style="margin-top: 40px; margin-bottom: 20px;">Обратная связь</h2>
+            <div class="table-card">
+                <table id="fbTableHome">
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Разметчик</th>
+                            <th>Тип ВКС</th>
+                            <th>Провел</th>
+                            <th>Статус</th>
+                            <th>Пулы с ошибками</th>
+                            <th>Ср. качество за период</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fbTableBodyHome"></tbody>
+                </table>
+            </div>
+            <!-- ▲▲▲ КОНЕЦ НОВОГО БЛОКА ▲▲▲ -->
         </section>
 
         <section id="section-errors" class="section">
@@ -248,8 +268,10 @@
 </div>
 
 <!-- Локальные библиотеки (не CDN!) -->
-<script src="./xlsx.full.min.js"></script>
-<script src="./chart.umd.min.js"></script>
+<script src="./xlsx.full.min.js"
+        onerror="console.error('❌ xlsx.full.min.js не найден. Проверьте, что файл лежит в корне репозитория.')"></script>
+<script src="./chart.umd.min.js"
+        onerror="console.error('❌ chart.umd.min.js не найден. Проверьте, что файл лежит в корне репозитория.')"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
