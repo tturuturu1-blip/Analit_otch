@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
 import { formatDate, updateLabel, escapeHtml, destroyChart } from './utils.js';
-import { renderFeedbackTable } from './feedback.js';
+import { renderFeedbackTable, renderFeedbackTableHome } from './feedback.js';
 
 // ===== Навигация =====
 export function switchMenu(menuId, btn) {
@@ -86,7 +86,6 @@ export function populateMultiSelect(containerId, stateKey, values) {
     state.filterState[stateKey].clear();
     document.getElementById(containerId + '_all').checked = false;
 
-    // Более быстрый вариант — строковая сборка вместо создания DOM-узлов в цикле
     optionsContainer.innerHTML = values.map(val => {
         const safe = escapeHtml(val);
         return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onOptionChange('${containerId}', '${stateKey}', this.value, this.checked)"><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
@@ -105,7 +104,7 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
 }
 
-// ===== Обновление всей панели =====
+// ===== Обновление всей панели главной страницы =====
 export function triggerFilterUpdate() {
     if (state.currentMenu !== 'main') return;
     applyFilters();
@@ -117,6 +116,7 @@ export function triggerFilterUpdate() {
     buildErrorsByMarkerChart();
     buildTrendChart();
     buildTable();
+    renderFeedbackTableHome();   // ← таблица обратной связи на главной
 }
 
 // ===== KPI =====
@@ -155,7 +155,7 @@ export function updateKPI() {
 }
 
 // ===== Charts =====
-function _buildQualityChart() {
+export function buildQualityChart() {
     destroyChart(state.charts.quality);
     const byMarker = {};
     for (const r of state.filteredData) {
@@ -175,8 +175,6 @@ function _buildQualityChart() {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#2e1065' } }, x: { ticks: { color: '#2e1065' } } } }
     });
 }
-
-export function buildQualityChart() { _buildQualityChart(); }
 
 export function buildErrorChart() {
     destroyChart(state.charts.errors);
