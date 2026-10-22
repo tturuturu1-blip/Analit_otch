@@ -2,31 +2,43 @@ import { state, saveFeedbackToStorage } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel } from './utils.js';
 import { matchesTab } from './data.js';
 
-export function renderFeedbackTable() {
-    const tbody = document.getElementById('fbTableBody');
-    const markerSelect = document.getElementById('fbMarker');
-
-    const markers = [...new Set(state.processedData.map(r => r.marker).filter(Boolean))].sort();
-    markerSelect.innerHTML = markers.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
-
-    const conductors = [...new Set(state.feedbackData.map(f => f.conductor).filter(Boolean))].sort();
-    document.getElementById('conductorsList').innerHTML = conductors.map(c => `<option value="${escapeHtml(c)}">`).join('');
+// ===== Общий рендер строк таблицы обратной связи =====
+// tbodyId       — id контейнера <tbody>, куда рендерить
+// includeActions — true → добавить колонку с кнопками "Редактировать/Удалить"
+function renderFeedbackRows(tbodyId, includeActions) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
 
     const validMarkers = new Set(state.processedData.filter(matchesTab).map(r => r.marker));
-    const filteredFb = state.feedbackData.filter(f => state.currentTab === 'all' || validMarkers.has(f.marker));
+    const filteredFb = state.feedbackData.filter(f =>
+        state.currentTab === 'all' || validMarkers.has(f.marker)
+    );
 
     tbody.innerHTML = filteredFb
         .slice()
         .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .map((f, idx) => {
+        .map((f) => {
             const statusColor = f.status === 'Проведена' ? '#10b981'
                 : f.status === 'Отменена' ? '#ef4444'
-                : f.status === 'Перенесена' ? '#f59e0b' : '#1d9bf0';
+                : f.status === 'Перенесена' ? '#f59e0b'
+                : '#1d9bf0';
             const avgQText = f.avgQuality !== undefined && f.avgQuality !== null
-                ? (f.avgQuality * 100).toFixed(1) + '%' : '—';
-            // Индекс для удаления/редактирования берём из исходного массива,
-            // поэтому используем _originalIndex при сортировке
-            const realIdx = state.feedbackData.indexOf(f);
+                ? (f.avgQuality * 100).toFixed(1) + '%'
+                : '—';
+
+            let actionsCell = '';
+            if (includeActions) {
+                const realIdx = state.feedbackData.indexOf(f);
+                actionsCell = `<td style="text-align:right; white-space:nowrap;">
+                    <button class="icon-btn" onclick="editFeedback(${realIdx})" title="Редактировать">
+                        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                    </button>
+                    <button class="icon-btn danger" onclick="deleteFeedback(${realIdx})" title="Удалить">
+                        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                    </button>
+                </td>`;
+            }
+
             return `<tr>
                 <td>${escapeHtml(f.date || '')}</td>
                 <td>${escapeHtml(f.marker || '')}</td>
@@ -35,18 +47,41 @@ export function renderFeedbackTable() {
                 <td><span class="status-badge" style="background:${statusColor}20; color:${statusColor}">${escapeHtml(f.status)}</span></td>
                 <td>${escapeHtml(f.pools || '')}</td>
                 <td><b>${avgQText}</b></td>
-                <td style="text-align:right; white-space:nowrap;">
-                    <button class="icon-btn" onclick="editFeedback(${realIdx})" title="Редактировать">
-                        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                    </button>
-                    <button class="icon-btn danger" onclick="deleteFeedback(${realIdx})" title="Удалить">
-                        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                    </button>
-                </td>
+                ${actionsCell}
             </tr>`;
         }).join('');
 }
 
+// ===== Полная таблица на странице "Обратная связь" (с кнопками) =====
+// Дополнительно обновляет select разметчиков и datalist "Провел".
+// Также обновляет таблицу на главной, чтобы данные не разъезжались.
+export function renderFeedbackTable() {
+    const markerSelect = document.getElementById('fbMarker');
+    if (markerSelect) {
+        const markers = [...new Set(state.processedData.map(r => r.marker).filter(Boolean))].sort();
+        markerSelect.innerHTML = markers
+            .map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`)
+            .join('');
+    }
+
+    const conductorsList = document.getElementById('conductorsList');
+    if (conductorsList) {
+        const conductors = [...new Set(state.feedbackData.map(f => f.conductor).filter(Boolean))].sort();
+        conductorsList.innerHTML = conductors
+            .map(c => `<option value="${escapeHtml(c)}">`)
+            .join('');
+    }
+
+    renderFeedbackRows('fbTableBody', true);      // страница "Обратная связь"
+    renderFeedbackRows('fbTableBodyHome', false); // страница "Главная" (без кнопок)
+}
+
+// ===== Только таблица на главной (без кнопок) =====
+export function renderFeedbackTableHome() {
+    renderFeedbackRows('fbTableBodyHome', false);
+}
+
+// ===== Редактирование записи =====
 export function editFeedback(idx) {
     const f = state.feedbackData[idx];
     if (!f) return;
@@ -72,6 +107,7 @@ export function editFeedback(idx) {
     document.getElementById('btnAddFeedback').textContent = 'Сохранить';
 }
 
+// ===== Удаление записи =====
 export function deleteFeedback(idx) {
     if (!confirm('Удалить запись?')) return;
     state.feedbackData.splice(idx, 1);
@@ -79,6 +115,7 @@ export function deleteFeedback(idx) {
     renderFeedbackTable();
 }
 
+// ===== Добавление / сохранение записи =====
 function handleAddFeedback() {
     const marker = document.getElementById('fbMarker').value;
     const dateStr = document.getElementById('fbDate').value;
@@ -136,7 +173,7 @@ function handleAddFeedback() {
     updateLabel('msFbFormPools', 'fbFormPools');
 }
 
-// ===== Генерация фидбеков по пулам =====
+// ===== Генерация фидбеков по пулам (Excel) =====
 export async function generateFeedback() {
     const selectedPools = Array.from(state.filterState.feedbackPool);
     if (selectedPools.length === 0) {
@@ -183,7 +220,6 @@ export async function generateFeedback() {
 
         await new Promise(r => setTimeout(r, 300));
     }
-    // log() — импортируем динамически, чтобы не тянуть лишнюю зависимость
     const { log } = await import('./utils.js');
     log('Фидбеки сформированы (по файлу на пул)', false);
 }
