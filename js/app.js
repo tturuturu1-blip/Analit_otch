@@ -8,6 +8,7 @@ import { renderFeedbackTable, editFeedback, deleteFeedback, initFeedbackForm } f
 import {
     progressStartTimer, updateProgress, yieldToUI, log, formatDate
 } from './utils.js';
+import { generateHtmlReport } from './report.js';
 
 // ===== Экспорт функций в window (нужно для inline-обработчиков в HTML) =====
 Object.assign(window, {
@@ -44,7 +45,6 @@ document.getElementById('btnResetFilters').addEventListener('click', () => {
     state.filterState.pool.clear();
     state.filterState.marker.clear();
     state.filterState.result.clear();
-    // Импорт updateLabel через utils
     import('./utils.js').then(({ updateLabel }) => {
         updateLabel('msPool', 'pool');
         updateLabel('msMarker', 'marker');
@@ -65,7 +65,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
     e.target.value = '';
 });
 
-// ===== Экспорт =====
+// ===== Экспорт в Excel =====
 document.getElementById('btnExport').addEventListener('click', () => {
     if (!state.processedData.length && !state.feedbackData.length) {
         alert('Нет данных для экспорта');
@@ -163,7 +163,7 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.rawValidation = [];
     state.rawRecommendations = [];
     state.processedData = [];
-    try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) {}
+    try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
     triggerFilterUpdate();
     updateProgress(0, '', 'Готово');
 });
@@ -173,8 +173,17 @@ document.getElementById('btnRelink').addEventListener('click', () => {
     recomputeDashboard();
 });
 
-// ⚠️ Кнопка «Скачать HTML-отчет» (btnGenerateReport) — намеренно без обработчика
-// (по требованию: функционал отчёта отключён)
+// ===== Скачать HTML-отчёт =====
+document.getElementById('btnGenerateReport').addEventListener('click', async () => {
+    try {
+        log('Формирование HTML-отчёта...', false);
+        await generateHtmlReport();
+        log('HTML-отчёт сформирован и скачан', false);
+    } catch (err) {
+        log('Ошибка генерации отчёта: ' + err.message, true);
+        console.error(err);
+    }
+});
 
 // ===== Инициализация =====
 initFeedbackForm();
@@ -184,7 +193,7 @@ loadFeedbackFromStorage();
 if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length) {
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
-        try { triggerFilterUpdate(); } catch (e2) {}
+        try { triggerFilterUpdate(); } catch (e2) { /* ignore */ }
     });
 } else {
     triggerFilterUpdate();
