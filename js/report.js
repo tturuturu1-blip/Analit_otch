@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 
 // Генерирует автономный HTML-файл с дашбордом "Главная".
-// Табы проектов формируются динамически из state.processedData.
+// Иконка вкладки — эмодзи 📊 через SVG data-URL (работает при открытии file://).
 export async function generateHtmlReport() {
     if (state.processedData.length === 0 && state.feedbackData.length === 0) {
         alert('Нет данных для отчёта');
@@ -71,6 +71,7 @@ export async function generateHtmlReport() {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ГС PRO — Отчёт по валидации</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
 <style>${cssText}</style>
 </head>
 <body>
