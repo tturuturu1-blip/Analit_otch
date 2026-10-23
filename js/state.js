@@ -5,7 +5,10 @@ export const state = {
     rawMarkers: [],
     rawValidation: [],
     rawRecommendations: [],
-    rawFlatValidations: [],   // ← НОВОЕ: плоский формат (url задания, file_name, radio и т.п.)
+    rawFlatValidations: [],
+    rawSuperset1: [],
+    rawSuperset2: [],
+    rawSuperset3: [],
     processedData: [],
     filteredData: [],
     feedbackData: [],
@@ -20,6 +23,19 @@ export const state = {
         result: new Set(),
         feedbackPool: new Set(),
         fbFormPools: new Set()
+    },
+    superset: {
+        table1: [],
+        table2: [],
+        table3: [],
+        cards: [],
+        ballsCards: [],   // ← НОВОЕ: [{ project, avg }] — Факт баллов/час
+        prodCards: [],    // ← НОВОЕ: [{ project, avg }] — Кпроизв в час
+        norms: {
+            byProjectPool: {},
+            byProject: {},
+            globalAvg: null
+        }
     }
 };
 
@@ -29,7 +45,10 @@ export function saveToStorage() {
             m: state.rawMarkers,
             v: state.rawValidation,
             r: state.rawRecommendations,
-            f: state.rawFlatValidations
+            f: state.rawFlatValidations,
+            s1: state.rawSuperset1,
+            s2: state.rawSuperset2,
+            s3: state.rawSuperset3
         }));
     } catch (e) {
         console.error('Ошибка сохранения:', e.message);
@@ -46,6 +65,9 @@ export function loadFromStorage() {
                 state.rawValidation = Array.isArray(parsed.v) ? parsed.v : [];
                 state.rawRecommendations = Array.isArray(parsed.r) ? parsed.r : [];
                 state.rawFlatValidations = Array.isArray(parsed.f) ? parsed.f : [];
+                state.rawSuperset1 = Array.isArray(parsed.s1) ? parsed.s1 : [];
+                state.rawSuperset2 = Array.isArray(parsed.s2) ? parsed.s2 : [];
+                state.rawSuperset3 = Array.isArray(parsed.s3) ? parsed.s3 : [];
             }
         }
     } catch (e) {
@@ -53,6 +75,9 @@ export function loadFromStorage() {
         state.rawValidation = [];
         state.rawRecommendations = [];
         state.rawFlatValidations = [];
+        state.rawSuperset1 = [];
+        state.rawSuperset2 = [];
+        state.rawSuperset3 = [];
     }
 }
 
