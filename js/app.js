@@ -2,7 +2,8 @@ import { state, loadFromStorage, loadFeedbackFromStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
 import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
-    populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable, toggleRow
+    populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable, toggleRow,
+    buildProjectTabs
 } from './ui.js';
 import { renderFeedbackTable, editFeedback, deleteFeedback, initFeedbackForm } from './feedback.js';
 import {
@@ -17,9 +18,20 @@ Object.assign(window, {
     editFeedback, deleteFeedback
 });
 
+// ===== Делегирование кликов по табам проектов =====
+const projectTabsContainer = document.getElementById('projectTabs');
+if (projectTabsContainer) {
+    projectTabsContainer.addEventListener('click', (e) => {
+        const tabEl = e.target.closest('.tab');
+        if (!tabEl) return;
+        switchTab(tabEl.dataset.tab, tabEl);
+    });
+}
+
 // ===== Обновление UI после пересчёта данных =====
 window.addEventListener('app:data-updated', () => {
     populateAllMultiSelects();
+    buildProjectTabs();
     triggerFilterUpdate();
 });
 
@@ -164,6 +176,7 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.rawRecommendations = [];
     state.processedData = [];
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
+    buildProjectTabs();          // скрыть табы (0 проектов)
     triggerFilterUpdate();
     updateProgress(0, '', 'Готово');
 });
@@ -193,8 +206,10 @@ loadFeedbackFromStorage();
 if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length) {
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
+        buildProjectTabs();
         try { triggerFilterUpdate(); } catch (e2) { /* ignore */ }
     });
 } else {
+    buildProjectTabs();
     triggerFilterUpdate();
 }
