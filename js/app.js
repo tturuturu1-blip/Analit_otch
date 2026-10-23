@@ -3,9 +3,10 @@ import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
 import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
     populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable, toggleRow,
-    buildProjectTabs, renderMarkersTasksStatus
+    buildProjectTabs, renderMarkersTasksStatus, renderSupersetPage
 } from './ui.js';
 import { renderFeedbackTable, editFeedback, deleteFeedback, initFeedbackForm } from './feedback.js';
+import { buildSuperset } from './superset.js';
 import {
     progressStartTimer, updateProgress, yieldToUI, log, formatDate
 } from './utils.js';
@@ -30,10 +31,12 @@ if (projectTabsContainer) {
 
 // ===== Обновление UI после пересчёта данных =====
 window.addEventListener('app:data-updated', () => {
+    buildSuperset();
     populateAllMultiSelects();
     buildProjectTabs();
     renderMarkersTasksStatus();
     triggerFilterUpdate();
+    if (state.currentMenu === 'superset') renderSupersetPage();
 });
 
 // ===== Закрытие dropdown при клике вне =====
@@ -48,6 +51,7 @@ for (const id of ['filterDateFrom', 'filterDateTo']) {
     document.getElementById(id).addEventListener('change', triggerFilterUpdate);
 }
 
+// ===== Сброс фильтров =====
 document.getElementById('btnResetFilters').addEventListener('click', () => {
     document.getElementById('filterDateFrom').value = '';
     document.getElementById('filterDateTo').value = '';
@@ -134,6 +138,12 @@ document.getElementById('btnExport').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawRecommendations), "Рекомендации (сырые)");
         if (state.rawFlatValidations.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
+        if (state.rawSuperset1.length > 0)
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawSuperset1), "Суперсет 1 (сырые)");
+        if (state.rawSuperset2.length > 0)
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawSuperset2), "Суперсет 2 (сырые)");
+        if (state.rawSuperset3.length > 0)
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawSuperset3), "Суперсет 3 (сырые)");
 
         XLSX.writeFile(wb, `full_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
         log('Полный экспорт выполнен', false);
@@ -151,10 +161,14 @@ document.getElementById('importInput').addEventListener('change', (e) => {
         try {
             const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
             let parsedM = [], parsedV = [], parsedR = [], parsedF = [];
+            let parsedS1 = [], parsedS2 = [], parsedS3 = [];
             for (const name of wb.SheetNames) {
                 const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
                 const lower = name.toLowerCase();
-                if (lower.includes('flat') || lower.includes('плоск')) parsedF = json;
+                if (lower.includes('суперсет 1') || lower.includes('superset 1')) parsedS1 = json;
+                else if (lower.includes('суперсет 2') || lower.includes('superset 2')) parsedS2 = json;
+                else if (lower.includes('суперсет 3') || lower.includes('superset 3')) parsedS3 = json;
+                else if (lower.includes('flat') || lower.includes('плоск')) parsedF = json;
                 else if (lower.includes('marker') || lower.includes('разметчик')) parsedM = json;
                 else if (lower.includes('валидац') || lower.includes('valid')) parsedV = json;
                 else if (lower.includes('рекоменд') || lower.includes('recommend')) parsedR = json;
@@ -163,6 +177,9 @@ document.getElementById('importInput').addEventListener('change', (e) => {
             state.rawValidation = parsedV;
             state.rawRecommendations = parsedR;
             state.rawFlatValidations = parsedF;
+            state.rawSuperset1 = parsedS1;
+            state.rawSuperset2 = parsedS2;
+            state.rawSuperset3 = parsedS3;
             saveToStorage();
             await recomputeDashboard();
         } catch (err) {
@@ -180,11 +197,24 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.rawValidation = [];
     state.rawRecommendations = [];
     state.rawFlatValidations = [];
+    state.rawSuperset1 = [];
+    state.rawSuperset2 = [];
+    state.rawSuperset3 = [];
     state.processedData = [];
+    state.superset = {
+        table1: [],
+        table2: [],
+        table3: [],
+        cards: [],
+        ballsCards: [],
+        prodCards: [],
+        norms: { byProjectPool: {}, byProject: {}, globalAvg: null }
+    };
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
     buildProjectTabs();
     renderMarkersTasksStatus();
     triggerFilterUpdate();
+    if (state.currentMenu === 'superset') renderSupersetPage();
     updateProgress(0, '', 'Готово');
 });
 
@@ -210,14 +240,17 @@ initFeedbackForm();
 loadFromStorage();
 loadFeedbackFromStorage();
 
-if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length || state.rawFlatValidations.length) {
+if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length ||
+    state.rawFlatValidations.length || state.rawSuperset1.length || state.rawSuperset2.length || state.rawSuperset3.length) {
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
+        buildSuperset();
         buildProjectTabs();
         renderMarkersTasksStatus();
         try { triggerFilterUpdate(); } catch (e2) { /* ignore */ }
     });
 } else {
+    buildSuperset();
     buildProjectTabs();
     renderMarkersTasksStatus();
     triggerFilterUpdate();
