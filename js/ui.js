@@ -2,7 +2,12 @@ import { state } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
 import { formatDate, updateLabel, escapeHtml, destroyChart, getVal } from './utils.js';
 import { renderFeedbackTable, renderFeedbackTableHome } from './feedback.js';
+import {
+    applySupersetFilters, formatPeriod, getNormForDate, getNormsForPeriod,
+    addNormEntry, getTable1Config, getTable2Config, getTable3Config
+} from './superset.js';
 
+// ===== Навигация =====
 export function switchMenu(menuId, btn) {
     state.currentMenu = menuId;
     document.querySelectorAll('.nav-icon').forEach(b => b.classList.remove('active'));
@@ -18,7 +23,10 @@ export function switchMenu(menuId, btn) {
     if (menuId === 'main') triggerFilterUpdate();
     if (menuId === 'errors') renderErrorsTable();
     if (menuId === 'feedback') renderFeedbackTable();
-    if (menuId === 'superset') renderSupersetPage();
+    if (menuId === 'superset') {
+        applySupersetFilters();
+        renderSupersetPage();
+    }
 }
 
 export function switchTab(tabId, btn) {
@@ -138,6 +146,7 @@ export function renderMarkersTasksStatus() {
     container.style.display = 'block';
 }
 
+// ===== Multi-select =====
 export function toggleDropdown(id) {
     const dropdown = document.getElementById(id + '_dropdown');
     if (!dropdown) return;
@@ -223,6 +232,7 @@ export function triggerFilterUpdate() {
     renderFeedbackTableHome();
 }
 
+// ===== KPI =====
 export function updateKPI() {
     const uniqueFiles = new Set();
     let totalFragments = 0;
@@ -257,9 +267,7 @@ export function updateKPI() {
 
     const target = state.superset.norms.globalAvg;
     const targetEl = document.getElementById('kpiTargetQuality');
-    if (targetEl) {
-        targetEl.textContent = target != null ? target.toFixed(1) + '%' : '—';
-    }
+    if (targetEl) targetEl.textContent = target != null ? target.toFixed(1) + '%' : '—';
 }
 
 function targetLinesForLabels(labels) {
@@ -494,7 +502,6 @@ export function renderErrorsTable() {
                 <td style="padding-left: 30px;"><span class="toggle-icon">▶</span> ${escapeHtml(type)}</td>
                 <td>${typeRate.toFixed(2)}% <span style="color:var(--muted)">(${typeData.count})</span></td>
             </tr>`;
-
             let l3Html = '';
             const sortedPools = Object.keys(typeData.pools).sort((a, b) => typeData.pools[b].count - typeData.pools[a].count);
             sortedPools.forEach((pool, pIdx) => {
@@ -538,79 +545,273 @@ export function toggleRow(id, rowElement, event) {
     else { el.style.display = 'none'; if (icon) icon.classList.remove('open'); }
 }
 
-// ===== Суперсет =====
+// ============================================================
+// ============ СТРАНИЦА СУПЕРСЕТ ==============================
+// ============================================================
+
 export function renderSupersetPage() {
-    renderSupersetCards();
-    renderSupersetBallsCards();
-    renderSupersetProdCards();
+    renderSupersetProjectTabs();
+    renderSupersetFilters();
+    renderSupersetNormCard();
+    renderSupersetKPIs();
     renderSupersetTable1();
     renderSupersetTable2();
     renderSupersetTable3();
 }
 
-function renderSupersetCards() {
-    const container = document.getElementById('supersetCards');
+export function renderSupersetProjectTabs() {
+    const container = document.getElementById('supersetProjectTabs');
     if (!container) return;
-    const cards = state.superset.cards || [];
-    if (cards.length === 0) {
-        container.innerHTML = '<div class="kpi-card"><div class="label">Нет данных</div><div class="value">—</div></div>';
+
+    const projectSet = new Set();
+    for (const r of state.superset.table1) if (r.project) projectSet.add(r.project);
+    for (const r of state.superset.table2) if (r.project) projectSet.add(r.project);
+    for (const r of state.superset.table3) if (r.project) projectSet.add(r.project);
+    const projects = Array.from(projectSet).sort();
+
+    if (projects.length === 0) {
+        container.style.display = 'none';
+        container.innerHTML = '';
         return;
     }
-    container.innerHTML = cards.map(c => {
-        const pct = c.factQuality * 100;
-        let cls = '';
-        if (pct < 98) cls = 'target-low';
-        else if (pct < 99) cls = 'target-mid';
-        return `<div class="kpi-card ${cls}">
-            <div class="label">${escapeHtml(c.project)}</div>
-            <div class="value">${pct.toFixed(1)}%</div>
-        </div>`;
+
+    if (state.superset.filters.project !== 'all' && !projects.includes(state.superset.filters.project)) {
+        state.superset.filters.project = 'all';
+    }
+
+    container.style.display = 'flex';
+    let html = '<div class="tab ' + (state.superset.filters.project === 'all' ? 'active' : '') + '" data-project="all">Все</div>';
+    for (const p of projects) {
+        const safe = escapeHtml(p);
+        const active = state.superset.filters.project === p ? 'active' : '';
+        html += '<div class="tab ' + active + '" data-project="' + safe + '">' + safe + '</div>';
+    }
+    container.innerHTML = html;
+}
+
+export function renderSupersetFilters() {
+    const dateFromEl = document.getElementById('supersetDateFrom');
+    const dateToEl = document.getElementById('supersetDateTo');
+    if (dateFromEl) dateFromEl.value = state.superset.filters.dateFrom || '';
+    if (dateToEl) dateToEl.value = state.superset.filters.dateTo || '';
+
+    const tasksSet = new Set();
+    for (const r of state.superset.table1) if (r.task) tasksSet.add(r.task);
+    for (const r of state.superset.table2) if (r.task) tasksSet.add(r.task);
+    const tasks = Array.from(tasksSet).sort();
+
+    const optionsContainer = document.getElementById('msSupersetTask_options');
+    if (optionsContainer) {
+        optionsContainer.innerHTML = tasks.map(t => {
+            const safe = escapeHtml(t);
+            const checked = state.superset.filters.tasks.has(t) ? 'checked' : '';
+            return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onSupersetTaskChange(this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
+        }).join('');
+    }
+    updateSupersetTaskLabel();
+}
+
+export function updateSupersetTaskLabel() {
+    const label = document.getElementById('msSupersetTask_label');
+    if (!label) return;
+    const count = state.superset.filters.tasks.size;
+    if (count === 0) {
+        label.textContent = 'Все задачи';
+        label.classList.add('empty');
+    } else if (count === 1) {
+        label.textContent = Array.from(state.superset.filters.tasks)[0];
+        label.classList.remove('empty');
+    } else {
+        label.textContent = 'Выбрано: ' + count;
+        label.classList.remove('empty');
+    }
+}
+
+export function onSupersetTaskChange(value, isChecked) {
+    if (isChecked) state.superset.filters.tasks.add(value);
+    else state.superset.filters.tasks.delete(value);
+    updateSupersetTaskLabel();
+    applySupersetFilters();
+    renderSupersetPage();
+}
+
+export function onSupersetDateChange() {
+    state.superset.filters.dateFrom = document.getElementById('supersetDateFrom').value;
+    state.superset.filters.dateTo = document.getElementById('supersetDateTo').value;
+    applySupersetFilters();
+    renderSupersetPage();
+}
+
+export function onSupersetProjectTabClick(projectName) {
+    state.superset.filters.project = projectName;
+    applySupersetFilters();
+    renderSupersetPage();
+}
+
+export function resetSupersetFilters() {
+    state.superset.filters.dateFrom = '';
+    state.superset.filters.dateTo = '';
+    state.superset.filters.tasks.clear();
+    state.superset.filters.project = 'all';
+    state.superset.tableFilters = { t1: {}, t2: {}, t3: {} };
+
+    const df = document.getElementById('supersetDateFrom');
+    const dt = document.getElementById('supersetDateTo');
+    if (df) df.value = '';
+    if (dt) dt.value = '';
+    document.querySelectorAll('#msSupersetTask_options input').forEach(cb => { cb.checked = false; });
+    updateSupersetTaskLabel();
+
+    applySupersetFilters();
+    renderSupersetPage();
+}
+
+export function renderSupersetNormCard() {
+    const container = document.getElementById('supersetNormCard');
+    if (!container) return;
+
+    const { dateFrom, dateTo } = state.superset.filters;
+    const norms = getNormsForPeriod(dateFrom, dateTo);
+
+    const editBtn = `<button class="norm-edit-btn" onclick="editSupersetNorm()" title="Редактировать">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+    </button>`;
+
+    let valuesHtml = '';
+    if (norms.length === 1) {
+        valuesHtml = `<div class="value">${norms[0].value.toFixed(0)}</div>`;
+    } else {
+        valuesHtml = '<div class="norm-values-multi">';
+        for (const n of norms) {
+            valuesHtml += `<div class="norm-value-item">
+                <div class="value">${n.value.toFixed(0)}</div>
+                ${n.label ? `<div class="norm-label">${escapeHtml(n.label)}</div>` : ''}
+            </div>`;
+        }
+        valuesHtml += '</div>';
+    }
+
+    container.innerHTML = editBtn + '<div class="label">Норма у.е. в час</div>' + valuesHtml;
+}
+
+export function editSupersetNorm() {
+    const today = new Date().toISOString().slice(0, 10);
+    const currentNorm = getNormForDate(today);
+    const input = prompt('Введите новое значение нормы у.е. в час:', String(currentNorm));
+    if (input === null) return;
+    const num = parseFloat(input);
+    if (isNaN(num) || num <= 0) {
+        alert('Введите положительное число');
+        return;
+    }
+    if (addNormEntry(today, num)) {
+        applySupersetFilters();
+        renderSupersetPage();
+    }
+}
+
+export function renderSupersetKPIs() {
+    const container = document.getElementById('supersetKpis');
+    if (!container) return;
+    const k = state.superset.kpis || {};
+
+    const cards = [
+        { label: 'Качество факт', value: k.qualityFact != null ? (k.qualityFact * 100).toFixed(1) + '%' : '—' },
+        { label: 'Качество план', value: k.qualityPlan != null ? k.qualityPlan.toFixed(1) + '%' : '—' },
+        { label: 'Факт у.е. в час', value: k.ballsPerHour != null ? k.ballsPerHour.toFixed(1) : '—' },
+        { label: 'Коэффициент', value: k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—' },
+        { label: 'Среднее время разметки', value: k.avgTime != null ? k.avgTime.toFixed(2) + ' ч' : '—' }
+    ];
+
+    container.innerHTML = cards.map(c => `
+        <div class="kpi-card">
+            <div class="label">${escapeHtml(c.label)}</div>
+            <div class="value">${escapeHtml(c.value)}</div>
+        </div>
+    `).join('');
+}
+
+// Общий рендер фильтров в столбцах
+function renderTableFilters(tableId, configs, fullRows) {
+    return configs.map(cfg => {
+        const values = new Set();
+        for (const r of fullRows) {
+            const v = cfg.get(r) || '';
+            if (v !== '') values.add(v);
+        }
+        const sorted = Array.from(values).sort();
+
+        const sel = (state.superset.tableFilters[tableId] && state.superset.tableFilters[tableId][cfg.key]) || new Set();
+        const cnt = sel.size;
+        const label = cnt === 0 ? 'Все' : (cnt === 1 ? Array.from(sel)[0] : 'Выбрано: ' + cnt);
+        const emptyCls = cnt === 0 ? 'empty' : '';
+
+        const id = `ms-${tableId}-${cfg.key}`;
+
+        const optionsHtml = sorted.map(v => {
+            const safe = escapeHtml(String(v));
+            const checked = sel.has(v) ? 'checked' : '';
+            return `<label class="ms-item ms-item-compact"><input type="checkbox" value="${safe}" onchange="onSupersetTableFilterChange('${tableId}', '${cfg.key}', this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
+        }).join('');
+
+        return `<th style="padding: 4px 6px;">
+            <div class="multi-select ms-compact" id="${id}">
+                <div class="ms-header ms-header-compact" onclick="toggleDropdown('${id}')">
+                    <span class="ms-label ${emptyCls}" id="${id}_label">${escapeHtml(label)}</span>
+                    <span class="ms-arrow">▼</span>
+                </div>
+                <div class="ms-dropdown ms-dropdown-compact" id="${id}_dropdown">
+                    <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                    <div>${optionsHtml || '<div class="ms-item" style="color:var(--muted);cursor:default;padding:8px;">Нет данных</div>'}</div>
+                </div>
+            </div>
+        </th>`;
     }).join('');
 }
 
-function renderSupersetBallsCards() {
-    const container = document.getElementById('supersetBallsCards');
-    if (!container) return;
-    const cards = state.superset.ballsCards || [];
-    if (cards.length === 0) {
-        container.innerHTML = '<div class="kpi-card"><div class="label">Нет данных. Загрузите файлы типа 1.</div><div class="value">—</div></div>';
-        return;
-    }
-    container.innerHTML = cards.map(c => `
-        <div class="kpi-card">
-            <div class="label">${escapeHtml(c.project)}</div>
-            <div class="value">${c.avg.toFixed(1)}</div>
-        </div>
-    `).join('');
-}
+export function onSupersetTableFilterChange(tableId, colKey, value, isChecked) {
+    if (!state.superset.tableFilters[tableId]) state.superset.tableFilters[tableId] = {};
+    if (!state.superset.tableFilters[tableId][colKey]) state.superset.tableFilters[tableId][colKey] = new Set();
+    const set = state.superset.tableFilters[tableId][colKey];
+    if (isChecked) set.add(value);
+    else set.delete(value);
 
-function renderSupersetProdCards() {
-    const container = document.getElementById('supersetProdCards');
-    if (!container) return;
-    const cards = state.superset.prodCards || [];
-    if (cards.length === 0) {
-        container.innerHTML = '<div class="kpi-card"><div class="label">Нет данных. Загрузите файлы типа 1.</div><div class="value">—</div></div>';
-        return;
+    const id = `ms-${tableId}-${colKey}`;
+    const label = document.getElementById(id + '_label');
+    if (label) {
+        const cnt = set.size;
+        if (cnt === 0) {
+            label.textContent = 'Все';
+            label.classList.add('empty');
+        } else if (cnt === 1) {
+            label.textContent = Array.from(set)[0];
+            label.classList.remove('empty');
+        } else {
+            label.textContent = 'Выбрано: ' + cnt;
+            label.classList.remove('empty');
+        }
     }
-    container.innerHTML = cards.map(c => `
-        <div class="kpi-card">
-            <div class="label">${escapeHtml(c.project)}</div>
-            <div class="value">${c.avg.toFixed(1)}</div>
-        </div>
-    `).join('');
+
+    applySupersetFilters();
+    renderSupersetPage();
 }
 
 function renderSupersetTable1() {
     const tbody = document.getElementById('supersetTable1Body');
+    const filtersRow = document.getElementById('supersetTable1Filters');
     if (!tbody) return;
-    const rows = state.superset.table1 || [];
+
+    const configs = getTable1Config();
+    if (filtersRow) {
+        filtersRow.innerHTML = renderTableFilters('t1', configs, state.superset.table1 || []);
+    }
+
+    const rows = state.superset.filteredTable1 || [];
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типов 1 и/или 2.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типов 1 и/или 2.</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `<tr>
-        <td>${r.dateStart ? formatDate(r.dateStart) : ''}</td>
-        <td>${r.dateEnd ? formatDate(r.dateEnd) : ''}</td>
         <td>${escapeHtml(r.project)}</td>
         <td>${escapeHtml(r.task)}</td>
         <td>${escapeHtml(String(r.fragments))}</td>
@@ -622,13 +823,21 @@ function renderSupersetTable1() {
         <td>${escapeHtml(String(r.prodPerHour))}</td>
         <td>${escapeHtml(String(r.price))}</td>
         <td>${escapeHtml(String(r.taskType))}</td>
+        <td>${escapeHtml(formatPeriod(r.dateStart, r.dateEnd))}</td>
     </tr>`).join('');
 }
 
 function renderSupersetTable2() {
     const tbody = document.getElementById('supersetTable2Body');
+    const filtersRow = document.getElementById('supersetTable2Filters');
     if (!tbody) return;
-    const rows = state.superset.table2 || [];
+
+    const configs = getTable2Config();
+    if (filtersRow) {
+        filtersRow.innerHTML = renderTableFilters('t2', configs, state.superset.table2 || []);
+    }
+
+    const rows = state.superset.filteredTable2 || [];
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типа 3.</td></tr>';
         return;
@@ -649,8 +858,15 @@ function renderSupersetTable2() {
 
 function renderSupersetTable3() {
     const tbody = document.getElementById('supersetTable3Body');
+    const filtersRow = document.getElementById('supersetTable3Filters');
     if (!tbody) return;
-    const rows = state.superset.table3 || [];
+
+    const configs = getTable3Config();
+    if (filtersRow) {
+        filtersRow.innerHTML = renderTableFilters('t3', configs, state.superset.table3 || []);
+    }
+
+    const rows = state.superset.filteredTable3 || [];
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типа 1.</td></tr>';
         return;
