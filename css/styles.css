@@ -17,12 +17,8 @@ body {
     height: 60px; padding: 0 20px; z-index: 100;
 }
 .brand {
-    font-weight: 700;
-    font-size: 1.05rem;
-    color: var(--text);
-    margin-right: 24px;
-    white-space: nowrap;
-    letter-spacing: -0.02em;
+    font-weight: 700; font-size: 1.05rem; color: var(--text);
+    margin-right: 24px; white-space: nowrap; letter-spacing: -0.02em;
 }
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
 .tab {
@@ -182,19 +178,60 @@ tr:hover { background: #f8fafc; }
 
 /* Footer */
 .page-footer {
-    margin-top: 40px;
-    padding: 16px 0;
-    text-align: center;
-    font-size: 0.75rem;
+    margin-top: 40px; padding: 16px 0; text-align: center;
+    font-size: 0.75rem; color: var(--muted); border-top: 1px solid var(--border);
+}
+.page-footer a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+.page-footer a:hover { color: var(--text); text-decoration: underline; }
+
+/* Status Markers Tasks */
+.markers-status-list {
+    margin-top: 15px;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.markers-status-summary {
+    display: flex;
+    gap: 15px;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+.markers-status-ok { color: var(--success); }
+.markers-status-bad { color: var(--danger); }
+.markers-status-total { color: var(--muted); margin-left: auto; }
+.markers-status-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.markers-status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px dashed #f0f4f8;
+    font-size: 0.8rem;
+    border-radius: 4px;
+}
+.markers-status-item:last-child { border-bottom: none; }
+.markers-status-item.bad { background: #fef2f2; }
+.markers-status-item.ok { background: #f0fdf4; }
+.markers-status-icon { flex-shrink: 0; font-size: 1rem; }
+.markers-status-name {
+    word-break: break-all;
+    white-space: normal;
+    flex: 1;
+}
+.markers-status-pairs {
     color: var(--muted);
-    border-top: 1px solid var(--border);
-}
-.page-footer a {
-    color: var(--accent);
-    text-decoration: none;
-    transition: color 0.2s;
-}
-.page-footer a:hover {
-    color: var(--text);
-    text-decoration: underline;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    font-weight: 600;
 }
