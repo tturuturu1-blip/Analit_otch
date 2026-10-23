@@ -117,6 +117,7 @@ document.getElementById('btnExport').addEventListener('click', () => {
                     "Статус": f.status || "",
                     "Тип ВКС": f.typeVKS || "",
                     "Провел": f.conductor || "",
+                    "Проект": f.project || "",
                     "Пулы с ошибками": f.pools || "",
                     "Ср. качество за период": f.avgQuality ?? ""
                 };
