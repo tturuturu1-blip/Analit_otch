@@ -23,11 +23,53 @@ export function switchMenu(menuId, btn) {
 export function switchTab(tabId, btn) {
     state.currentTab = tabId;
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
+    if (btn) btn.classList.add('active');
 
     if (state.currentMenu === 'main') triggerFilterUpdate();
     if (state.currentMenu === 'errors') renderErrorsTable();
     if (state.currentMenu === 'feedback') renderFeedbackTable();
+}
+
+// ===== Авто-формирование табов проектов =====
+// Строит табы на основе уникальных значений поля "project" в processedData.
+// Суффикс "_validate" отбрасывается, пустые отбрасываются.
+// Если проектов 0 или 1 — контейнер табов скрывается (state.currentTab = 'all').
+export function buildProjectTabs() {
+    const tabsContainer = document.getElementById('projectTabs');
+    if (!tabsContainer) return;
+
+    const projectSet = new Set();
+    for (const r of state.processedData) {
+        if (!r.project) continue;
+        const name = String(r.project).replace(/_validate$/, '').trim();
+        if (name) projectSet.add(name);
+    }
+    const projects = Array.from(projectSet).sort();
+    state.projects = projects;
+
+    // 0 или 1 проект — табы не нужны
+    if (projects.length <= 1) {
+        tabsContainer.style.display = 'none';
+        tabsContainer.innerHTML = '';
+        state.currentTab = 'all';
+        return;
+    }
+
+    tabsContainer.style.display = 'flex';
+
+    // Если текущий таб больше не существует — сброс на "Все"
+    if (state.currentTab !== 'all' && !projects.includes(state.currentTab)) {
+        state.currentTab = 'all';
+    }
+
+    // Сборка HTML
+    let html = '<div class="tab ' + (state.currentTab === 'all' ? 'active' : '') + '" data-tab="all">Все</div>';
+    for (const p of projects) {
+        const safe = escapeHtml(p);
+        const active = state.currentTab === p ? 'active' : '';
+        html += '<div class="tab ' + active + '" data-tab="' + safe + '">' + safe + '</div>';
+    }
+    tabsContainer.innerHTML = html;
 }
 
 // ===== Multi-select =====
@@ -116,7 +158,7 @@ export function triggerFilterUpdate() {
     buildErrorsByMarkerChart();
     buildTrendChart();
     buildTable();
-    renderFeedbackTableHome();   // ← таблица обратной связи на главной
+    renderFeedbackTableHome();
 }
 
 // ===== KPI =====
