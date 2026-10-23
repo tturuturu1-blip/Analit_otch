@@ -1,7 +1,7 @@
-import { state } from './state.js';
-import { getVal, parseExcelDate, parseHtmlNumber, parseNorm } from './utils.js';
+import { state, saveToStorage } from './state.js';
+import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
 
-// ===== Вспомогательные =====
+// ===== Утилиты =====
 function calcFactQuality() {
     const byProjectPool = {};
     const byProject = {};
@@ -24,16 +24,99 @@ function avg(arr) {
     return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
-// Парсер HTML-числа в float: "<div>572.2</div>" → 572.2
 function parseHtmlNumberToFloat(val) {
     if (val == null) return null;
-    const s = parseHtmlNumber(val);   // "572,2"
+    const s = parseHtmlNumber(val);
     if (!s) return null;
     const n = parseFloat(String(s).replace(',', '.'));
     return isNaN(n) ? null : n;
 }
 
-// ===== Нормативы (для главной и графиков) =====
+export function formatISODate(date) {
+    if (!date) return null;
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return null;
+    return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+}
+
+export function formatPeriod(start, end) {
+    const s = start ? formatDate(start) : null;
+    const e = end ? formatDate(end) : null;
+    if (s && e) return s + '-' + e;
+    if (s) return 'с ' + s;
+    if (e) return 'по ' + e;
+    return '';
+}
+
+// ===== История норм у.е. в час =====
+export function getNormForDate(dateISO) {
+    const fallbackDate = new Date().toISOString().slice(0, 10);
+    const d = dateISO || fallbackDate;
+    const history = state.superset.normHistory.slice().sort((a, b) => a.date.localeCompare(b.date));
+    let value = 580;
+    for (const entry of history) {
+        if (entry.date <= d) value = entry.value;
+        else break;
+    }
+    return value;
+}
+
+export function getNormsForPeriod(dateFrom, dateTo) {
+    const history = state.superset.normHistory.slice().sort((a, b) => a.date.localeCompare(b.date));
+    if (history.length === 0) return [{ value: 580, label: null }];
+
+    if (!dateFrom && !dateTo) {
+        const current = getNormForDate(new Date().toISOString().slice(0, 10));
+        return [{ value: current, label: null }];
+    }
+
+    const from = dateFrom || '1900-01-01';
+    const to = dateTo || '9999-12-31';
+
+    const segments = [];
+    for (let i = 0; i < history.length; i++) {
+        const segStart = history[i].date;
+        const segEndNext = i + 1 < history.length ? history[i + 1].date : null;
+        if (segEndNext && segEndNext <= from) continue;
+        if (segStart > to) break;
+        const effectiveStart = segStart > from ? segStart : from;
+        const effectiveEnd = segEndNext && segEndNext <= to ? segEndNext : to;
+        segments.push({ value: history[i].value, start: effectiveStart, end: effectiveEnd });
+    }
+
+    if (segments.length === 0) {
+        return [{ value: getNormForDate(from), label: null }];
+    }
+    if (segments.length === 1) {
+        return [{ value: segments[0].value, label: null }];
+    }
+
+    return segments.map((s, idx) => {
+        let label = null;
+        if (idx < segments.length - 1) {
+            const endDate = new Date(s.end + 'T00:00:00');
+            endDate.setDate(endDate.getDate() - 1);
+            label = 'до ' + formatDate(endDate);
+        } else {
+            label = 'с ' + formatDate(new Date(s.start + 'T00:00:00'));
+        }
+        return { value: s.value, label };
+    });
+}
+
+export function addNormEntry(dateISO, value) {
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return false;
+    state.superset.normHistory = state.superset.normHistory.filter(e => e.date !== dateISO);
+    state.superset.normHistory.push({ date: dateISO, value: num });
+    state.superset.normHistory.sort((a, b) => a.date.localeCompare(b.date));
+    saveToStorage();
+    return true;
+}
+
+// ===== Нормативы качества (для главной) =====
 function buildNorms() {
     const byProjectPool = {};
     const byProject = {};
@@ -82,7 +165,7 @@ function buildNorms() {
     };
 }
 
-// ===== Таблица 1 (проект + задача) =====
+// ===== Таблица 1 =====
 function buildTable1() {
     const idx1 = {};
     for (const r of state.rawSuperset1) {
@@ -146,7 +229,7 @@ function buildTable1() {
     state.superset.table1 = rows;
 }
 
-// ===== Таблица 2 (по дням / ФИО) =====
+// ===== Таблица 2 =====
 function buildTable2() {
     const { byProjectPool, byProject } = calcFactQuality();
     const rows = [];
@@ -180,7 +263,7 @@ function buildTable2() {
     state.superset.table2 = rows;
 }
 
-// ===== Таблица 3 (цены по проектам) =====
+// ===== Таблица 3 =====
 function buildTable3() {
     const byProject = {};
     for (const r of state.rawSuperset1) {
@@ -218,54 +301,157 @@ function buildTable3() {
     state.superset.table3 = rows;
 }
 
-// ===== Карточки: Качество факт. =====
-function buildCards() {
-    const { byProject } = calcFactQuality();
-    const cards = [];
-    for (const project in byProject) {
-        const a = avg(byProject[project]);
-        if (a === null) continue;
-        cards.push({ project, factQuality: a });
-    }
-    state.superset.cards = cards.sort((a, b) => a.project.localeCompare(b.project));
+// ===== Применение фильтров =====
+function matchesProject(project) {
+    const filter = state.superset.filters.project;
+    if (filter === 'all') return true;
+    return (project || '') === filter;
 }
 
-// ===== Карточки: Факт баллов/час и Кпроизв в час =====
-function buildPerformanceCards() {
-    const ballsByProject = {};
-    const prodByProject = {};
+function matchesDateRangeRow(date) {
+    const { dateFrom, dateTo } = state.superset.filters;
+    if (!dateFrom && !dateTo) return true;
+    if (!date) return false;
+    const iso = formatISODate(date);
+    if (dateFrom && iso < dateFrom) return false;
+    if (dateTo && iso > dateTo) return false;
+    return true;
+}
 
-    for (const r of state.rawSuperset1) {
-        const project = getVal(r, 'Проект');
-        if (!project) continue;
+function matchesPeriodRange(start, end) {
+    const { dateFrom, dateTo } = state.superset.filters;
+    if (!dateFrom && !dateTo) return true;
+    const s = start ? formatISODate(start) : null;
+    const e = end ? formatISODate(end) : null;
+    if (!s && !e) return false;
+    const rowStart = s || e;
+    const rowEnd = e || s;
+    if (dateFrom && rowEnd < dateFrom) return false;
+    if (dateTo && rowStart > dateTo) return false;
+    return true;
+}
 
-        const balls = parseHtmlNumberToFloat(getVal(r, 'Факт баллов/час'));
-        if (balls !== null) {
-            if (!ballsByProject[project]) ballsByProject[project] = [];
-            ballsByProject[project].push(balls);
-        }
+function matchesTask(task) {
+    const tasks = state.superset.filters.tasks;
+    if (tasks.size === 0) return true;
+    return tasks.has(task || '');
+}
 
-        const prod = parseHtmlNumberToFloat(getVal(r, 'Кпроизв в час'));
-        if (prod !== null) {
-            if (!prodByProject[project]) prodByProject[project] = [];
-            prodByProject[project].push(prod);
-        }
+function matchesColumnFilters(tableId, row, configs) {
+    const filters = state.superset.tableFilters[tableId] || {};
+    for (const cfg of configs) {
+        const sel = filters[cfg.key];
+        if (!sel || sel.size === 0) continue;
+        const val = cfg.get(row) || '';
+        if (!sel.has(val)) return false;
     }
+    return true;
+}
 
-    const ballsCards = Object.keys(ballsByProject).map(p => ({
-        project: p,
-        avg: avg(ballsByProject[p])
-    })).filter(x => x.avg !== null)
-      .sort((a, b) => a.project.localeCompare(b.project));
+export function getTable1Config() {
+    return [
+        { key: 'task', label: 'Задача', get: r => r.task || '' },
+        { key: 'fragments', label: 'Размечено, шт', get: r => String(r.fragments || '') },
+        { key: 'normQuality', label: 'Норма качества', get: r => String(r.normQuality || '') },
+        { key: 'quality', label: 'Качество', get: r => String(r.quality || '') },
+        { key: 'comment', label: 'Комментарий', get: r => String(r.comment || '') },
+        { key: 'withoutQuality', label: 'Без качества, шт', get: r => String(r.withoutQuality || '') },
+        { key: 'ballsPerHour', label: 'Факт баллов/час', get: r => String(r.ballsPerHour || '') },
+        { key: 'prodPerHour', label: 'Кпроизв в час', get: r => String(r.prodPerHour || '') },
+        { key: 'price', label: 'Цена', get: r => String(r.price || '') },
+        { key: 'taskType', label: 'Тип задания', get: r => String(r.taskType || '') },
+        { key: 'period', label: 'Период разметки', get: r => formatPeriod(r.dateStart, r.dateEnd) }
+    ];
+}
 
-    const prodCards = Object.keys(prodByProject).map(p => ({
-        project: p,
-        avg: avg(prodByProject[p])
-    })).filter(x => x.avg !== null)
-      .sort((a, b) => a.project.localeCompare(b.project));
+export function getTable2Config() {
+    return [
+        { key: 'date', label: 'Дата', get: r => r.date ? formatDate(r.date) : '' },
+        { key: 'fio', label: 'ФИО', get: r => r.fio || '' },
+        { key: 'task', label: 'Задача', get: r => r.task || '' },
+        { key: 'fragments', label: 'Размечено, шт', get: r => String(r.fragments || '') },
+        { key: 'balls', label: 'Размечено, б', get: r => String(r.balls || '') },
+        { key: 'qualitySuperset', label: 'Качество в суперсете', get: r => String(r.qualitySuperset || '') },
+        { key: 'qualityFact', label: 'Качество факт.', get: r => r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '' },
+        { key: 'norm', label: 'Норматив', get: r => String(r.norm || '') },
+        { key: 'withoutQuality', label: 'Без качества, шт', get: r => String(r.withoutQuality || '') }
+    ];
+}
 
-    state.superset.ballsCards = ballsCards;
-    state.superset.prodCards = prodCards;
+export function getTable3Config() {
+    return [
+        { key: 'date', label: 'Дата', get: r => r.date ? formatDate(r.date) : '' },
+        { key: 'price', label: 'Цена', get: r => String(r.price || '') }
+    ];
+}
+
+function buildKPIs() {
+    const t1 = state.superset.filteredTable1;
+
+    // Качество факт из processedData с учётом фильтров по проекту и датам
+    const qualities = [];
+    for (const r of state.processedData) {
+        if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
+        const proj = (r.project || '').replace(/_validate$/, '').trim();
+        if (state.superset.filters.project !== 'all' && proj !== state.superset.filters.project) continue;
+        if (r.date && !matchesDateRangeRow(r.date)) continue;
+        qualities.push(r.quality);
+    }
+    const qualityFact = avg(qualities);
+
+    // Качество план — среднее normQuality
+    const norms = t1.map(r => parseNorm(r.normQuality)).filter(n => n !== null);
+    const qualityPlan = avg(norms);
+
+    // Факт у.е. в час — среднее ballsPerHour
+    const balls = t1.map(r => parseHtmlNumberToFloat(r.ballsPerHour)).filter(v => v !== null);
+    const ballsPerHour = avg(balls);
+
+    // Коэффициент — среднее prodPerHour
+    const prods = t1.map(r => parseHtmlNumberToFloat(r.prodPerHour)).filter(v => v !== null);
+    const prodPerHour = avg(prods);
+
+    // Среднее время разметки = balls / norm(для даты строки)
+    const times = [];
+    for (const r of t1) {
+        const ballsV = parseHtmlNumberToFloat(r.ballsPerHour);
+        if (ballsV === null || ballsV <= 0) continue;
+        const dateISO = r.dateStart ? formatISODate(r.dateStart) : (r.dateEnd ? formatISODate(r.dateEnd) : null);
+        const normV = getNormForDate(dateISO || new Date().toISOString().slice(0, 10));
+        if (!normV || normV <= 0) continue;
+        times.push(ballsV / normV);
+    }
+    const avgTime = avg(times);
+
+    state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime };
+}
+
+export function applySupersetFilters() {
+    const t1Config = getTable1Config();
+    const t2Config = getTable2Config();
+    const t3Config = getTable3Config();
+
+    state.superset.filteredTable1 = (state.superset.table1 || []).filter(r =>
+        matchesProject(r.project) &&
+        matchesPeriodRange(r.dateStart, r.dateEnd) &&
+        matchesTask(r.task) &&
+        matchesColumnFilters('t1', r, t1Config)
+    );
+
+    state.superset.filteredTable2 = (state.superset.table2 || []).filter(r =>
+        matchesProject(r.project) &&
+        matchesDateRangeRow(r.date) &&
+        matchesTask(r.task) &&
+        matchesColumnFilters('t2', r, t2Config)
+    );
+
+    state.superset.filteredTable3 = (state.superset.table3 || []).filter(r =>
+        matchesProject(r.project) &&
+        matchesDateRangeRow(r.date) &&
+        matchesColumnFilters('t3', r, t3Config)
+    );
+
+    buildKPIs();
 }
 
 // ===== Общая сборка =====
@@ -274,11 +460,9 @@ export function buildSuperset() {
     buildTable1();
     buildTable2();
     buildTable3();
-    buildCards();
-    buildPerformanceCards();
+    applySupersetFilters();
 }
 
-// Целевое качество для главной/графиков
 export function getTargetQuality(project, pool) {
     const cleanProject = (project || '').replace(/_validate$/, '').trim();
     const key = cleanProject + '|' + (pool || '');
