@@ -48,6 +48,14 @@ export function formatInterval(start, finish) {
 
 export function detectTableType(row) {
     const keys = Object.keys(row).map(k => k.toLowerCase().trim());
+
+    // Плоский формат: url задания + file_name + меток с учетом предразметки
+    if (keys.includes('url задания') &&
+        keys.includes('file_name') &&
+        keys.includes('меток с учетом предразметки')) {
+        return 'validation_flat';
+    }
+
     if (keys.includes('assignment_id') || keys.includes('output:marks') || keys.includes('output_marks')) return 'validation';
     if (keys.includes('id разметчика') || keys.includes('id задачи') || keys.includes('фио')) return 'markers';
     if (keys.includes('комментарий') && (keys.includes('почта разметчика') || keys.includes('пул'))) return 'recommendations';
@@ -134,7 +142,6 @@ export function debounce(fn, delay = 100) {
     };
 }
 
-// Уничтожение графика (принимает объект chart для разрушения)
 export function destroyChart(chartRef) {
-    if (chartRef) { try { chartRef.destroy(); } catch (e) {} }
+    if (chartRef) { try { chartRef.destroy(); } catch (e) { /* ignore */ } }
 }
