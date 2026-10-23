@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- CSP: запрещаем любые внешние подключения и запросы -->
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self';">
     <title>ГС PRO</title>
@@ -39,10 +38,19 @@
             <h2 style="margin-bottom: 20px;">Управление данными</h2>
             <p style="color: var(--muted); margin-bottom: 20px;">Загружайте исходные файлы, импортируйте резервные копии или выгружайте результаты.</p>
 
+            <!-- ▼▼▼ Загрузка исходников — ОТДЕЛЬНАЯ КАРТОЧКА ▼▼▼ -->
             <div class="card">
+                <h3 style="margin-bottom: 15px;">Загрузка исходных файлов</h3>
                 <div class="toolbar">
                     <label class="file-btn" for="fileInput">📂 Загрузить Excel (исходники)</label>
                     <input type="file" id="fileInput" accept=".xlsx,.xls" multiple>
+                </div>
+            </div>
+            <!-- ▲▲▲ КОНЕЦ ▲▲▲ -->
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px;">Управление данными</h3>
+                <div class="toolbar">
                     <button class="secondary" id="btnExport">💾 Экспорт в Excel</button>
                     <label class="file-btn secondary" for="importInput">📥 Импорт из Excel</label>
                     <input type="file" id="importInput" accept=".xlsx,.xls">
