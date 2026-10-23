@@ -4,9 +4,9 @@ import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
     populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable, toggleRow,
     buildProjectTabs, renderMarkersTasksStatus, renderSupersetPage,
-    renderSupersetProjectTabs, renderSupersetFilters, renderSupersetNormCard,
-    renderSupersetKPIs, updateSupersetTaskLabel,
-    onSupersetTaskChange, onSupersetDateChange, onSupersetProjectTabClick,
+    renderSupersetFilters, renderSupersetNormCard, renderSupersetKPIs,
+    updateSupersetTaskLabel, updateSupersetProjectLabel,
+    onSupersetTaskChange, onSupersetProjectChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange
 } from './ui.js';
 import { renderFeedbackTable, editFeedback, deleteFeedback, initFeedbackForm } from './feedback.js';
@@ -16,20 +16,19 @@ import {
 } from './utils.js';
 import { generateHtmlReport } from './report.js';
 
-// ===== Экспорт в window =====
 Object.assign(window, {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll,
     onOptionChange, toggleRow, renderErrorsTable,
     editFeedback, deleteFeedback,
-    // Суперсет
     onSupersetTaskChange,
+    onSupersetProjectChange,
     onSupersetDateChange,
     resetSupersetFilters,
     editSupersetNorm,
     onSupersetTableFilterChange
 });
 
-// ===== Делегирование кликов по табам проектов (главная) =====
+// Табы на главной
 const projectTabsContainer = document.getElementById('projectTabs');
 if (projectTabsContainer) {
     projectTabsContainer.addEventListener('click', (e) => {
@@ -39,30 +38,19 @@ if (projectTabsContainer) {
     });
 }
 
-// ===== Делегирование кликов по табам суперсета =====
-const supersetTabsContainer = document.getElementById('supersetProjectTabs');
-if (supersetTabsContainer) {
-    supersetTabsContainer.addEventListener('click', (e) => {
-        const tabEl = e.target.closest('.tab');
-        if (!tabEl) return;
-        onSupersetProjectTabClick(tabEl.dataset.project);
-    });
-}
-
-// ===== Изменение дат на странице Суперсет =====
+// Изменение дат на странице Суперсет
 const supersetDateFrom = document.getElementById('supersetDateFrom');
 const supersetDateTo = document.getElementById('supersetDateTo');
 if (supersetDateFrom) supersetDateFrom.addEventListener('change', onSupersetDateChange);
 if (supersetDateTo) supersetDateTo.addEventListener('change', onSupersetDateChange);
 
-// ===== Обновление UI после пересчёта данных =====
 window.addEventListener('app:data-updated', () => {
-    // Сброс фильтров суперсета при новых данных
-    state.superset.filters.project = 'all';
+    // Сброс фильтров суперсета
+    state.superset.filters.projects.clear();
     state.superset.filters.dateFrom = '';
     state.superset.filters.dateTo = '';
     state.superset.filters.tasks.clear();
-    state.superset.tableFilters = { t1: {}, t2: {}, t3: {} };
+    state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
 
     buildSuperset();
     populateAllMultiSelects();
@@ -72,14 +60,12 @@ window.addEventListener('app:data-updated', () => {
     if (state.currentMenu === 'superset') renderSupersetPage();
 });
 
-// ===== Закрытие dropdown при клике вне =====
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.multi-select')) {
         document.querySelectorAll('.ms-dropdown').forEach(d => d.classList.remove('open'));
     }
 });
 
-// ===== Фильтры по дате (главная) =====
 for (const id of ['filterDateFrom', 'filterDateTo']) {
     document.getElementById(id).addEventListener('change', triggerFilterUpdate);
 }
@@ -102,7 +88,6 @@ document.getElementById('btnResetFilters').addEventListener('click', () => {
     triggerFilterUpdate();
 });
 
-// ===== Загрузка Excel =====
 document.getElementById('fileInput').addEventListener('change', async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -114,7 +99,6 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
     e.target.value = '';
 });
 
-// ===== Экспорт в Excel =====
 document.getElementById('btnExport').addEventListener('click', () => {
     if (!state.processedData.length && !state.feedbackData.length) {
         alert('Нет данных для экспорта');
@@ -158,6 +142,8 @@ document.getElementById('btnExport').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanFeedback), "Обратная связь");
         }
 
+        if (state.rawEmployeeMap.length > 0)
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawEmployeeMap), "Сотрудники");
         if (state.rawMarkers.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawMarkers), "Markers (сырые)");
         if (state.rawValidation.length > 0)
@@ -180,7 +166,6 @@ document.getElementById('btnExport').addEventListener('click', () => {
     }
 });
 
-// ===== Импорт =====
 document.getElementById('importInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -188,12 +173,13 @@ document.getElementById('importInput').addEventListener('change', (e) => {
     reader.onload = async (ev) => {
         try {
             const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
-            let parsedM = [], parsedV = [], parsedR = [], parsedF = [];
+            let parsedM = [], parsedV = [], parsedR = [], parsedF = [], parsedEmp = [];
             let parsedS1 = [], parsedS2 = [], parsedS3 = [];
             for (const name of wb.SheetNames) {
                 const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
                 const lower = name.toLowerCase();
-                if (lower.includes('суперсет 1') || lower.includes('superset 1')) parsedS1 = json;
+                if (lower.includes('сотрудник') || lower.includes('employee')) parsedEmp = json;
+                else if (lower.includes('суперсет 1') || lower.includes('superset 1')) parsedS1 = json;
                 else if (lower.includes('суперсет 2') || lower.includes('superset 2')) parsedS2 = json;
                 else if (lower.includes('суперсет 3') || lower.includes('superset 3')) parsedS3 = json;
                 else if (lower.includes('flat') || lower.includes('плоск')) parsedF = json;
@@ -208,6 +194,7 @@ document.getElementById('importInput').addEventListener('change', (e) => {
             state.rawSuperset1 = parsedS1;
             state.rawSuperset2 = parsedS2;
             state.rawSuperset3 = parsedS3;
+            state.rawEmployeeMap = parsedEmp;
             saveToStorage();
             await recomputeDashboard();
         } catch (err) {
@@ -218,7 +205,6 @@ document.getElementById('importInput').addEventListener('change', (e) => {
     e.target.value = '';
 });
 
-// ===== Очистка =====
 document.getElementById('btnClear').addEventListener('click', () => {
     if (!confirm('Удалить все данные?')) return;
     state.rawMarkers = [];
@@ -228,17 +214,21 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.rawSuperset1 = [];
     state.rawSuperset2 = [];
     state.rawSuperset3 = [];
+    state.rawEmployeeMap = [];
     state.processedData = [];
     state.superset.table1 = [];
     state.superset.table2 = [];
     state.superset.table3 = [];
+    state.superset.table4 = [];
     state.superset.filteredTable1 = [];
     state.superset.filteredTable2 = [];
     state.superset.filteredTable3 = [];
+    state.superset.filteredTable4 = [];
     state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null };
     state.superset.norms = { byProjectPool: {}, byProject: {}, globalAvg: null };
-    state.superset.filters = { project: 'all', dateFrom: '', dateTo: '', tasks: new Set() };
-    state.superset.tableFilters = { t1: {}, t2: {}, t3: {} };
+    state.superset.employeeMap = { fioToEmail: {}, emailToFio: {} };
+    state.superset.filters = { projects: new Set(), dateFrom: '', dateTo: '', tasks: new Set() };
+    state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
     buildProjectTabs();
     renderMarkersTasksStatus();
@@ -262,13 +252,13 @@ document.getElementById('btnGenerateReport').addEventListener('click', async () 
     }
 });
 
-// ===== Инициализация =====
 initFeedbackForm();
 loadFromStorage();
 loadFeedbackFromStorage();
 
 if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length ||
-    state.rawFlatValidations.length || state.rawSuperset1.length || state.rawSuperset2.length || state.rawSuperset3.length) {
+    state.rawFlatValidations.length || state.rawSuperset1.length || state.rawSuperset2.length ||
+    state.rawSuperset3.length || state.rawEmployeeMap.length) {
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
         buildSuperset();
