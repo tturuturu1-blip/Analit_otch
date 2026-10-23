@@ -1,14 +1,14 @@
 import { state } from './state.js';
+import { escapeHtml } from './utils.js';
 
 // Генерирует автономный HTML-файл с дашбордом "Главная".
-// Данные и все ассеты встраиваются внутрь — никаких внешних запросов.
+// Табы проектов формируются динамически из state.processedData.
 export async function generateHtmlReport() {
     if (state.processedData.length === 0 && state.feedbackData.length === 0) {
         alert('Нет данных для отчёта');
         return;
     }
 
-    // Загружаем локальные ассеты с того же origin (CSP connect-src 'self' разрешает)
     let cssText, chartJsText, runtimeText;
     try {
         const results = await Promise.all([
@@ -35,11 +35,30 @@ export async function generateHtmlReport() {
         return;
     }
 
-    // Безопасное встраивание JS-кода в <script>: экранируем </script>
+    // === Динамические табы проектов ===
+    const projectSet = new Set();
+    for (const r of state.processedData) {
+        if (!r.project) continue;
+        const name = String(r.project).replace(/_validate$/, '').trim();
+        if (name) projectSet.add(name);
+    }
+    const projects = Array.from(projectSet).sort();
+    const showTabs = projects.length > 1;
+
+    let tabsHtml = '';
+    if (showTabs) {
+        tabsHtml = '<div class="tabs" id="projectTabs">';
+        tabsHtml += '<div class="tab active" data-tab="all">Все</div>';
+        for (const p of projects) {
+            const safe = escapeHtml(p);
+            tabsHtml += '<div class="tab" data-tab="' + safe + '">' + safe + '</div>';
+        }
+        tabsHtml += '</div>';
+    }
+
     const safeChartJs = chartJsText.replace(/<\/script>/gi, '<\\/script>');
     const safeRuntime = runtimeText.replace(/<\/script>/gi, '<\\/script>');
 
-    // Данные встраиваем в JSON (экранируем <, чтобы нельзя было вырваться из <script>)
     const reportData = {
         processedData: state.processedData,
         feedbackData: state.feedbackData
@@ -51,18 +70,14 @@ export async function generateHtmlReport() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Отчёт по валидации</title>
+<title>ГС PRO — Отчёт по валидации</title>
 <style>${cssText}</style>
 </head>
 <body>
 
-<header class="top-bar">
-    <div class="tabs">
-        <div class="tab active" onclick="switchTab('all', this)">Все</div>
-        <div class="tab" onclick="switchTab('aug', this)">Гимнастки август</div>
-        <div class="tab" onclick="switchTab('prep', this)">Гимнастика. Подготовка выступлений</div>
-        <div class="tab" onclick="switchTab('prop', this)">Гимнастки разметка с предметом</div>
-    </div>
+<header class="top-bar" id="topBar">
+    <div class="brand">ГС PRO</div>
+    ${tabsHtml}
 </header>
 
 <div class="main-container">
@@ -151,13 +166,8 @@ export async function generateHtmlReport() {
                 <table id="fbTableHome">
                     <thead>
                         <tr>
-                            <th>Дата</th>
-                            <th>Разметчик</th>
-                            <th>Тип ВКС</th>
-                            <th>Провел</th>
-                            <th>Статус</th>
-                            <th>Пулы с ошибками</th>
-                            <th>Ср. качество за период</th>
+                            <th>Дата</th><th>Разметчик</th><th>Тип ВКС</th><th>Провел</th>
+                            <th>Статус</th><th>Пулы с ошибками</th><th>Ср. качество за период</th>
                         </tr>
                     </thead>
                     <tbody id="fbTableBodyHome"></tbody>
@@ -178,7 +188,7 @@ export async function generateHtmlReport() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Отчет_валидации_${new Date().toISOString().slice(0, 10)}.html`;
+    a.download = `ГС_PRO_Отчет_${new Date().toISOString().slice(0, 10)}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
