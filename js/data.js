@@ -39,7 +39,6 @@ export async function readExcelFiles(files) {
 // ===== Парсинг project/pool из имени файла =====
 // Формат: "Название проекта_название пула.xlsx"
 // Разделитель — ПЕРВЫЙ "_". Расширение отбрасывается.
-// Если разделителя нет — всё имя считается проектом, пул = null.
 function parseFileProjectPool(filename) {
     if (!filename) return { project: null, pool: null };
     const base = String(filename).replace(/\.(xlsx|xls)$/i, '').trim();
@@ -52,9 +51,25 @@ function parseFileProjectPool(filename) {
     return { project, pool };
 }
 
+// ===== Есть ли в файле колонка radio? =====
+// sheet_to_json с defval: null добавляет ВСЕ заголовки во ВСЕ строки,
+// поэтому достаточно проверить первую строку.
+function detectRadioColumn(rows) {
+    if (!rows || rows.length === 0) return false;
+    const keys = Object.keys(rows[0]);
+    for (const k of keys) {
+        const lk = k.toLowerCase().trim();
+        if (lk === 'radio' || lk === 'радио') return true;
+    }
+    return false;
+}
+
 export async function processNewRows(results) {
     let addedM = 0, addedV = 0, addedR = 0, addedF = 0;
     for (const { file, rows } of results) {
+        // Определяем наличие radio-колонки на уровне файла
+        const hasRadioColumn = detectRadioColumn(rows);
+
         for (const row of rows) {
             if (Object.values(row).filter(v => v !== null && v !== '').length < 2) continue;
             const type = detectTableType(row);
@@ -68,8 +83,9 @@ export async function processNewRows(results) {
                 state.rawRecommendations.push(row);
                 addedR++;
             } else if (type === 'validation_flat') {
-                // Применяем project/pool из имени файла только если их нет в самой строке
                 const rowWithMeta = Object.assign({}, row);
+
+                // project/pool из имени файла (если ещё не заданы)
                 if (getVal(rowWithMeta, 'Проект') == null) {
                     const meta = parseFileProjectPool(file);
                     if (meta.project) rowWithMeta['Проект'] = meta.project;
@@ -78,6 +94,10 @@ export async function processNewRows(results) {
                     const meta = parseFileProjectPool(file);
                     if (meta.pool) rowWithMeta['Пул'] = meta.pool;
                 }
+
+                // Флаг "в этом файле есть radio-колонка"
+                rowWithMeta._hasRadio = hasRadioColumn;
+
                 state.rawFlatValidations.push(rowWithMeta);
                 addedF++;
             }
@@ -89,39 +109,93 @@ export async function processNewRows(results) {
 }
 
 // ===== Обработка плоского формата =====
-// Одна строка файла = одно задание.
-//   "меток с учетом предразметки" → totalFragments
-//   "некорректных меток"          → totalErrors
-//   "radio"                       → тип ошибки (если ошибок нет — пусто/нет колонки)
-//   "file_name"                   → stripJson (убираем .json)
-//   "email"                       → разметчик
-//   "email проверяющего"          → валидатор
-//   "Проект" / "Пул"              → из имени файла (добавлены в processNewRows)
-// quality = 1 - (totalErrors * weight) / totalFragments,
-//   weight = 0.5 для "Некритичная ошибка", иначе 1.
+// Один файл = один пул. Одна задача может занимать несколько строк (разметчик
+// мог допустить более одной ошибки). Логика:
+//   • Нет колонки radio во всём файле → у всех задач 0 ошибок.
+//   • Есть колонка radio → в каждой строке: radio = "-" — без ошибки,
+//     иначе radio содержит тип ошибки.
+//   • quality = 1 - (Σweight / totalFragments), weight = 0.5 для
+//     "Некритичная ошибка", иначе 1.
 function processFlatValidations() {
     if (!state.rawFlatValidations || state.rawFlatValidations.length === 0) return;
+
+    // Группировка по задаче
+    const groups = {};
+    for (const r of state.rawFlatValidations) {
+        if (!r) continue;
+        const url = getVal(r, 'url задания') || '';
+        const email = getVal(r, 'email') || '';
+        const fileNameRaw = getVal(r, 'file_name') || '';
+        const dateRaw = getVal(r, 'дата разметки') || '';
+        const key = [url, email, fileNameRaw, String(dateRaw)].join('|');
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(r);
+    }
 
     let addedRows = 0;
     let processedTasks = 0;
 
-    for (const r of state.rawFlatValidations) {
-        if (!r) continue;
+    for (const key in groups) {
+        const rows = groups[key];
+        const first = rows[0];
         processedTasks++;
 
-        const project = (getVal(r, 'Проект') || '').replace(/_validate$/, '').trim() || null;
-        const pool = (getVal(r, 'Пул') || '').trim() || null;
-        const fileName = stripJson(getVal(r, 'file_name'));
-        const date = parseExcelDate(getVal(r, 'дата разметки'));
-        const marker = getVal(r, 'email');
-        const validator = getVal(r, 'email проверяющего');
+        const project = (getVal(first, 'Проект') || '').replace(/_validate$/, '').trim() || null;
+        const pool = (getVal(first, 'Пул') || '').trim() || null;
+        const fileName = stripJson(getVal(first, 'file_name'));
+        const date = parseExcelDate(getVal(first, 'дата разметки'));
+        const marker = getVal(first, 'email');
+        const validator = getVal(first, 'email проверяющего');
+        const totalFragments = Number(getVal(first, 'меток с учетом предразметки')) || 0;
+        const declaredErrors = Number(getVal(first, 'некорректных меток')) || 0;
 
-        const totalFragments = Number(getVal(r, 'меток с учетом предразметки')) || 0;
-        const totalErrors = Number(getVal(r, 'некорректных меток')) || 0;
-        let radio = getVal(r, 'radio');
+        // Определяем, есть ли radio-колонка (по флагу или автоопределению для старых данных)
+        const flag = first._hasRadio;
+        let hasRadio;
+        if (flag === true || flag === 'true' || flag === 1 || flag === '1') {
+            hasRadio = true;
+        } else if (flag === false || flag === 'false' || flag === 0 || flag === '0') {
+            hasRadio = false;
+        } else {
+            // Автоопределение: есть ли в группе хоть одно непустое не-"-" значение radio
+            hasRadio = rows.some(r => {
+                const radio = getVal(r, 'radio', 'радио');
+                if (radio == null) return false;
+                const s = String(radio).trim();
+                return s !== '' && s !== '-';
+            });
+        }
 
-        if (totalErrors === 0) {
-            // Ошибок нет → одна запись «Ошибки не выявлены»
+        // Собираем ошибки
+        const mistakes = [];
+        if (hasRadio) {
+            for (const r of rows) {
+                const radio = getVal(r, 'radio', 'радио');
+                if (radio == null) continue;
+                const s = String(radio).trim();
+                if (s === '' || s === '-') continue; // "-" — в этой строке ошибки нет
+                const weight = s === 'Некритичная ошибка' ? 0.5 : 1;
+                mistakes.push({ typ: s, weight });
+            }
+        }
+
+        // Перекрёстная проверка с "некорректных меток":
+        // если заявлено больше ошибок, чем видно по radio — добиваем "Неизвестная ошибка"
+        if (hasRadio && declaredErrors > mistakes.length) {
+            for (let k = mistakes.length; k < declaredErrors; k++) {
+                mistakes.push({ typ: 'Неизвестная ошибка', weight: 1 });
+            }
+        }
+        // Если radio-колонки нет — ошибок нет (согласно спецификации),
+        // даже если declaredErrors > 0 (данные противоречивы, доверяем отсутствию radio).
+
+        const sumWeights = mistakes.reduce((a, b) => a + b.weight, 0);
+        const quality = (totalFragments === 0 || mistakes.length === 0)
+            ? 1
+            : 1 - (sumWeights / totalFragments);
+
+        if (mistakes.length === 0) {
+            // Ошибок нет — одна запись
             state.processedData.push({
                 _id: 'vf_' + Math.random().toString(36).slice(2, 9),
                 _type: 'validation', _linked: null,
@@ -136,21 +210,15 @@ function processFlatValidations() {
             });
             addedRows++;
         } else {
-            // Есть ошибки. Если radio отсутствует — считаем тип «Неизвестная ошибка».
-            if (!radio) radio = 'Неизвестная ошибка';
-            const weightPerError = radio === 'Некритичная ошибка' ? 0.5 : 1;
-            const sumWeights = totalErrors * weightPerError;
-            const quality = totalFragments > 0 ? 1 - (sumWeights / totalFragments) : 1;
-
-            // Создаём по одной записи на каждую ошибку (совместимо с текущей таблицей/графиками)
-            for (let k = 0; k < totalErrors; k++) {
+            // По одной записи на каждую ошибку (совместимо с текущими графиками/таблицами)
+            for (const mis of mistakes) {
                 state.processedData.push({
                     _id: 'vf_' + Math.random().toString(36).slice(2, 9),
                     _type: 'validation', _linked: null,
                     date, pool, marker, validator, project,
                     fileName,
                     result: 'Ошибка',
-                    errorType: radio,
+                    errorType: mis.typ,
                     comment: null,
                     quality,
                     interval: null,
