@@ -12,6 +12,7 @@ export const state = {
     charts: {},
     currentTab: 'all',
     currentMenu: 'main',
+    projects: [],            // ← НОВОЕ: список уникальных названий проектов
     filterState: {
         pool: new Set(),
         marker: new Set(),
