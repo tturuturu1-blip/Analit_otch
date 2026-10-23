@@ -1,7 +1,6 @@
 (function () {
     'use strict';
 
-    // ===== Данные (встроены в отчёт) =====
     var REPORT_DATA = JSON.parse(document.getElementById('report-data').textContent);
     var processedData = REPORT_DATA.processedData || [];
     var feedbackData = REPORT_DATA.feedbackData || [];
@@ -34,13 +33,11 @@
             .replace(/'/g, '&#39;');
     }
 
-    // ===== Фильтры по вкладкам =====
+    // ===== Фильтр по проекту (динамический) =====
     function matchesTab(r) {
         if (currentTab === 'all') return true;
-        if (currentTab === 'aug' && (r.project || '') !== 'Гимнастки август_validate') return false;
-        if (currentTab === 'prep' && (r.project || '') !== 'Гимнастика. Подготовка выступлений_validate') return false;
-        if (currentTab === 'prop' && (r.project || '') !== 'Гимнастки разметка с предметом_validate') return false;
-        return true;
+        var project = (r.project || '').replace(/_validate$/, '').trim();
+        return project === currentTab;
     }
 
     function applyFilters() {
@@ -416,7 +413,6 @@
         tbody.innerHTML = html;
     }
 
-    // ===== Общий триггер =====
     function triggerFilterUpdate() {
         applyFilters();
         updateKPI();
@@ -428,6 +424,14 @@
         buildTrendChart();
         buildTable();
         renderFeedbackTableHome();
+    }
+
+    // ===== Переключение табов проекта =====
+    function switchTab(tabId, btn) {
+        currentTab = tabId;
+        document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+        if (btn) btn.classList.add('active');
+        triggerFilterUpdate();
     }
 
     // ===== Multi-select =====
@@ -520,15 +524,7 @@
         updateLabel(containerId, stateKey);
     }
 
-    // ===== Вкладки =====
-    function switchTab(tabId, btn) {
-        currentTab = tabId;
-        document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
-        btn.classList.add('active');
-        triggerFilterUpdate();
-    }
-
-    // ===== Сброс фильтров =====
+    // ===== Сброс =====
     function resetFilters() {
         document.getElementById('filterDateFrom').value = '';
         document.getElementById('filterDateTo').value = '';
@@ -581,6 +577,16 @@
                 document.querySelectorAll('.ms-dropdown').forEach(function (d) { d.classList.remove('open'); });
             }
         });
+
+        // Табы проектов (делегирование)
+        var tabsContainer = document.getElementById('projectTabs');
+        if (tabsContainer) {
+            tabsContainer.addEventListener('click', function (e) {
+                var tabEl = e.target.closest('.tab');
+                if (!tabEl) return;
+                switchTab(tabEl.dataset.tab, tabEl);
+            });
+        }
 
         triggerFilterUpdate();
     }
