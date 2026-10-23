@@ -167,3 +167,143 @@ tr:hover { background: #f8fafc; }
 #supersetProdCards .kpi-card .value {
     color: var(--accent);
 }
+
+/* ============ Superset: Sticky ============ */
+#section-superset .superset-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--bg);
+    padding: 10px 0 12px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid var(--border);
+}
+#section-superset .superset-sticky .tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+#section-superset .superset-filters {
+    position: static;
+    margin-bottom: 0;
+    box-shadow: none;
+}
+
+/* Sticky заголовки таблиц суперсета (2 строки) */
+#section-superset .table-card {
+    max-height: 600px;
+    overflow: auto;
+}
+#section-superset .table-card table thead tr:nth-child(1) th {
+    top: 0;
+    z-index: 12;
+    background: var(--card);
+    height: 40px;
+}
+#section-superset .table-card table thead tr:nth-child(2) th {
+    top: 40px;
+    z-index: 11;
+    background: #f8fafc;
+    padding: 4px 6px;
+    white-space: normal;
+    border-bottom: 2px solid var(--border);
+}
+#section-superset .table-card table thead tr:nth-child(2) th:empty {
+    background: #f8fafc;
+}
+
+/* ============ Superset: карточка нормы ============ */
+#section-superset .norm-card {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+#section-superset .norm-card .label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+#section-superset .norm-card .value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-top: 5px;
+    color: var(--accent);
+}
+#section-superset .norm-edit-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    padding: 4px 6px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+#section-superset .norm-edit-btn:hover {
+    background: var(--bg);
+    color: var(--accent);
+    opacity: 1;
+}
+#section-superset .norm-values-multi {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+}
+#section-superset .norm-value-item {
+    padding: 4px 0;
+    border-bottom: 1px dashed var(--border);
+}
+#section-superset .norm-value-item:last-child {
+    border-bottom: none;
+}
+#section-superset .norm-value-item .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+#section-superset .norm-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+/* ============ Superset: компактные фильтры в таблицах ============ */
+#section-superset .ms-compact .ms-header {
+    padding: 4px 6px;
+    min-height: 28px;
+    font-size: 0.72rem;
+}
+#section-superset .ms-compact .ms-dropdown {
+    min-width: 180px;
+    max-width: 280px;
+}
+#section-superset .ms-compact .ms-label {
+    font-size: 0.7rem;
+    font-weight: normal;
+}
+#section-superset .ms-compact .ms-arrow {
+    font-size: 0.55rem;
+    margin-left: 4px;
+}
+#section-superset .ms-item-compact {
+    padding: 5px 8px !important;
+    font-size: 0.72rem !important;
+    border-bottom: 1px solid #f0f4f8 !important;
+}
+#section-superset .ms-item-compact input {
+    margin-top: 1px;
+}
