@@ -5,6 +5,7 @@ export const state = {
     rawMarkers: [],
     rawValidation: [],
     rawRecommendations: [],
+    rawFlatValidations: [],   // ← НОВОЕ: плоский формат (url задания, file_name, radio и т.п.)
     processedData: [],
     filteredData: [],
     feedbackData: [],
@@ -12,7 +13,7 @@ export const state = {
     charts: {},
     currentTab: 'all',
     currentMenu: 'main',
-    projects: [],            // ← НОВОЕ: список уникальных названий проектов
+    projects: [],
     filterState: {
         pool: new Set(),
         marker: new Set(),
@@ -27,7 +28,8 @@ export function saveToStorage() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
             m: state.rawMarkers,
             v: state.rawValidation,
-            r: state.rawRecommendations
+            r: state.rawRecommendations,
+            f: state.rawFlatValidations
         }));
     } catch (e) {
         console.error('Ошибка сохранения:', e.message);
@@ -43,12 +45,14 @@ export function loadFromStorage() {
                 state.rawMarkers = Array.isArray(parsed.m) ? parsed.m : [];
                 state.rawValidation = Array.isArray(parsed.v) ? parsed.v : [];
                 state.rawRecommendations = Array.isArray(parsed.r) ? parsed.r : [];
+                state.rawFlatValidations = Array.isArray(parsed.f) ? parsed.f : [];
             }
         }
     } catch (e) {
         state.rawMarkers = [];
         state.rawValidation = [];
         state.rawRecommendations = [];
+        state.rawFlatValidations = [];
     }
 }
 
