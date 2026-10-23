@@ -11,6 +11,7 @@ export const state = {
     rawSuperset1: [],
     rawSuperset2: [],
     rawSuperset3: [],
+    rawEmployeeMap: [],           // ← НОВОЕ: [{ФИО, Почта}]
     processedData: [],
     filteredData: [],
     feedbackData: [],
@@ -30,9 +31,11 @@ export const state = {
         table1: [],
         table2: [],
         table3: [],
+        table4: [],               // ← НОВОЕ
         filteredTable1: [],
         filteredTable2: [],
         filteredTable3: [],
+        filteredTable4: [],       // ← НОВОЕ
         kpis: {
             qualityFact: null,
             qualityPlan: null,
@@ -46,7 +49,7 @@ export const state = {
             globalAvg: null
         },
         filters: {
-            project: 'all',
+            projects: new Set(),      // ← вместо строки 'project'
             dateFrom: '',
             dateTo: '',
             tasks: new Set()
@@ -54,9 +57,11 @@ export const state = {
         tableFilters: {
             t1: {},
             t2: {},
-            t3: {}
+            t3: {},
+            t4: {}
         },
-        normHistory: DEFAULT_NORM_HISTORY.slice()
+        normHistory: DEFAULT_NORM_HISTORY.slice(),
+        employeeMap: { fioToEmail: {}, emailToFio: {} }
     }
 };
 
@@ -70,6 +75,7 @@ export function saveToStorage() {
             s1: state.rawSuperset1,
             s2: state.rawSuperset2,
             s3: state.rawSuperset3,
+            emp: state.rawEmployeeMap,
             normHistory: state.superset.normHistory
         }));
     } catch (e) {
@@ -90,6 +96,7 @@ export function loadFromStorage() {
                 state.rawSuperset1 = Array.isArray(parsed.s1) ? parsed.s1 : [];
                 state.rawSuperset2 = Array.isArray(parsed.s2) ? parsed.s2 : [];
                 state.rawSuperset3 = Array.isArray(parsed.s3) ? parsed.s3 : [];
+                state.rawEmployeeMap = Array.isArray(parsed.emp) ? parsed.emp : [];
                 state.superset.normHistory = Array.isArray(parsed.normHistory) && parsed.normHistory.length > 0
                     ? parsed.normHistory
                     : DEFAULT_NORM_HISTORY.slice();
@@ -103,6 +110,7 @@ export function loadFromStorage() {
         state.rawSuperset1 = [];
         state.rawSuperset2 = [];
         state.rawSuperset3 = [];
+        state.rawEmployeeMap = [];
         state.superset.normHistory = DEFAULT_NORM_HISTORY.slice();
     }
 }
