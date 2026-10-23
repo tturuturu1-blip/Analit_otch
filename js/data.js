@@ -197,18 +197,16 @@ export async function recomputeDashboard() {
     }
 
     updateProgress(100, 'Готово', 'Пересчет');
-
-    // Сообщаем UI, что данные обновлены — app.js обновит всё
     window.dispatchEvent(new CustomEvent('app:data-updated'));
 }
 
 // ===== Фильтрация =====
+// Динамический фильтр по проекту: сравнивает усечённое имя проекта в строке
+// с текущим state.currentTab. Усечение — снимаем суффикс "_validate" и пробелы.
 export function matchesTab(r) {
     if (state.currentTab === 'all') return true;
-    if (state.currentTab === 'aug' && (r.project || '') !== 'Гимнастки август_validate') return false;
-    if (state.currentTab === 'prep' && (r.project || '') !== 'Гимнастика. Подготовка выступлений_validate') return false;
-    if (state.currentTab === 'prop' && (r.project || '') !== 'Гимнастки разметка с предметом_validate') return false;
-    return true;
+    const project = (r.project || '').replace(/_validate$/, '').trim();
+    return project === state.currentTab;
 }
 
 export function applyFilters() {
@@ -218,7 +216,6 @@ export function applyFilters() {
     const toDate = to ? new Date(to) : null;
     if (toDate) toDate.setDate(toDate.getDate() + 1);
 
-    // Предварительно кэшируем Set — доступ к Set быстрее, чем к state
     const { pool, marker, result } = state.filterState;
     const poolEmpty = pool.size === 0;
     const markerEmpty = marker.size === 0;
