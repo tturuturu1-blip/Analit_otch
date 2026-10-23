@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
-import { formatDate, updateLabel, escapeHtml, destroyChart } from './utils.js';
+import { formatDate, updateLabel, escapeHtml, destroyChart, getVal } from './utils.js';
 import { renderFeedbackTable, renderFeedbackTableHome } from './feedback.js';
 
 // ===== Навигация =====
@@ -31,9 +31,6 @@ export function switchTab(tabId, btn) {
 }
 
 // ===== Авто-формирование табов проектов =====
-// Строит табы на основе уникальных значений поля "project" в processedData.
-// Суффикс "_validate" отбрасывается, пустые отбрасываются.
-// Если проектов 0 или 1 — контейнер табов скрывается (state.currentTab = 'all').
 export function buildProjectTabs() {
     const tabsContainer = document.getElementById('projectTabs');
     if (!tabsContainer) return;
@@ -47,7 +44,6 @@ export function buildProjectTabs() {
     const projects = Array.from(projectSet).sort();
     state.projects = projects;
 
-    // 0 или 1 проект — табы не нужны
     if (projects.length <= 1) {
         tabsContainer.style.display = 'none';
         tabsContainer.innerHTML = '';
@@ -57,12 +53,10 @@ export function buildProjectTabs() {
 
     tabsContainer.style.display = 'flex';
 
-    // Если текущий таб больше не существует — сброс на "Все"
     if (state.currentTab !== 'all' && !projects.includes(state.currentTab)) {
         state.currentTab = 'all';
     }
 
-    // Сборка HTML
     let html = '<div class="tab ' + (state.currentTab === 'all' ? 'active' : '') + '" data-tab="all">Все</div>';
     for (const p of projects) {
         const safe = escapeHtml(p);
@@ -70,6 +64,97 @@ export function buildProjectTabs() {
         html += '<div class="tab ' + active + '" data-tab="' + safe + '">' + safe + '</div>';
     }
     tabsContainer.innerHTML = html;
+}
+
+// ===== Список задач из Markers с индикатором покрытия Validation =====
+// Для каждой уникальной "Задачи" из Markers проверяем, есть ли хотя бы одна
+// пара (ID задачи, ID разметчика), которая присутствует в rawValidation.
+// ✅ — хотя бы одна валидация найдена, ❌ — ни одной.
+// Рядом показывается (N/M): найдено N пар из M.
+export function renderMarkersTasksStatus() {
+    const container = document.getElementById('markersStatusList');
+    if (!container) return;
+
+    if (!state.rawMarkers || state.rawMarkers.length === 0) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    // Индекс ключей валидаций
+    const valKeys = new Set();
+    for (const v of state.rawValidation) {
+        const taskId = getVal(v, 'task_id');
+        const markerId = getVal(v, 'marker_id');
+        if (taskId != null && markerId != null) {
+            valKeys.add(String(taskId).trim() + '|' + String(markerId).trim());
+        }
+    }
+
+    // Группировка по значению "Задача"
+    const tasksMap = new Map();
+    for (const m of state.rawMarkers) {
+        const taskName = getVal(m, 'Задача');
+        if (!taskName) continue;
+        const taskId = getVal(m, 'ID задачи');
+        const markerId = getVal(m, 'ID разметчика');
+        const key = (taskId != null && markerId != null)
+            ? String(taskId).trim() + '|' + String(markerId).trim()
+            : null;
+
+        if (!tasksMap.has(taskName)) {
+            tasksMap.set(taskName, { pairs: new Set(), matched: new Set() });
+        }
+        const entry = tasksMap.get(taskName);
+        if (key) {
+            entry.pairs.add(key);
+            if (valKeys.has(key)) entry.matched.add(key);
+        }
+    }
+
+    // Формируем список
+    const tasks = [];
+    for (const [name, entry] of tasksMap) {
+        tasks.push({
+            name,
+            hasVal: entry.matched.size > 0,
+            totalPairs: entry.pairs.size,
+            matchedPairs: entry.matched.size
+        });
+    }
+
+    // Сортировка: сначала "без валидации", затем по имени
+    tasks.sort((a, b) => {
+        if (a.hasVal === b.hasVal) return a.name.localeCompare(b.name);
+        return a.hasVal ? 1 : -1;
+    });
+
+    const withVal = tasks.filter(t => t.hasVal).length;
+    const withoutVal = tasks.length - withVal;
+
+    let html = '<div class="markers-status-summary">'
+        + '<span class="markers-status-ok">✅ ' + withVal + '</span>'
+        + '<span class="markers-status-bad">❌ ' + withoutVal + '</span>'
+        + '<span class="markers-status-total">Всего задач: ' + tasks.length + '</span>'
+        + '</div>';
+
+    html += '<ul class="markers-status-items">';
+    for (const t of tasks) {
+        const icon = t.hasVal ? '✅' : '❌';
+        const cls = t.hasVal ? 'ok' : 'bad';
+        const pairsInfo = t.totalPairs > 0
+            ? '<span class="markers-status-pairs">(' + t.matchedPairs + '/' + t.totalPairs + ')</span>'
+            : '';
+        html += '<li class="markers-status-item ' + cls + '" title="' + escapeHtml(t.name) + '">'
+            + '<span class="markers-status-icon">' + icon + '</span>'
+            + '<span class="markers-status-name">' + escapeHtml(t.name) + '</span>'
+            + pairsInfo
+            + '</li>';
+    }
+    html += '</ul>';
+
+    container.innerHTML = html;
+    container.style.display = 'block';
 }
 
 // ===== Multi-select =====
