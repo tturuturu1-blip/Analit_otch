@@ -3,14 +3,14 @@ import { applyFilters, matchesTab } from './data.js';
 import { formatDate, updateLabel, escapeHtml, destroyChart, getVal } from './utils.js';
 import { renderFeedbackTable, renderFeedbackTableHome } from './feedback.js';
 
-// ===== Навигация =====
 export function switchMenu(menuId, btn) {
     state.currentMenu = menuId;
     document.querySelectorAll('.nav-icon').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    document.getElementById('section-' + menuId).classList.add('active');
+    const sec = document.getElementById('section-' + menuId);
+    if (sec) sec.classList.add('active');
 
     const topBar = document.getElementById('topBar');
     topBar.style.display = (menuId === 'data') ? 'none' : 'flex';
@@ -18,6 +18,7 @@ export function switchMenu(menuId, btn) {
     if (menuId === 'main') triggerFilterUpdate();
     if (menuId === 'errors') renderErrorsTable();
     if (menuId === 'feedback') renderFeedbackTable();
+    if (menuId === 'superset') renderSupersetPage();
 }
 
 export function switchTab(tabId, btn) {
@@ -30,7 +31,6 @@ export function switchTab(tabId, btn) {
     if (state.currentMenu === 'feedback') renderFeedbackTable();
 }
 
-// ===== Авто-формирование табов проектов =====
 export function buildProjectTabs() {
     const tabsContainer = document.getElementById('projectTabs');
     if (!tabsContainer) return;
@@ -52,10 +52,7 @@ export function buildProjectTabs() {
     }
 
     tabsContainer.style.display = 'flex';
-
-    if (state.currentTab !== 'all' && !projects.includes(state.currentTab)) {
-        state.currentTab = 'all';
-    }
+    if (state.currentTab !== 'all' && !projects.includes(state.currentTab)) state.currentTab = 'all';
 
     let html = '<div class="tab ' + (state.currentTab === 'all' ? 'active' : '') + '" data-tab="all">Все</div>';
     for (const p of projects) {
@@ -66,22 +63,15 @@ export function buildProjectTabs() {
     tabsContainer.innerHTML = html;
 }
 
-// ===== Список задач из Markers с индикатором покрытия Validation =====
-// Для каждой уникальной "Задачи" из Markers проверяем, есть ли хотя бы одна
-// пара (ID задачи, ID разметчика), которая присутствует в rawValidation.
-// ✅ — хотя бы одна валидация найдена, ❌ — ни одной.
-// Рядом показывается (N/M): найдено N пар из M.
 export function renderMarkersTasksStatus() {
     const container = document.getElementById('markersStatusList');
     if (!container) return;
-
     if (!state.rawMarkers || state.rawMarkers.length === 0) {
         container.style.display = 'none';
         container.innerHTML = '';
         return;
     }
 
-    // Индекс ключей валидаций
     const valKeys = new Set();
     for (const v of state.rawValidation) {
         const taskId = getVal(v, 'task_id');
@@ -91,7 +81,6 @@ export function renderMarkersTasksStatus() {
         }
     }
 
-    // Группировка по значению "Задача"
     const tasksMap = new Map();
     for (const m of state.rawMarkers) {
         const taskName = getVal(m, 'Задача');
@@ -101,10 +90,7 @@ export function renderMarkersTasksStatus() {
         const key = (taskId != null && markerId != null)
             ? String(taskId).trim() + '|' + String(markerId).trim()
             : null;
-
-        if (!tasksMap.has(taskName)) {
-            tasksMap.set(taskName, { pairs: new Set(), matched: new Set() });
-        }
+        if (!tasksMap.has(taskName)) tasksMap.set(taskName, { pairs: new Set(), matched: new Set() });
         const entry = tasksMap.get(taskName);
         if (key) {
             entry.pairs.add(key);
@@ -112,7 +98,6 @@ export function renderMarkersTasksStatus() {
         }
     }
 
-    // Формируем список
     const tasks = [];
     for (const [name, entry] of tasksMap) {
         tasks.push({
@@ -123,7 +108,6 @@ export function renderMarkersTasksStatus() {
         });
     }
 
-    // Сортировка: сначала "без валидации", затем по имени
     tasks.sort((a, b) => {
         if (a.hasVal === b.hasVal) return a.name.localeCompare(b.name);
         return a.hasVal ? 1 : -1;
@@ -136,9 +120,7 @@ export function renderMarkersTasksStatus() {
         + '<span class="markers-status-ok">✅ ' + withVal + '</span>'
         + '<span class="markers-status-bad">❌ ' + withoutVal + '</span>'
         + '<span class="markers-status-total">Всего задач: ' + tasks.length + '</span>'
-        + '</div>';
-
-    html += '<ul class="markers-status-items">';
+        + '</div><ul class="markers-status-items">';
     for (const t of tasks) {
         const icon = t.hasVal ? '✅' : '❌';
         const cls = t.hasVal ? 'ok' : 'bad';
@@ -148,8 +130,7 @@ export function renderMarkersTasksStatus() {
         html += '<li class="markers-status-item ' + cls + '" title="' + escapeHtml(t.name) + '">'
             + '<span class="markers-status-icon">' + icon + '</span>'
             + '<span class="markers-status-name">' + escapeHtml(t.name) + '</span>'
-            + pairsInfo
-            + '</li>';
+            + pairsInfo + '</li>';
     }
     html += '</ul>';
 
@@ -157,7 +138,6 @@ export function renderMarkersTasksStatus() {
     container.style.display = 'block';
 }
 
-// ===== Multi-select =====
 export function toggleDropdown(id) {
     const dropdown = document.getElementById(id + '_dropdown');
     if (!dropdown) return;
@@ -212,12 +192,10 @@ export function populateMultiSelect(containerId, stateKey, values) {
     if (!optionsContainer) return;
     state.filterState[stateKey].clear();
     document.getElementById(containerId + '_all').checked = false;
-
     optionsContainer.innerHTML = values.map(val => {
         const safe = escapeHtml(val);
         return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onOptionChange('${containerId}', '${stateKey}', this.value, this.checked)"><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
     }).join('');
-
     updateLabel(containerId, stateKey);
 }
 
@@ -231,7 +209,6 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
 }
 
-// ===== Обновление всей панели главной страницы =====
 export function triggerFilterUpdate() {
     if (state.currentMenu !== 'main') return;
     applyFilters();
@@ -246,11 +223,9 @@ export function triggerFilterUpdate() {
     renderFeedbackTableHome();
 }
 
-// ===== KPI =====
 export function updateKPI() {
     const uniqueFiles = new Set();
     let totalFragments = 0;
-
     for (const r of state.filteredData) {
         if (r._type !== 'validation') continue;
         const fileKey = r.marker + '|' + r.fileName + '|' + r.fragments;
@@ -279,9 +254,25 @@ export function updateKPI() {
     document.getElementById('kpiTotalMarkers').textContent = uniqueMarkers.size;
     document.getElementById('kpiErrorsPercent').textContent = errorPercent.toFixed(2) + '%';
     document.getElementById('kpiQuality').textContent = avgQ !== null ? (avgQ * 100).toFixed(1) + '%' : '—';
+
+    const target = state.superset.norms.globalAvg;
+    const targetEl = document.getElementById('kpiTargetQuality');
+    if (targetEl) {
+        targetEl.textContent = target != null ? target.toFixed(1) + '%' : '—';
+    }
 }
 
-// ===== Charts =====
+function targetLinesForLabels(labels) {
+    const target = state.superset.norms.globalAvg;
+    if (target != null) {
+        return [{ label: 'Целевое (суперсет)', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#1d9bf0', borderWidth: 2, pointRadius: 0, order: 1 }];
+    }
+    return [
+        { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, order: 1 },
+        { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, order: 1 }
+    ];
+}
+
 export function buildQualityChart() {
     destroyChart(state.charts.quality);
     const byMarker = {};
@@ -292,13 +283,13 @@ export function buildQualityChart() {
     }
     const labels = Object.keys(byMarker).sort();
     const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
+    const datasets = [
+        { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#ef4444' : v < 99 ? '#f59e0b' : '#10b981'), borderRadius: 4, order: 2 },
+        ...targetLinesForLabels(labels)
+    ];
     state.charts.quality = new Chart(document.getElementById('chartQuality'), {
         type: 'bar',
-        data: { labels: labels.map(l => l.length > 25 ? l.slice(0, 22) + '…' : l), datasets: [
-            { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#ef4444' : v < 99 ? '#f59e0b' : '#10b981'), borderRadius: 4, order: 2 },
-            { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, order: 1 },
-            { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, order: 1 }
-        ]},
+        data: { labels: labels.map(l => l.length > 25 ? l.slice(0, 22) + '…' : l), datasets },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#2e1065' } }, x: { ticks: { color: '#2e1065' } } } }
     });
 }
@@ -326,13 +317,13 @@ export function buildPoolQualityChart() {
     }
     const labels = Object.keys(byPool).sort();
     const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
+    const datasets = [
+        { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#ef4444' : v < 99 ? '#f59e0b' : '#10b981'), borderRadius: 4, order: 2 },
+        ...targetLinesForLabels(labels)
+    ];
     state.charts.poolQuality = new Chart(document.getElementById('chartPoolQuality'), {
         type: 'bar',
-        data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets: [
-            { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#ef4444' : v < 99 ? '#f59e0b' : '#10b981'), borderRadius: 4, order: 2 },
-            { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, order: 1 },
-            { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, order: 1 }
-        ]},
+        data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#2e1065' } }, x: { ticks: { color: '#2e1065' } } } }
     });
 }
@@ -349,15 +340,27 @@ export function buildDayQualityChart() {
     const labels = Object.keys(byDate).sort((a, b) =>
         a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-')));
     const values = labels.map(d => (byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length) * 100);
-    const targetLine = labels.map(d => {
-        const p = d.split('.');
-        return new Date(p[2], p[1] - 1, p[0]) < new Date(2026, 9, 20) ? 98 : 99;
-    });
+
+    const target = state.superset.norms.globalAvg;
+    let targetData, targetLabel, targetColor;
+    if (target != null) {
+        targetData = labels.map(() => target);
+        targetLabel = 'Целевое качество (суперсет)';
+        targetColor = '#1d9bf0';
+    } else {
+        targetData = labels.map(d => {
+            const p = d.split('.');
+            return new Date(p[2], p[1] - 1, p[0]) < new Date(2026, 9, 20) ? 98 : 99;
+        });
+        targetLabel = 'Контрольная линия';
+        targetColor = '#ef4444';
+    }
+
     state.charts.dayQuality = new Chart(document.getElementById('chartDayQuality'), {
         type: 'line',
         data: { labels, datasets: [
             { label: 'Ср. качество, %', data: values, borderColor: '#1d9bf0', backgroundColor: 'rgba(29, 155, 240, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 },
-            { label: 'Контрольная линия', data: targetLine, borderColor: '#ef4444', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: true, order: 1 }
+            { label: targetLabel, data: targetData, borderColor: targetColor, borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: target == null, order: 1 }
         ]},
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#2e1065' } }, x: { ticks: { color: '#2e1065' } } } }
     });
@@ -402,7 +405,6 @@ export function buildTrendChart() {
     });
 }
 
-// ===== Таблица данных =====
 export function buildTable() {
     const tbody = document.getElementById('tableBody');
     const rows = state.filteredData.slice(0, 300);
@@ -431,7 +433,6 @@ export function buildTable() {
     }).join('');
 }
 
-// ===== Топ ошибок =====
 export function renderErrorsTable() {
     const tbody = document.getElementById('errorsTableBody');
     const from = document.getElementById('errFilterDateFrom').value;
@@ -453,9 +454,7 @@ export function renderErrorsTable() {
 
     for (const r of filtered) {
         if (!r.marker) continue;
-        if (!markerStats[r.marker]) {
-            markerStats[r.marker] = { totalErrors: 0, totalFragments: 0, errorTypes: {} };
-        }
+        if (!markerStats[r.marker]) markerStats[r.marker] = { totalErrors: 0, totalFragments: 0, errorTypes: {} };
         const fileKey = r.marker + '|' + r.fileName + '|' + r.fragments;
         if (!processedFiles.has(fileKey)) {
             processedFiles.add(fileKey);
@@ -464,18 +463,12 @@ export function renderErrorsTable() {
         if (r.result === 'Ошибка') {
             markerStats[r.marker].totalErrors++;
             const type = r.errorType || 'Неизвестная';
-            if (!markerStats[r.marker].errorTypes[type]) {
-                markerStats[r.marker].errorTypes[type] = { count: 0, pools: {} };
-            }
+            if (!markerStats[r.marker].errorTypes[type]) markerStats[r.marker].errorTypes[type] = { count: 0, pools: {} };
             markerStats[r.marker].errorTypes[type].count++;
             const pool = r.pool || 'Неизвестный пул';
-            if (!markerStats[r.marker].errorTypes[type].pools[pool]) {
-                markerStats[r.marker].errorTypes[type].pools[pool] = { count: 0, comments: [] };
-            }
+            if (!markerStats[r.marker].errorTypes[type].pools[pool]) markerStats[r.marker].errorTypes[type].pools[pool] = { count: 0, comments: [] };
             markerStats[r.marker].errorTypes[type].pools[pool].count++;
-            if (r.comment) {
-                markerStats[r.marker].errorTypes[type].pools[pool].comments.push(r.comment);
-            }
+            if (r.comment) markerStats[r.marker].errorTypes[type].pools[pool].comments.push(r.comment);
         }
     }
 
@@ -486,7 +479,6 @@ export function renderErrorsTable() {
         const stats = markerStats[marker];
         const rate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
         const markerId = `m_${mIdx}`;
-
         html += `<tr class="expandable-row l1-row" onclick="toggleRow('${markerId}_details', this, event)">
             <td><span class="toggle-icon">▶</span> <b>${escapeHtml(marker)}</b></td>
             <td><b>${rate.toFixed(2)}%</b> <span style="font-weight:normal;color:var(--muted)">(${stats.totalErrors} из ${stats.totalFragments})</span></td>
@@ -494,12 +486,10 @@ export function renderErrorsTable() {
 
         let l2Html = '';
         const sortedTypes = Object.keys(stats.errorTypes).sort((a, b) => stats.errorTypes[b].count - stats.errorTypes[a].count);
-
         sortedTypes.forEach((type, tIdx) => {
             const typeData = stats.errorTypes[type];
             const typeRate = (typeData.count / stats.totalErrors) * 100;
             const typeId = `${markerId}_t_${tIdx}`;
-
             l2Html += `<tr class="expandable-row l2-row" id="${typeId}" onclick="toggleRow('${typeId}_details', this, event)">
                 <td style="padding-left: 30px;"><span class="toggle-icon">▶</span> ${escapeHtml(type)}</td>
                 <td>${typeRate.toFixed(2)}% <span style="color:var(--muted)">(${typeData.count})</span></td>
@@ -511,36 +501,30 @@ export function renderErrorsTable() {
                 const poolData = typeData.pools[pool];
                 const poolRate = (poolData.count / typeData.count) * 100;
                 const poolId = `${typeId}_p_${pIdx}`;
-
                 l3Html += `<tr class="expandable-row l3-row" id="${poolId}" onclick="toggleRow('${poolId}_details', this, event)">
                     <td style="padding-left: 60px;"><span class="toggle-icon">▶</span> ${escapeHtml(pool)}</td>
                     <td>${poolRate.toFixed(2)}% <span style="color:var(--muted)">(${poolData.count})</span></td>
                 </tr>`;
-
                 let commentsHtml = poolData.comments.map(c => `<li>${escapeHtml(c)}</li>`).join('');
                 if (!commentsHtml) commentsHtml = '<li>Нет комментариев</li>';
-
                 l3Html += `<tr class="details-row" id="${poolId}_details" style="display:none;">
                     <td colspan="2" style="padding-left: 90px; background: #f8fafc;">
                         <ul class="comment-list">${commentsHtml}</ul>
                     </td>
                 </tr>`;
             });
-
             l2Html += `<tr class="details-row" id="${typeId}_details" style="display:none;">
                 <td colspan="2" style="padding:0;">
                     <table style="margin:0; box-shadow:none; border:none;"><tbody>${l3Html}</tbody></table>
                 </td>
             </tr>`;
         });
-
         html += `<tr class="details-row" id="${markerId}_details" style="display:none;">
             <td colspan="2" style="padding:0;">
                 <table style="margin:0; box-shadow:none; border:none;"><tbody>${l2Html}</tbody></table>
             </td>
         </tr>`;
     });
-
     tbody.innerHTML = html;
 }
 
@@ -550,11 +534,130 @@ export function toggleRow(id, rowElement, event) {
     if (!el) return;
     const icon = rowElement.querySelector('.toggle-icon');
     const isHidden = el.style.display === 'none' || el.style.display === '' || window.getComputedStyle(el).display === 'none';
-    if (isHidden) {
-        el.style.display = 'table-row';
-        if (icon) icon.classList.add('open');
-    } else {
-        el.style.display = 'none';
-        if (icon) icon.classList.remove('open');
+    if (isHidden) { el.style.display = 'table-row'; if (icon) icon.classList.add('open'); }
+    else { el.style.display = 'none'; if (icon) icon.classList.remove('open'); }
+}
+
+// ===== Суперсет =====
+export function renderSupersetPage() {
+    renderSupersetCards();
+    renderSupersetBallsCards();
+    renderSupersetProdCards();
+    renderSupersetTable1();
+    renderSupersetTable2();
+    renderSupersetTable3();
+}
+
+function renderSupersetCards() {
+    const container = document.getElementById('supersetCards');
+    if (!container) return;
+    const cards = state.superset.cards || [];
+    if (cards.length === 0) {
+        container.innerHTML = '<div class="kpi-card"><div class="label">Нет данных</div><div class="value">—</div></div>';
+        return;
     }
+    container.innerHTML = cards.map(c => {
+        const pct = c.factQuality * 100;
+        let cls = '';
+        if (pct < 98) cls = 'target-low';
+        else if (pct < 99) cls = 'target-mid';
+        return `<div class="kpi-card ${cls}">
+            <div class="label">${escapeHtml(c.project)}</div>
+            <div class="value">${pct.toFixed(1)}%</div>
+        </div>`;
+    }).join('');
+}
+
+function renderSupersetBallsCards() {
+    const container = document.getElementById('supersetBallsCards');
+    if (!container) return;
+    const cards = state.superset.ballsCards || [];
+    if (cards.length === 0) {
+        container.innerHTML = '<div class="kpi-card"><div class="label">Нет данных. Загрузите файлы типа 1.</div><div class="value">—</div></div>';
+        return;
+    }
+    container.innerHTML = cards.map(c => `
+        <div class="kpi-card">
+            <div class="label">${escapeHtml(c.project)}</div>
+            <div class="value">${c.avg.toFixed(1)}</div>
+        </div>
+    `).join('');
+}
+
+function renderSupersetProdCards() {
+    const container = document.getElementById('supersetProdCards');
+    if (!container) return;
+    const cards = state.superset.prodCards || [];
+    if (cards.length === 0) {
+        container.innerHTML = '<div class="kpi-card"><div class="label">Нет данных. Загрузите файлы типа 1.</div><div class="value">—</div></div>';
+        return;
+    }
+    container.innerHTML = cards.map(c => `
+        <div class="kpi-card">
+            <div class="label">${escapeHtml(c.project)}</div>
+            <div class="value">${c.avg.toFixed(1)}</div>
+        </div>
+    `).join('');
+}
+
+function renderSupersetTable1() {
+    const tbody = document.getElementById('supersetTable1Body');
+    if (!tbody) return;
+    const rows = state.superset.table1 || [];
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типов 1 и/или 2.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => `<tr>
+        <td>${r.dateStart ? formatDate(r.dateStart) : ''}</td>
+        <td>${r.dateEnd ? formatDate(r.dateEnd) : ''}</td>
+        <td>${escapeHtml(r.project)}</td>
+        <td>${escapeHtml(r.task)}</td>
+        <td>${escapeHtml(String(r.fragments))}</td>
+        <td>${escapeHtml(String(r.normQuality))}</td>
+        <td>${escapeHtml(String(r.quality))}</td>
+        <td>${escapeHtml(String(r.comment))}</td>
+        <td>${escapeHtml(String(r.withoutQuality))}</td>
+        <td>${escapeHtml(String(r.ballsPerHour))}</td>
+        <td>${escapeHtml(String(r.prodPerHour))}</td>
+        <td>${escapeHtml(String(r.price))}</td>
+        <td>${escapeHtml(String(r.taskType))}</td>
+    </tr>`).join('');
+}
+
+function renderSupersetTable2() {
+    const tbody = document.getElementById('supersetTable2Body');
+    if (!tbody) return;
+    const rows = state.superset.table2 || [];
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типа 3.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => `<tr>
+        <td>${r.date ? formatDate(r.date) : ''}</td>
+        <td>${escapeHtml(r.fio)}</td>
+        <td>${escapeHtml(r.project)}</td>
+        <td>${escapeHtml(r.task)}</td>
+        <td>${escapeHtml(String(r.fragments))}</td>
+        <td>${escapeHtml(String(r.balls))}</td>
+        <td>${escapeHtml(String(r.qualitySuperset))}</td>
+        <td>${r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '—'}</td>
+        <td>${escapeHtml(String(r.norm))}</td>
+        <td>${escapeHtml(String(r.withoutQuality))}</td>
+    </tr>`).join('');
+}
+
+function renderSupersetTable3() {
+    const tbody = document.getElementById('supersetTable3Body');
+    if (!tbody) return;
+    const rows = state.superset.table3 || [];
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типа 1.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => `<tr>
+        <td>${r.date ? formatDate(r.date) : ''}</td>
+        <td>${escapeHtml(r.project)}</td>
+        <td>${escapeHtml(String(r.price))}</td>
+    </tr>`).join('');
 }
