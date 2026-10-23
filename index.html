@@ -266,14 +266,10 @@
             </div>
         </section>
 
-        <!-- ▼▼▼ Суперсет ▼▼▼ -->
         <section id="section-superset" class="section">
             <h2 style="margin-bottom: 20px;">Суперсет</h2>
 
-            <!-- Sticky-контейнер: табы проектов + фильтры по дате/задаче -->
             <div class="superset-sticky">
-                <div class="tabs" id="supersetProjectTabs" style="display:none; margin-bottom: 12px;"></div>
-
                 <div class="filters superset-filters">
                     <div class="filter-group">
                         <label>Дата с</label>
@@ -282,6 +278,19 @@
                     <div class="filter-group">
                         <label>Дата по</label>
                         <input type="date" id="supersetDateTo">
+                    </div>
+                    <div class="filter-group">
+                        <label>Проект</label>
+                        <div class="multi-select" id="msSupersetProject">
+                            <div class="ms-header" onclick="toggleDropdown('msSupersetProject')">
+                                <span class="ms-label empty" id="msSupersetProject_label">Все проекты</span>
+                                <span class="ms-arrow">▼</span>
+                            </div>
+                            <div class="ms-dropdown" id="msSupersetProject_dropdown">
+                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                <div id="msSupersetProject_options"></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="filter-group">
                         <label>Задача (пул)</label>
@@ -300,13 +309,8 @@
                 </div>
             </div>
 
-            <!-- Карточка "Норма у.е. в час" -->
-            <div class="norm-card" id="supersetNormCard">
-                <div class="label">Норма у.е. в час</div>
-                <div class="value">580</div>
-            </div>
+            <div class="norm-card" id="supersetNormCard"></div>
 
-            <!-- 5 KPI-карточек -->
             <div class="kpi-row" id="supersetKpis"></div>
 
             <h3 style="margin-bottom: 15px;">Сводная таблица (проект + задача)</h3>
@@ -341,18 +345,33 @@
                 </table>
             </div>
 
-            <h3 style="margin-bottom: 15px;">Цены по проектам</h3>
-            <div class="table-card">
-                <table id="supersetTable3">
-                    <thead>
-                        <tr><th>Дата</th><th>Проект</th><th>Цена</th></tr>
-                        <tr id="supersetTable3Filters"></tr>
-                    </thead>
-                    <tbody id="supersetTable3Body"></tbody>
-                </table>
+            <div class="superset-tables-row">
+                <div>
+                    <h3 style="margin-bottom: 15px;">Цены по проектам</h3>
+                    <div class="table-card">
+                        <table id="supersetTable3">
+                            <thead>
+                                <tr><th>Дата</th><th>Проект</th><th>Цена</th></tr>
+                                <tr id="supersetTable3Filters"></tr>
+                            </thead>
+                            <tbody id="supersetTable3Body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div>
+                    <h3 style="margin-bottom: 15px;">Факт/план по сотрудникам</h3>
+                    <div class="table-card">
+                        <table id="supersetTable4">
+                            <thead>
+                                <tr><th>ФИО</th><th>Качество</th><th>Норматив</th></tr>
+                                <tr id="supersetTable4Filters"></tr>
+                            </thead>
+                            <tbody id="supersetTable4Body"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </section>
-        <!-- ▲▲▲ -->
 
         <footer class="page-footer">
             <a href="https://www.flaticon.com/ru/free-icons/" title="статистика иконки" target="_blank" rel="noopener noreferrer">Статистика иконки от Flat-icons-com - Flaticon</a>
