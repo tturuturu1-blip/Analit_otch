@@ -2,6 +2,23 @@ import { state, saveFeedbackToStorage } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel } from './utils.js';
 import { matchesTab } from './data.js';
 
+// ===== Определение проекта по пулам записи =====
+// Используется, если в записи нет поля project (старые записи)
+// или если пользователь выбрал пулы для новой записи.
+function deriveProjectFromPools(poolsStr) {
+    if (!poolsStr) return null;
+    const pools = String(poolsStr).split(',').map(p => p.trim()).filter(Boolean);
+    if (pools.length === 0) return null;
+    for (const pool of pools) {
+        for (const r of state.processedData) {
+            if (r.pool === pool && r.project) {
+                return r.project.replace(/_validate$/, '').trim();
+            }
+        }
+    }
+    return null;
+}
+
 // ===== Общий рендер строк таблицы обратной связи =====
 // tbodyId       — id контейнера <tbody>, куда рендерить
 // includeActions — true → добавить колонку с кнопками "Редактировать/Удалить"
@@ -9,10 +26,21 @@ function renderFeedbackRows(tbodyId, includeActions) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
 
-    const validMarkers = new Set(state.processedData.filter(matchesTab).map(r => r.marker));
-    const filteredFb = state.feedbackData.filter(f =>
-        state.currentTab === 'all' || validMarkers.has(f.marker)
-    );
+    // Маркеры, у которых есть данные в выбранном проекте (fallback для старых записей без project)
+    const validMarkers = new Set();
+    if (state.currentTab !== 'all') {
+        for (const r of state.processedData) {
+            if (matchesTab(r) && r.marker) validMarkers.add(r.marker);
+        }
+    }
+
+    // Фильтр по проекту (приоритет — поле project, fallback — маркер)
+    const filteredFb = state.feedbackData.filter(f => {
+        if (state.currentTab === 'all') return true;
+        const proj = f.project || deriveProjectFromPools(f.pools);
+        if (proj) return proj === state.currentTab;
+        return validMarkers.has(f.marker);
+    });
 
     tbody.innerHTML = filteredFb
         .slice()
@@ -25,6 +53,7 @@ function renderFeedbackRows(tbodyId, includeActions) {
             const avgQText = f.avgQuality !== undefined && f.avgQuality !== null
                 ? (f.avgQuality * 100).toFixed(1) + '%'
                 : '—';
+            const displayProject = f.project || deriveProjectFromPools(f.pools) || '—';
 
             let actionsCell = '';
             if (includeActions) {
@@ -45,6 +74,7 @@ function renderFeedbackRows(tbodyId, includeActions) {
                 <td>${escapeHtml(f.typeVKS || '—')}</td>
                 <td>${escapeHtml(f.conductor || '—')}</td>
                 <td><span class="status-badge" style="background:${statusColor}20; color:${statusColor}">${escapeHtml(f.status)}</span></td>
+                <td>${escapeHtml(displayProject)}</td>
                 <td>${escapeHtml(f.pools || '')}</td>
                 <td><b>${avgQText}</b></td>
                 ${actionsCell}
@@ -53,8 +83,6 @@ function renderFeedbackRows(tbodyId, includeActions) {
 }
 
 // ===== Полная таблица на странице "Обратная связь" (с кнопками) =====
-// Дополнительно обновляет select разметчиков и datalist "Провел".
-// Также обновляет таблицу на главной, чтобы данные не разъезжались.
 export function renderFeedbackTable() {
     const markerSelect = document.getElementById('fbMarker');
     if (markerSelect) {
@@ -72,8 +100,8 @@ export function renderFeedbackTable() {
             .join('');
     }
 
-    renderFeedbackRows('fbTableBody', true);      // страница "Обратная связь"
-    renderFeedbackRows('fbTableBodyHome', false); // страница "Главная" (без кнопок)
+    renderFeedbackRows('fbTableBody', true);
+    renderFeedbackRows('fbTableBodyHome', false);
 }
 
 // ===== Только таблица на главной (без кнопок) =====
@@ -127,6 +155,9 @@ function handleAddFeedback() {
     if (!marker || !dateStr) { alert('Выберите разметчика и дату'); return; }
     if (!pools) { alert('Выберите хотя бы один пул с ошибками'); return; }
 
+    // Проект выводим из пулов (первый найденный)
+    const project = deriveProjectFromPools(pools);
+
     const currentDate = new Date(dateStr);
     const pastFeedbacks = state.feedbackData
         .filter(f => f.marker === marker && f.status === 'Проведена' && new Date(f.date) < currentDate)
@@ -152,7 +183,7 @@ function handleAddFeedback() {
         avgQuality = relevantData.reduce((a, b) => a + b.quality, 0) / relevantData.length;
     }
 
-    const newRecord = { marker, date: dateStr, status, typeVKS, conductor, pools, avgQuality };
+    const newRecord = { marker, date: dateStr, status, typeVKS, conductor, pools, avgQuality, project };
 
     if (state.editingFeedbackIndex !== null) {
         state.feedbackData[state.editingFeedbackIndex] = newRecord;
