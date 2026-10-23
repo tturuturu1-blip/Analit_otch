@@ -167,12 +167,16 @@ export async function generateHtmlReport() {
                     <thead>
                         <tr>
                             <th>Дата</th><th>Разметчик</th><th>Тип ВКС</th><th>Провел</th>
-                            <th>Статус</th><th>Пулы с ошибками</th><th>Ср. качество за период</th>
+                            <th>Статус</th><th>Проект</th><th>Пулы с ошибками</th><th>Ср. качество за период</th>
                         </tr>
                     </thead>
                     <tbody id="fbTableBodyHome"></tbody>
                 </table>
             </div>
+
+            <footer class="page-footer">
+                <a href="https://www.flaticon.com/ru/free-icons/" title="статистика иконки" target="_blank" rel="noopener noreferrer">Статистика иконки от Flat-icons-com - Flaticon</a>
+            </footer>
 
         </section>
     </main>
