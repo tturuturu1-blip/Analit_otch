@@ -3,23 +3,33 @@ import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
 import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
     populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable, toggleRow,
-    buildProjectTabs, renderMarkersTasksStatus, renderSupersetPage
+    buildProjectTabs, renderMarkersTasksStatus, renderSupersetPage,
+    renderSupersetProjectTabs, renderSupersetFilters, renderSupersetNormCard,
+    renderSupersetKPIs, updateSupersetTaskLabel,
+    onSupersetTaskChange, onSupersetDateChange, onSupersetProjectTabClick,
+    resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange
 } from './ui.js';
 import { renderFeedbackTable, editFeedback, deleteFeedback, initFeedbackForm } from './feedback.js';
-import { buildSuperset } from './superset.js';
+import { buildSuperset, applySupersetFilters } from './superset.js';
 import {
     progressStartTimer, updateProgress, yieldToUI, log, formatDate
 } from './utils.js';
 import { generateHtmlReport } from './report.js';
 
-// ===== Экспорт функций в window (нужно для inline-обработчиков в HTML) =====
+// ===== Экспорт в window =====
 Object.assign(window, {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll,
     onOptionChange, toggleRow, renderErrorsTable,
-    editFeedback, deleteFeedback
+    editFeedback, deleteFeedback,
+    // Суперсет
+    onSupersetTaskChange,
+    onSupersetDateChange,
+    resetSupersetFilters,
+    editSupersetNorm,
+    onSupersetTableFilterChange
 });
 
-// ===== Делегирование кликов по табам проектов =====
+// ===== Делегирование кликов по табам проектов (главная) =====
 const projectTabsContainer = document.getElementById('projectTabs');
 if (projectTabsContainer) {
     projectTabsContainer.addEventListener('click', (e) => {
@@ -29,8 +39,31 @@ if (projectTabsContainer) {
     });
 }
 
+// ===== Делегирование кликов по табам суперсета =====
+const supersetTabsContainer = document.getElementById('supersetProjectTabs');
+if (supersetTabsContainer) {
+    supersetTabsContainer.addEventListener('click', (e) => {
+        const tabEl = e.target.closest('.tab');
+        if (!tabEl) return;
+        onSupersetProjectTabClick(tabEl.dataset.project);
+    });
+}
+
+// ===== Изменение дат на странице Суперсет =====
+const supersetDateFrom = document.getElementById('supersetDateFrom');
+const supersetDateTo = document.getElementById('supersetDateTo');
+if (supersetDateFrom) supersetDateFrom.addEventListener('change', onSupersetDateChange);
+if (supersetDateTo) supersetDateTo.addEventListener('change', onSupersetDateChange);
+
 // ===== Обновление UI после пересчёта данных =====
 window.addEventListener('app:data-updated', () => {
+    // Сброс фильтров суперсета при новых данных
+    state.superset.filters.project = 'all';
+    state.superset.filters.dateFrom = '';
+    state.superset.filters.dateTo = '';
+    state.superset.filters.tasks.clear();
+    state.superset.tableFilters = { t1: {}, t2: {}, t3: {} };
+
     buildSuperset();
     populateAllMultiSelects();
     buildProjectTabs();
@@ -46,12 +79,11 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// ===== Фильтры по дате =====
+// ===== Фильтры по дате (главная) =====
 for (const id of ['filterDateFrom', 'filterDateTo']) {
     document.getElementById(id).addEventListener('change', triggerFilterUpdate);
 }
 
-// ===== Сброс фильтров =====
 document.getElementById('btnResetFilters').addEventListener('click', () => {
     document.getElementById('filterDateFrom').value = '';
     document.getElementById('filterDateTo').value = '';
@@ -117,13 +149,9 @@ document.getElementById('btnExport').addEventListener('click', () => {
                     if (!isNaN(d.getTime())) formattedDate = formatDate(d);
                 }
                 return {
-                    "Дата": formattedDate,
-                    "Разметчик": f.marker || "",
-                    "Статус": f.status || "",
-                    "Тип ВКС": f.typeVKS || "",
-                    "Провел": f.conductor || "",
-                    "Проект": f.project || "",
-                    "Пулы с ошибками": f.pools || "",
+                    "Дата": formattedDate, "Разметчик": f.marker || "", "Статус": f.status || "",
+                    "Тип ВКС": f.typeVKS || "", "Провел": f.conductor || "",
+                    "Проект": f.project || "", "Пулы с ошибками": f.pools || "",
                     "Ср. качество за период": f.avgQuality ?? ""
                 };
             });
@@ -201,15 +229,16 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.rawSuperset2 = [];
     state.rawSuperset3 = [];
     state.processedData = [];
-    state.superset = {
-        table1: [],
-        table2: [],
-        table3: [],
-        cards: [],
-        ballsCards: [],
-        prodCards: [],
-        norms: { byProjectPool: {}, byProject: {}, globalAvg: null }
-    };
+    state.superset.table1 = [];
+    state.superset.table2 = [];
+    state.superset.table3 = [];
+    state.superset.filteredTable1 = [];
+    state.superset.filteredTable2 = [];
+    state.superset.filteredTable3 = [];
+    state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null };
+    state.superset.norms = { byProjectPool: {}, byProject: {}, globalAvg: null };
+    state.superset.filters = { project: 'all', dateFrom: '', dateTo: '', tasks: new Set() };
+    state.superset.tableFilters = { t1: {}, t2: {}, t3: {} };
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
     buildProjectTabs();
     renderMarkersTasksStatus();
@@ -218,12 +247,10 @@ document.getElementById('btnClear').addEventListener('click', () => {
     updateProgress(0, '', 'Готово');
 });
 
-// ===== Пересчёт =====
 document.getElementById('btnRelink').addEventListener('click', () => {
     recomputeDashboard();
 });
 
-// ===== Скачать HTML-отчёт =====
 document.getElementById('btnGenerateReport').addEventListener('click', async () => {
     try {
         log('Формирование HTML-отчёта...', false);
