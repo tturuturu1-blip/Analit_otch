@@ -1,8 +1,7 @@
 import { state } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm } from './utils.js';
 
-// Считает фактическое качество из processedData (Markers + Validation):
-// по (Проект|Задача) → массив quality, по Проект → массив quality.
+// ===== Вспомогательные =====
 function calcFactQuality() {
     const byProjectPool = {};
     const byProject = {};
@@ -25,11 +24,20 @@ function avg(arr) {
     return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
+// Парсер HTML-числа в float: "<div>572.2</div>" → 572.2
+function parseHtmlNumberToFloat(val) {
+    if (val == null) return null;
+    const s = parseHtmlNumber(val);   // "572,2"
+    if (!s) return null;
+    const n = parseFloat(String(s).replace(',', '.'));
+    return isNaN(n) ? null : n;
+}
+
+// ===== Нормативы (для главной и графиков) =====
 function buildNorms() {
     const byProjectPool = {};
     const byProject = {};
 
-    // Из Тип 2 (Норма качества)
     for (const r of state.rawSuperset2) {
         const project = getVal(r, 'Проект');
         const task = getVal(r, 'Задача');
@@ -41,8 +49,6 @@ function buildNorms() {
             byProject[project].push(norm);
         }
     }
-
-    // Из Тип 3 (Норматив) — только если в Тип 2 не было
     for (const r of state.rawSuperset3) {
         const project = getVal(r, 'Проект');
         const task = getVal(r, 'Задача');
@@ -57,14 +63,12 @@ function buildNorms() {
         }
     }
 
-    // Среднее по проектам
     const avgByProject = {};
     for (const p in byProject) {
         const a = avg(byProject[p]);
         if (a !== null) avgByProject[p] = a;
     }
 
-    // Глобальное среднее
     const all = [];
     for (const p in byProject) {
         for (const n of byProject[p]) all.push(n);
@@ -78,8 +82,8 @@ function buildNorms() {
     };
 }
 
+// ===== Таблица 1 (проект + задача) =====
 function buildTable1() {
-    // Индекс из Тип 1 по (Проект, Задача)
     const idx1 = {};
     for (const r of state.rawSuperset1) {
         const project = getVal(r, 'Проект');
@@ -91,7 +95,6 @@ function buildTable1() {
     const rows = [];
     const seen = new Set();
 
-    // Основной источник — Тип 2
     for (const r of state.rawSuperset2) {
         const project = getVal(r, 'Проект') || '';
         const task = getVal(r, 'Задача') || '';
@@ -116,7 +119,6 @@ function buildTable1() {
         });
     }
 
-    // Добавляем строки из Тип 1, которых нет в Тип 2
     for (const r of state.rawSuperset1) {
         const project = getVal(r, 'Проект') || '';
         const task = getVal(r, 'Задача') || '';
@@ -144,6 +146,7 @@ function buildTable1() {
     state.superset.table1 = rows;
 }
 
+// ===== Таблица 2 (по дням / ФИО) =====
 function buildTable2() {
     const { byProjectPool, byProject } = calcFactQuality();
     const rows = [];
@@ -177,8 +180,8 @@ function buildTable2() {
     state.superset.table2 = rows;
 }
 
+// ===== Таблица 3 (цены по проектам) =====
 function buildTable3() {
-    // Группировка по проекту из Тип 1
     const byProject = {};
     for (const r of state.rawSuperset1) {
         const project = getVal(r, 'Проект');
@@ -188,24 +191,18 @@ function buildTable3() {
         if (price != null && price !== '') byProject[project].prices.push(price);
     }
 
-    // Дата из Тип 2 (max Дата окончания)
     const projectDates = {};
     for (const r of state.rawSuperset2) {
         const project = getVal(r, 'Проект');
         const date = parseExcelDate(getVal(r, 'Дата окончания'));
         if (!project || !date) continue;
-        if (!projectDates[project] || date > projectDates[project]) {
-            projectDates[project] = date;
-        }
+        if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
     }
-    // Fallback — из Тип 3
     for (const r of state.rawSuperset3) {
         const project = getVal(r, 'Проект');
         const date = parseExcelDate(getVal(r, 'Дата'));
         if (!project || !date) continue;
-        if (!projectDates[project] || date > projectDates[project]) {
-            projectDates[project] = date;
-        }
+        if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
     }
 
     const rows = [];
@@ -221,6 +218,7 @@ function buildTable3() {
     state.superset.table3 = rows;
 }
 
+// ===== Карточки: Качество факт. =====
 function buildCards() {
     const { byProject } = calcFactQuality();
     const cards = [];
@@ -232,15 +230,55 @@ function buildCards() {
     state.superset.cards = cards.sort((a, b) => a.project.localeCompare(b.project));
 }
 
+// ===== Карточки: Факт баллов/час и Кпроизв в час =====
+function buildPerformanceCards() {
+    const ballsByProject = {};
+    const prodByProject = {};
+
+    for (const r of state.rawSuperset1) {
+        const project = getVal(r, 'Проект');
+        if (!project) continue;
+
+        const balls = parseHtmlNumberToFloat(getVal(r, 'Факт баллов/час'));
+        if (balls !== null) {
+            if (!ballsByProject[project]) ballsByProject[project] = [];
+            ballsByProject[project].push(balls);
+        }
+
+        const prod = parseHtmlNumberToFloat(getVal(r, 'Кпроизв в час'));
+        if (prod !== null) {
+            if (!prodByProject[project]) prodByProject[project] = [];
+            prodByProject[project].push(prod);
+        }
+    }
+
+    const ballsCards = Object.keys(ballsByProject).map(p => ({
+        project: p,
+        avg: avg(ballsByProject[p])
+    })).filter(x => x.avg !== null)
+      .sort((a, b) => a.project.localeCompare(b.project));
+
+    const prodCards = Object.keys(prodByProject).map(p => ({
+        project: p,
+        avg: avg(prodByProject[p])
+    })).filter(x => x.avg !== null)
+      .sort((a, b) => a.project.localeCompare(b.project));
+
+    state.superset.ballsCards = ballsCards;
+    state.superset.prodCards = prodCards;
+}
+
+// ===== Общая сборка =====
 export function buildSuperset() {
     buildNorms();
     buildTable1();
     buildTable2();
     buildTable3();
     buildCards();
+    buildPerformanceCards();
 }
 
-// Целевое качество по (project, pool) → project → globalAvg
+// Целевое качество для главной/графиков
 export function getTargetQuality(project, pool) {
     const cleanProject = (project || '').replace(/_validate$/, '').trim();
     const key = cleanProject + '|' + (pool || '');
