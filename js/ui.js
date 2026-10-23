@@ -4,7 +4,7 @@ import { formatDate, updateLabel, escapeHtml, destroyChart, getVal } from './uti
 import { renderFeedbackTable, renderFeedbackTableHome } from './feedback.js';
 import {
     applySupersetFilters, formatPeriod, getNormForDate, getNormsForPeriod,
-    addNormEntry, getTable1Config, getTable2Config, getTable3Config
+    addNormEntry, getTable1Config, getTable2Config, getTable3Config, getTable4Config
 } from './superset.js';
 
 // ===== Навигация =====
@@ -550,43 +550,13 @@ export function toggleRow(id, rowElement, event) {
 // ============================================================
 
 export function renderSupersetPage() {
-    renderSupersetProjectTabs();
     renderSupersetFilters();
     renderSupersetNormCard();
     renderSupersetKPIs();
     renderSupersetTable1();
     renderSupersetTable2();
     renderSupersetTable3();
-}
-
-export function renderSupersetProjectTabs() {
-    const container = document.getElementById('supersetProjectTabs');
-    if (!container) return;
-
-    const projectSet = new Set();
-    for (const r of state.superset.table1) if (r.project) projectSet.add(r.project);
-    for (const r of state.superset.table2) if (r.project) projectSet.add(r.project);
-    for (const r of state.superset.table3) if (r.project) projectSet.add(r.project);
-    const projects = Array.from(projectSet).sort();
-
-    if (projects.length === 0) {
-        container.style.display = 'none';
-        container.innerHTML = '';
-        return;
-    }
-
-    if (state.superset.filters.project !== 'all' && !projects.includes(state.superset.filters.project)) {
-        state.superset.filters.project = 'all';
-    }
-
-    container.style.display = 'flex';
-    let html = '<div class="tab ' + (state.superset.filters.project === 'all' ? 'active' : '') + '" data-project="all">Все</div>';
-    for (const p of projects) {
-        const safe = escapeHtml(p);
-        const active = state.superset.filters.project === p ? 'active' : '';
-        html += '<div class="tab ' + active + '" data-project="' + safe + '">' + safe + '</div>';
-    }
-    container.innerHTML = html;
+    renderSupersetTable4();
 }
 
 export function renderSupersetFilters() {
@@ -595,20 +565,66 @@ export function renderSupersetFilters() {
     if (dateFromEl) dateFromEl.value = state.superset.filters.dateFrom || '';
     if (dateToEl) dateToEl.value = state.superset.filters.dateTo || '';
 
+    const projectSet = new Set();
+    for (const r of state.superset.table1) if (r.project) projectSet.add(r.project);
+    for (const r of state.superset.table2) if (r.project) projectSet.add(r.project);
+    for (const r of state.superset.table3) if (r.project) projectSet.add(r.project);
+    const projects = Array.from(projectSet).sort();
+
+    const projOptions = document.getElementById('msSupersetProject_options');
+    if (projOptions) {
+        for (const p of Array.from(state.superset.filters.projects)) {
+            if (!projects.includes(p)) state.superset.filters.projects.delete(p);
+        }
+        projOptions.innerHTML = projects.map(p => {
+            const safe = escapeHtml(p);
+            const checked = state.superset.filters.projects.has(p) ? 'checked' : '';
+            return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onSupersetProjectChange(this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
+        }).join('');
+    }
+    updateSupersetProjectLabel();
+
     const tasksSet = new Set();
     for (const r of state.superset.table1) if (r.task) tasksSet.add(r.task);
     for (const r of state.superset.table2) if (r.task) tasksSet.add(r.task);
     const tasks = Array.from(tasksSet).sort();
 
-    const optionsContainer = document.getElementById('msSupersetTask_options');
-    if (optionsContainer) {
-        optionsContainer.innerHTML = tasks.map(t => {
+    const taskOptions = document.getElementById('msSupersetTask_options');
+    if (taskOptions) {
+        for (const t of Array.from(state.superset.filters.tasks)) {
+            if (!tasks.includes(t)) state.superset.filters.tasks.delete(t);
+        }
+        taskOptions.innerHTML = tasks.map(t => {
             const safe = escapeHtml(t);
             const checked = state.superset.filters.tasks.has(t) ? 'checked' : '';
             return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onSupersetTaskChange(this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
         }).join('');
     }
     updateSupersetTaskLabel();
+}
+
+export function updateSupersetProjectLabel() {
+    const label = document.getElementById('msSupersetProject_label');
+    if (!label) return;
+    const count = state.superset.filters.projects.size;
+    if (count === 0) {
+        label.textContent = 'Все проекты';
+        label.classList.add('empty');
+    } else if (count === 1) {
+        label.textContent = Array.from(state.superset.filters.projects)[0];
+        label.classList.remove('empty');
+    } else {
+        label.textContent = 'Выбрано: ' + count;
+        label.classList.remove('empty');
+    }
+}
+
+export function onSupersetProjectChange(value, isChecked) {
+    if (isChecked) state.superset.filters.projects.add(value);
+    else state.superset.filters.projects.delete(value);
+    updateSupersetProjectLabel();
+    applySupersetFilters();
+    renderSupersetPage();
 }
 
 export function updateSupersetTaskLabel() {
@@ -642,25 +658,21 @@ export function onSupersetDateChange() {
     renderSupersetPage();
 }
 
-export function onSupersetProjectTabClick(projectName) {
-    state.superset.filters.project = projectName;
-    applySupersetFilters();
-    renderSupersetPage();
-}
-
 export function resetSupersetFilters() {
     state.superset.filters.dateFrom = '';
     state.superset.filters.dateTo = '';
     state.superset.filters.tasks.clear();
-    state.superset.filters.project = 'all';
-    state.superset.tableFilters = { t1: {}, t2: {}, t3: {} };
+    state.superset.filters.projects.clear();
+    state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
 
     const df = document.getElementById('supersetDateFrom');
     const dt = document.getElementById('supersetDateTo');
     if (df) df.value = '';
     if (dt) dt.value = '';
     document.querySelectorAll('#msSupersetTask_options input').forEach(cb => { cb.checked = false; });
+    document.querySelectorAll('#msSupersetProject_options input').forEach(cb => { cb.checked = false; });
     updateSupersetTaskLabel();
+    updateSupersetProjectLabel();
 
     applySupersetFilters();
     renderSupersetPage();
@@ -720,7 +732,7 @@ export function renderSupersetKPIs() {
         { label: 'Качество план', value: k.qualityPlan != null ? k.qualityPlan.toFixed(1) + '%' : '—' },
         { label: 'Факт у.е. в час', value: k.ballsPerHour != null ? k.ballsPerHour.toFixed(1) : '—' },
         { label: 'Коэффициент', value: k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—' },
-        { label: 'Среднее время разметки', value: k.avgTime != null ? k.avgTime.toFixed(2) + ' ч' : '—' }
+        { label: 'Среднее время разметки', value: k.avgTime != null ? k.avgTime.toFixed(1) + ' мин' : '—' }
     ];
 
     container.innerHTML = cards.map(c => `
@@ -731,7 +743,7 @@ export function renderSupersetKPIs() {
     `).join('');
 }
 
-// Общий рендер фильтров в столбцах
+// ===== Фильтры столбцов =====
 function renderTableFilters(tableId, configs, fullRows) {
     return configs.map(cfg => {
         const values = new Set();
@@ -868,12 +880,34 @@ function renderSupersetTable3() {
 
     const rows = state.superset.filteredTable3 || [];
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типа 1.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted);">Нет данных.</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `<tr>
         <td>${r.date ? formatDate(r.date) : ''}</td>
         <td>${escapeHtml(r.project)}</td>
         <td>${escapeHtml(String(r.price))}</td>
+    </tr>`).join('');
+}
+
+function renderSupersetTable4() {
+    const tbody = document.getElementById('supersetTable4Body');
+    const filtersRow = document.getElementById('supersetTable4Filters');
+    if (!tbody) return;
+
+    const configs = getTable4Config();
+    if (filtersRow) {
+        filtersRow.innerHTML = renderTableFilters('t4', configs, state.superset.table4 || []);
+    }
+
+    const rows = state.superset.filteredTable4 || [];
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted);">Нет данных. Загрузите Тип 3 и файл сопоставления ФИО↔Почта.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => `<tr>
+        <td>${escapeHtml(r.fio)}</td>
+        <td>${r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '—'}</td>
+        <td>${r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '—'}</td>
     </tr>`).join('');
 }
