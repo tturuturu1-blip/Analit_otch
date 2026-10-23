@@ -1,4 +1,4 @@
-import { state, loadFromStorage, loadFeedbackFromStorage } from './state.js';
+import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
 import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
@@ -130,6 +130,8 @@ document.getElementById('btnExport').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawValidation), "Валидация (сырые)");
         if (state.rawRecommendations.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawRecommendations), "Рекомендации (сырые)");
+        if (state.rawFlatValidations.length > 0)
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
 
         XLSX.writeFile(wb, `full_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
         log('Полный экспорт выполнен', false);
@@ -146,18 +148,19 @@ document.getElementById('importInput').addEventListener('change', (e) => {
     reader.onload = async (ev) => {
         try {
             const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
-            let parsedM = [], parsedV = [], parsedR = [];
+            let parsedM = [], parsedV = [], parsedR = [], parsedF = [];
             for (const name of wb.SheetNames) {
                 const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
                 const lower = name.toLowerCase();
-                if (lower.includes('marker') || lower.includes('разметчик')) parsedM = json;
+                if (lower.includes('flat') || lower.includes('плоск')) parsedF = json;
+                else if (lower.includes('marker') || lower.includes('разметчик')) parsedM = json;
                 else if (lower.includes('валидац') || lower.includes('valid')) parsedV = json;
                 else if (lower.includes('рекоменд') || lower.includes('recommend')) parsedR = json;
             }
             state.rawMarkers = parsedM;
             state.rawValidation = parsedV;
             state.rawRecommendations = parsedR;
-            const { saveToStorage } = await import('./state.js');
+            state.rawFlatValidations = parsedF;
             saveToStorage();
             await recomputeDashboard();
         } catch (err) {
@@ -174,9 +177,10 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.rawMarkers = [];
     state.rawValidation = [];
     state.rawRecommendations = [];
+    state.rawFlatValidations = [];
     state.processedData = [];
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
-    buildProjectTabs();          // скрыть табы (0 проектов)
+    buildProjectTabs();
     triggerFilterUpdate();
     updateProgress(0, '', 'Готово');
 });
@@ -203,7 +207,7 @@ initFeedbackForm();
 loadFromStorage();
 loadFeedbackFromStorage();
 
-if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length) {
+if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length || state.rawFlatValidations.length) {
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
         buildProjectTabs();
