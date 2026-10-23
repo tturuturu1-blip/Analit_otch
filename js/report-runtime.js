@@ -33,7 +33,21 @@
             .replace(/'/g, '&#39;');
     }
 
-    // ===== Фильтр по проекту (динамический) =====
+    // ===== Проект по пулам (fallback) =====
+    function deriveProjectFromPools(poolsStr) {
+        if (!poolsStr) return null;
+        var pools = String(poolsStr).split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+        for (var i = 0; i < pools.length; i++) {
+            for (var j = 0; j < processedData.length; j++) {
+                if (processedData[j].pool === pools[i] && processedData[j].project) {
+                    return processedData[j].project.replace(/_validate$/, '').trim();
+                }
+            }
+        }
+        return null;
+    }
+
+    // ===== Фильтр по проекту =====
     function matchesTab(r) {
         if (currentTab === 'all') return true;
         var project = (r.project || '').replace(/_validate$/, '').trim();
@@ -380,12 +394,17 @@
         if (!tbody) return;
 
         var validMarkers = new Set();
-        for (var i = 0; i < processedData.length; i++) {
-            if (matchesTab(processedData[i])) validMarkers.add(processedData[i].marker);
+        if (currentTab !== 'all') {
+            for (var i = 0; i < processedData.length; i++) {
+                if (matchesTab(processedData[i])) validMarkers.add(processedData[i].marker);
+            }
         }
 
         var filtered = feedbackData.filter(function (f) {
-            return currentTab === 'all' || validMarkers.has(f.marker);
+            if (currentTab === 'all') return true;
+            var proj = f.project || deriveProjectFromPools(f.pools);
+            if (proj) return proj === currentTab;
+            return validMarkers.has(f.marker);
         });
 
         filtered.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
@@ -400,12 +419,14 @@
             var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null)
                 ? (f.avgQuality * 100).toFixed(1) + '%'
                 : '—';
+            var displayProject = f.project || deriveProjectFromPools(f.pools) || '—';
             html += '<tr>' +
                 '<td>' + escapeHtml(f.date || '') + '</td>' +
                 '<td>' + escapeHtml(f.marker || '') + '</td>' +
                 '<td>' + escapeHtml(f.typeVKS || '—') + '</td>' +
                 '<td>' + escapeHtml(f.conductor || '—') + '</td>' +
                 '<td><span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '">' + escapeHtml(f.status) + '</span></td>' +
+                '<td>' + escapeHtml(displayProject) + '</td>' +
                 '<td>' + escapeHtml(f.pools || '') + '</td>' +
                 '<td><b>' + avgQText + '</b></td>' +
             '</tr>';
@@ -578,7 +599,6 @@
             }
         });
 
-        // Табы проектов (делегирование)
         var tabsContainer = document.getElementById('projectTabs');
         if (tabsContainer) {
             tabsContainer.addEventListener('click', function (e) {
