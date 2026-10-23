@@ -270,25 +270,56 @@
         <section id="section-superset" class="section">
             <h2 style="margin-bottom: 20px;">Суперсет</h2>
 
-            <h3 style="margin-bottom: 15px;">Качество факт. по проектам</h3>
-            <div class="kpi-row" id="supersetCards"></div>
+            <!-- Sticky-контейнер: табы проектов + фильтры по дате/задаче -->
+            <div class="superset-sticky">
+                <div class="tabs" id="supersetProjectTabs" style="display:none; margin-bottom: 12px;"></div>
 
-            <h3 style="margin-bottom: 15px;">Средний Факт баллов/час по проектам</h3>
-            <div class="kpi-row" id="supersetBallsCards"></div>
+                <div class="filters superset-filters">
+                    <div class="filter-group">
+                        <label>Дата с</label>
+                        <input type="date" id="supersetDateFrom">
+                    </div>
+                    <div class="filter-group">
+                        <label>Дата по</label>
+                        <input type="date" id="supersetDateTo">
+                    </div>
+                    <div class="filter-group">
+                        <label>Задача (пул)</label>
+                        <div class="multi-select" id="msSupersetTask">
+                            <div class="ms-header" onclick="toggleDropdown('msSupersetTask')">
+                                <span class="ms-label empty" id="msSupersetTask_label">Все задачи</span>
+                                <span class="ms-arrow">▼</span>
+                            </div>
+                            <div class="ms-dropdown" id="msSupersetTask_dropdown">
+                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                <div id="msSupersetTask_options"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="btnResetSupersetFilters" style="height:38px; margin-bottom:1px;" onclick="resetSupersetFilters()">Сбросить</button>
+                </div>
+            </div>
 
-            <h3 style="margin-bottom: 15px;">Средний Кпроизв в час по проектам</h3>
-            <div class="kpi-row" id="supersetProdCards"></div>
+            <!-- Карточка "Норма у.е. в час" -->
+            <div class="norm-card" id="supersetNormCard">
+                <div class="label">Норма у.е. в час</div>
+                <div class="value">580</div>
+            </div>
+
+            <!-- 5 KPI-карточек -->
+            <div class="kpi-row" id="supersetKpis"></div>
 
             <h3 style="margin-bottom: 15px;">Сводная таблица (проект + задача)</h3>
             <div class="table-card">
                 <table id="supersetTable1">
                     <thead>
                         <tr>
-                            <th>Дата начала</th><th>Дата окончания</th><th>Проект</th><th>Задача</th>
-                            <th>Размечено, шт</th><th>Норма качества</th><th>Качество</th><th>Комментарий</th>
-                            <th>Без качества, шт</th><th>Факт баллов/час</th><th>Кпроизв в час</th>
-                            <th>Цена</th><th>Тип задания</th>
+                            <th>Проект</th><th>Задача</th><th>Размечено, шт</th><th>Норма качества</th>
+                            <th>Качество</th><th>Комментарий</th><th>Без качества, шт</th>
+                            <th>Факт баллов/час</th><th>Кпроизв в час</th><th>Цена</th>
+                            <th>Тип задания</th><th>Период разметки</th>
                         </tr>
+                        <tr id="supersetTable1Filters"></tr>
                     </thead>
                     <tbody id="supersetTable1Body"></tbody>
                 </table>
@@ -304,6 +335,7 @@
                             <th>Качество в суперсете</th><th>Качество факт.</th>
                             <th>Норматив</th><th>Без качества, шт</th>
                         </tr>
+                        <tr id="supersetTable2Filters"></tr>
                     </thead>
                     <tbody id="supersetTable2Body"></tbody>
                 </table>
@@ -314,6 +346,7 @@
                 <table id="supersetTable3">
                     <thead>
                         <tr><th>Дата</th><th>Проект</th><th>Цена</th></tr>
+                        <tr id="supersetTable3Filters"></tr>
                     </thead>
                     <tbody id="supersetTable3Body"></tbody>
                 </table>
