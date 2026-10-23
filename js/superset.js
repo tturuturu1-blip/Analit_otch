@@ -1,7 +1,6 @@
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
 
-// ===== Утилиты =====
 function calcFactQuality() {
     const byProjectPool = {};
     const byProject = {};
@@ -116,7 +115,7 @@ export function addNormEntry(dateISO, value) {
     return true;
 }
 
-// ===== Нормативы качества (для главной) =====
+// ===== Нормативы качества =====
 function buildNorms() {
     const byProjectPool = {};
     const byProject = {};
@@ -165,147 +164,72 @@ function buildNorms() {
     };
 }
 
-// ===== Таблица 1 =====
-function buildTable1() {
-    const idx1 = {};
-    for (const r of state.rawSuperset1) {
-        const project = getVal(r, 'Проект');
-        const task = getVal(r, 'Задача');
-        const key = (project || '') + '|' + (task || '');
-        if (!idx1[key]) idx1[key] = r;
+// ===== Индекс ФИО ↔ Почта =====
+function buildEmployeeMap() {
+    const fioToEmail = {};
+    const emailToFio = {};
+    for (const r of state.rawEmployeeMap) {
+        const fio = getVal(r, 'ФИО', 'Фио', 'ФИО разметчика');
+        const email = getVal(r, 'Почта', 'Почта разметчика', 'Email', 'email');
+        if (!fio || !email) continue;
+        const fioStr = String(fio).trim();
+        const emailStr = String(email).trim();
+        if (!fioStr || !emailStr) continue;
+        fioToEmail[fioStr] = emailStr;
+        emailToFio[emailStr] = fioStr;
     }
-
-    const rows = [];
-    const seen = new Set();
-
-    for (const r of state.rawSuperset2) {
-        const project = getVal(r, 'Проект') || '';
-        const task = getVal(r, 'Задача') || '';
-        const key = project + '|' + task;
-        seen.add(key);
-        const perf = idx1[key] || {};
-
-        rows.push({
-            dateStart: parseExcelDate(getVal(r, 'Дата начала')),
-            dateEnd: parseExcelDate(getVal(r, 'Дата окончания')),
-            project,
-            task,
-            fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
-            normQuality: getVal(r, 'Норма качества') || '',
-            quality: getVal(r, 'Качество') || '',
-            comment: getVal(r, 'Комментарий') || '',
-            withoutQuality: getVal(r, 'Без качества, шт', 'Без качества шт') || '',
-            ballsPerHour: parseHtmlNumber(getVal(perf, 'Факт баллов/час')),
-            prodPerHour: parseHtmlNumber(getVal(perf, 'Кпроизв в час')),
-            price: getVal(perf, 'Цена') || '',
-            taskType: getVal(perf, 'Тип задания') || ''
-        });
-    }
-
-    for (const r of state.rawSuperset1) {
-        const project = getVal(r, 'Проект') || '';
-        const task = getVal(r, 'Задача') || '';
-        const key = project + '|' + task;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        rows.push({
-            dateStart: null,
-            dateEnd: null,
-            project,
-            task,
-            fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
-            normQuality: '',
-            quality: '',
-            comment: '',
-            withoutQuality: '',
-            ballsPerHour: parseHtmlNumber(getVal(r, 'Факт баллов/час')),
-            prodPerHour: parseHtmlNumber(getVal(r, 'Кпроизв в час')),
-            price: getVal(r, 'Цена') || '',
-            taskType: getVal(r, 'Тип задания') || ''
-        });
-    }
-
-    state.superset.table1 = rows;
+    state.superset.employeeMap = { fioToEmail, emailToFio };
+    return state.superset.employeeMap;
 }
 
-// ===== Таблица 2 =====
-function buildTable2() {
-    const { byProjectPool, byProject } = calcFactQuality();
-    const rows = [];
+// ===== Индекс качества по email =====
+function computeEmployeeQualityIndex() {
+    const byEmailOnly = {};
+    const byEmailProject = {};
+    const byEmailProjectTask = {};
+    const { dateFrom, dateTo, projects } = state.superset.filters;
 
-    for (const r of state.rawSuperset3) {
-        const project = getVal(r, 'Проект') || '';
-        const task = getVal(r, 'Задача') || '';
-        const key = project + '|' + task;
+    for (const r of state.processedData) {
+        if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
+        const em = (r.marker || '').trim().toLowerCase();
+        if (!em) continue;
 
-        let factQuality = null;
-        if (byProjectPool[key]) {
-            factQuality = avg(byProjectPool[key]);
-        } else if (byProject[project]) {
-            factQuality = avg(byProject[project]);
+        if (dateFrom || dateTo) {
+            if (!r.date) continue;
+            const iso = formatISODate(r.date);
+            if (dateFrom && iso < dateFrom) continue;
+            if (dateTo && iso > dateTo) continue;
         }
 
-        rows.push({
-            date: parseExcelDate(getVal(r, 'Дата')),
-            fio: getVal(r, 'ФИО') || '',
-            project,
-            task,
-            fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
-            balls: getVal(r, 'Размечено, б', 'Размечено б') || '',
-            qualitySuperset: getVal(r, 'Качество') || '',
-            qualityFact: factQuality,
-            norm: getVal(r, 'Норматив') || '',
-            withoutQuality: getVal(r, 'Без качества, шт', 'Без качества шт') || ''
-        });
+        const proj = (r.project || '').replace(/_validate$/, '').trim();
+        if (projects.size > 0 && proj && !projects.has(proj)) continue;
+
+        const pool = r.pool || '';
+
+        if (!byEmailOnly[em]) byEmailOnly[em] = [];
+        byEmailOnly[em].push(r.quality);
+
+        if (proj) {
+            const projKey = em + '|' + proj;
+            if (!byEmailProject[projKey]) byEmailProject[projKey] = [];
+            byEmailProject[projKey].push(r.quality);
+
+            if (pool) {
+                const ptKey = em + '|' + proj + '|' + pool;
+                if (!byEmailProjectTask[ptKey]) byEmailProjectTask[ptKey] = [];
+                byEmailProjectTask[ptKey].push(r.quality);
+            }
+        }
     }
 
-    state.superset.table2 = rows;
+    return { byEmailOnly, byEmailProject, byEmailProjectTask };
 }
 
-// ===== Таблица 3 =====
-function buildTable3() {
-    const byProject = {};
-    for (const r of state.rawSuperset1) {
-        const project = getVal(r, 'Проект');
-        const price = getVal(r, 'Цена');
-        if (!project) continue;
-        if (!byProject[project]) byProject[project] = { project, prices: [] };
-        if (price != null && price !== '') byProject[project].prices.push(price);
-    }
-
-    const projectDates = {};
-    for (const r of state.rawSuperset2) {
-        const project = getVal(r, 'Проект');
-        const date = parseExcelDate(getVal(r, 'Дата окончания'));
-        if (!project || !date) continue;
-        if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
-    }
-    for (const r of state.rawSuperset3) {
-        const project = getVal(r, 'Проект');
-        const date = parseExcelDate(getVal(r, 'Дата'));
-        if (!project || !date) continue;
-        if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
-    }
-
-    const rows = [];
-    for (const project in byProject) {
-        const prices = byProject[project].prices;
-        rows.push({
-            date: projectDates[project] || null,
-            project,
-            price: prices.length > 0 ? prices[0] : ''
-        });
-    }
-
-    state.superset.table3 = rows;
-}
-
-// ===== Применение фильтров =====
+// ===== Фильтры =====
 function matchesProject(project) {
-    const filter = state.superset.filters.project;
-    if (filter === 'all') return true;
-    return (project || '') === filter;
+    const set = state.superset.filters.projects;
+    if (!set || set.size === 0) return true;
+    return set.has(project || '');
 }
 
 function matchesDateRangeRow(date) {
@@ -348,6 +272,7 @@ function matchesColumnFilters(tableId, row, configs) {
     return true;
 }
 
+// ===== Конфиги столбцов =====
 export function getTable1Config() {
     return [
         { key: 'task', label: 'Задача', get: r => r.task || '' },
@@ -385,33 +310,220 @@ export function getTable3Config() {
     ];
 }
 
+export function getTable4Config() {
+    return [
+        { key: 'fio', label: 'ФИО', get: r => r.fio || '' },
+        { key: 'factQuality', label: 'Качество', get: r => r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '' },
+        { key: 'normQuality', label: 'Норматив', get: r => r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '' }
+    ];
+}
+
+// ===== Построение таблиц =====
+function buildTable1() {
+    const idx1 = {};
+    for (const r of state.rawSuperset1) {
+        const project = getVal(r, 'Проект');
+        const task = getVal(r, 'Задача');
+        const key = (project || '') + '|' + (task || '');
+        if (!idx1[key]) idx1[key] = r;
+    }
+
+    const rows = [];
+    const seen = new Set();
+
+    for (const r of state.rawSuperset2) {
+        const project = getVal(r, 'Проект') || '';
+        const task = getVal(r, 'Задача') || '';
+        const key = project + '|' + task;
+        seen.add(key);
+        const perf = idx1[key] || {};
+
+        rows.push({
+            dateStart: parseExcelDate(getVal(r, 'Дата начала')),
+            dateEnd: parseExcelDate(getVal(r, 'Дата окончания')),
+            project, task,
+            fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
+            normQuality: getVal(r, 'Норма качества') || '',
+            quality: getVal(r, 'Качество') || '',
+            comment: getVal(r, 'Комментарий') || '',
+            withoutQuality: getVal(r, 'Без качества, шт', 'Без качества шт') || '',
+            ballsPerHour: parseHtmlNumber(getVal(perf, 'Факт баллов/час')),
+            prodPerHour: parseHtmlNumber(getVal(perf, 'Кпроизв в час')),
+            price: getVal(perf, 'Цена') || '',
+            taskType: getVal(perf, 'Тип задания') || ''
+        });
+    }
+
+    for (const r of state.rawSuperset1) {
+        const project = getVal(r, 'Проект') || '';
+        const task = getVal(r, 'Задача') || '';
+        const key = project + '|' + task;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        rows.push({
+            dateStart: null, dateEnd: null,
+            project, task,
+            fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
+            normQuality: '', quality: '', comment: '', withoutQuality: '',
+            ballsPerHour: parseHtmlNumber(getVal(r, 'Факт баллов/час')),
+            prodPerHour: parseHtmlNumber(getVal(r, 'Кпроизв в час')),
+            price: getVal(r, 'Цена') || '',
+            taskType: getVal(r, 'Тип задания') || ''
+        });
+    }
+
+    state.superset.table1 = rows;
+}
+
+function rebuildTable2() {
+    const { fioToEmail } = state.superset.employeeMap || { fioToEmail: {} };
+    const qualityIdx = computeEmployeeQualityIndex();
+    const rows = [];
+
+    for (const r of state.rawSuperset3) {
+        const fio = getVal(r, 'ФИО') || '';
+        const project = getVal(r, 'Проект') || '';
+        const task = getVal(r, 'Задача') || '';
+        const date = parseExcelDate(getVal(r, 'Дата'));
+
+        if (!matchesProject(project)) continue;
+        if (!matchesDateRangeRow(date)) continue;
+        if (!matchesTask(task)) continue;
+
+        const email = fioToEmail[fio.trim()];
+        let factQuality = null;
+        if (email) {
+            const em = email.toLowerCase();
+            const ptKey = em + '|' + project + '|' + task;
+            const pKey = em + '|' + project;
+            if (qualityIdx.byEmailProjectTask[ptKey]) {
+                factQuality = avg(qualityIdx.byEmailProjectTask[ptKey]);
+            } else if (qualityIdx.byEmailProject[pKey]) {
+                factQuality = avg(qualityIdx.byEmailProject[pKey]);
+            } else if (qualityIdx.byEmailOnly[em]) {
+                factQuality = avg(qualityIdx.byEmailOnly[em]);
+            }
+        }
+
+        rows.push({
+            date, fio, project, task,
+            fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
+            balls: getVal(r, 'Размечено, б', 'Размечено б') || '',
+            qualitySuperset: getVal(r, 'Качество') || '',
+            qualityFact: factQuality,
+            norm: getVal(r, 'Норматив') || '',
+            withoutQuality: getVal(r, 'Без качества, шт', 'Без качества шт') || ''
+        });
+    }
+
+    state.superset.table2 = rows;
+}
+
+function buildTable3() {
+    const byProject = {};
+    for (const r of state.rawSuperset1) {
+        const project = getVal(r, 'Проект');
+        const price = getVal(r, 'Цена');
+        if (!project) continue;
+        if (!byProject[project]) byProject[project] = { project, prices: [] };
+        if (price != null && price !== '') byProject[project].prices.push(price);
+    }
+
+    const projectDates = {};
+    for (const r of state.rawSuperset2) {
+        const project = getVal(r, 'Проект');
+        const date = parseExcelDate(getVal(r, 'Дата окончания'));
+        if (!project || !date) continue;
+        if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
+    }
+    for (const r of state.rawSuperset3) {
+        const project = getVal(r, 'Проект');
+        const date = parseExcelDate(getVal(r, 'Дата'));
+        if (!project || !date) continue;
+        if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
+    }
+
+    const rows = [];
+    for (const project in byProject) {
+        const prices = byProject[project].prices;
+        rows.push({
+            date: projectDates[project] || null,
+            project,
+            price: prices.length > 0 ? prices[0] : ''
+        });
+    }
+
+    state.superset.table3 = rows;
+}
+
+function rebuildTable4() {
+    const { fioToEmail } = state.superset.employeeMap || { fioToEmail: {} };
+    const qualityIdx = computeEmployeeQualityIndex();
+
+    const byFio = {};
+    for (const r of state.rawSuperset3) {
+        const fio = getVal(r, 'ФИО') || '';
+        if (!fio) continue;
+
+        const project = getVal(r, 'Проект') || '';
+        if (!matchesProject(project)) continue;
+
+        const date = parseExcelDate(getVal(r, 'Дата'));
+        if (!matchesDateRangeRow(date)) continue;
+
+        const task = getVal(r, 'Задача') || '';
+        if (!matchesTask(task)) continue;
+
+        if (!byFio[fio]) byFio[fio] = { fio, norms: [] };
+        const norm = parseNorm(getVal(r, 'Норматив'));
+        if (norm !== null) byFio[fio].norms.push(norm);
+    }
+
+    const rows = [];
+    for (const fio in byFio) {
+        const email = fioToEmail[fio.trim()];
+        let factQuality = null;
+        if (email) {
+            const em = email.toLowerCase();
+            if (qualityIdx.byEmailOnly[em]) {
+                factQuality = avg(qualityIdx.byEmailOnly[em]);
+            }
+        }
+        rows.push({
+            fio,
+            factQuality,
+            normQuality: avg(byFio[fio].norms)
+        });
+    }
+
+    rows.sort((a, b) => a.fio.localeCompare(b.fio));
+    state.superset.table4 = rows;
+}
+
 function buildKPIs() {
     const t1 = state.superset.filteredTable1;
-
-    // Качество факт из processedData с учётом фильтров по проекту и датам
     const qualities = [];
+
     for (const r of state.processedData) {
         if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
         const proj = (r.project || '').replace(/_validate$/, '').trim();
-        if (state.superset.filters.project !== 'all' && proj !== state.superset.filters.project) continue;
+        if (state.superset.filters.projects.size > 0 && proj && !state.superset.filters.projects.has(proj)) continue;
         if (r.date && !matchesDateRangeRow(r.date)) continue;
         qualities.push(r.quality);
     }
     const qualityFact = avg(qualities);
 
-    // Качество план — среднее normQuality
     const norms = t1.map(r => parseNorm(r.normQuality)).filter(n => n !== null);
     const qualityPlan = avg(norms);
 
-    // Факт у.е. в час — среднее ballsPerHour
     const balls = t1.map(r => parseHtmlNumberToFloat(r.ballsPerHour)).filter(v => v !== null);
     const ballsPerHour = avg(balls);
 
-    // Коэффициент — среднее prodPerHour
     const prods = t1.map(r => parseHtmlNumberToFloat(r.prodPerHour)).filter(v => v !== null);
     const prodPerHour = avg(prods);
 
-    // Среднее время разметки = balls / norm(для даты строки)
+    // Среднее время разметки = (ballsPerHour / norm) — часы; * 60 → минуты
     const times = [];
     for (const r of t1) {
         const ballsV = parseHtmlNumberToFloat(r.ballsPerHour);
@@ -419,7 +531,7 @@ function buildKPIs() {
         const dateISO = r.dateStart ? formatISODate(r.dateStart) : (r.dateEnd ? formatISODate(r.dateEnd) : null);
         const normV = getNormForDate(dateISO || new Date().toISOString().slice(0, 10));
         if (!normV || normV <= 0) continue;
-        times.push(ballsV / normV);
+        times.push((ballsV / normV) * 60);   // часы → минуты
     }
     const avgTime = avg(times);
 
@@ -430,6 +542,7 @@ export function applySupersetFilters() {
     const t1Config = getTable1Config();
     const t2Config = getTable2Config();
     const t3Config = getTable3Config();
+    const t4Config = getTable4Config();
 
     state.superset.filteredTable1 = (state.superset.table1 || []).filter(r =>
         matchesProject(r.project) &&
@@ -438,10 +551,8 @@ export function applySupersetFilters() {
         matchesColumnFilters('t1', r, t1Config)
     );
 
+    rebuildTable2();
     state.superset.filteredTable2 = (state.superset.table2 || []).filter(r =>
-        matchesProject(r.project) &&
-        matchesDateRangeRow(r.date) &&
-        matchesTask(r.task) &&
         matchesColumnFilters('t2', r, t2Config)
     );
 
@@ -451,14 +562,18 @@ export function applySupersetFilters() {
         matchesColumnFilters('t3', r, t3Config)
     );
 
+    rebuildTable4();
+    state.superset.filteredTable4 = (state.superset.table4 || []).filter(r =>
+        matchesColumnFilters('t4', r, t4Config)
+    );
+
     buildKPIs();
 }
 
-// ===== Общая сборка =====
 export function buildSuperset() {
     buildNorms();
+    buildEmployeeMap();
     buildTable1();
-    buildTable2();
     buildTable3();
     applySupersetFilters();
 }
