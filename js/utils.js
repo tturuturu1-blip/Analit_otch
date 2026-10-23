@@ -1,6 +1,5 @@
 import { state } from './state.js';
 
-// ===== Даты и данные =====
 export function parseExcelDate(v) {
     if (!v) return null;
     if (v instanceof Date) return v;
@@ -46,18 +45,52 @@ export function formatInterval(start, finish) {
     return `${fmt(start)}-${fmt(finish)}`;
 }
 
+// Извлечь число из HTML-ячейки вида
+// "<div style="...">572.2</div>" → "572,2"
+export function parseHtmlNumber(val) {
+    if (val == null) return '';
+    let s = String(val).trim();
+    if (!s) return '';
+    if (s.indexOf('<') >= 0) {
+        s = s.replace(/<[^>]*>/g, '').trim();
+    }
+    s = s.replace(/\./g, ',');
+    return s;
+}
+
+// Норматив: "98.5" / "98,5" / "0.985" / "98%" → 98.5 (проценты)
+export function parseNorm(val) {
+    if (val == null) return null;
+    let s = String(val).trim().replace(',', '.').replace('%', '').replace(/\s+/g, '');
+    const n = parseFloat(s);
+    if (isNaN(n)) return null;
+    return n < 1 ? n * 100 : n;
+}
+
 export function detectTableType(row) {
     const keys = Object.keys(row).map(k => k.toLowerCase().trim());
 
-    // Плоский формат: url задания + file_name + меток с учетом предразметки
-    if (keys.includes('url задания') &&
-        keys.includes('file_name') &&
-        keys.includes('меток с учетом предразметки')) {
+    // Superset 3: ФИО + Норматив / Размечено б
+    if (keys.includes('фио') && (keys.includes('норматив') || keys.includes('размечено б') || keys.includes('размечено, б'))) {
+        return 'superset3';
+    }
+    // Superset 2: Норма качества / Ханипотов / Источник качества
+    if (keys.includes('норма качества') || keys.includes('ханипотов или заданий с качеством') || keys.includes('источник качества')) {
+        return 'superset2';
+    }
+    // Superset 1: Заказчик / Факт баллов/час / Кпроизв в час / Медиана проекта
+    if (keys.includes('заказчик') || keys.includes('факт баллов/час') || keys.includes('кпроизв в час') || keys.includes('медиана проекта')) {
+        return 'superset1';
+    }
+    // Flat validation
+    if (keys.includes('url задания') && keys.includes('file_name') && keys.includes('меток с учетом предразметки')) {
         return 'validation_flat';
     }
-
+    // Old validation
     if (keys.includes('assignment_id') || keys.includes('output:marks') || keys.includes('output_marks')) return 'validation';
-    if (keys.includes('id разметчика') || keys.includes('id задачи') || keys.includes('фио')) return 'markers';
+    // Old markers
+    if (keys.includes('id разметчика') || keys.includes('id задачи')) return 'markers';
+    // Old recommendations
     if (keys.includes('комментарий') && (keys.includes('почта разметчика') || keys.includes('пул'))) return 'recommendations';
     return 'unknown';
 }
@@ -68,7 +101,6 @@ export function maskEmail(email) {
     return email.substring(0, 3) + "***" + email.slice(-7);
 }
 
-// ===== Безопасность (XSS) =====
 export function escapeHtml(str) {
     if (str === null || str === undefined) return '';
     return String(str)
@@ -79,7 +111,6 @@ export function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-// ===== UI helpers =====
 export function updateLabel(containerId, stateKey) {
     const label = document.getElementById(containerId + '_label');
     if (!label) return;
@@ -96,18 +127,14 @@ export function updateLabel(containerId, stateKey) {
     }
 }
 
-// ===== Progress =====
 let _progressStart = 0;
-
 export function progressStartTimer() { _progressStart = Date.now(); }
-
 export function progressETA(percent) {
     if (percent <= 0.5) return '';
     const elapsed = (Date.now() - _progressStart) / 1000;
     const remaining = Math.max(0, (elapsed / (percent / 100)) - elapsed);
     return remaining < 1 ? '' : ' · осталось ~' + remaining.toFixed(1) + ' с';
 }
-
 export function updateProgress(percent, stage, title) {
     const fill = document.getElementById('progressFill');
     const pct = document.getElementById('progressPct');
@@ -119,9 +146,7 @@ export function updateProgress(percent, stage, title) {
     if (stage !== undefined && stageEl) stageEl.textContent = stage || '';
     if (title !== undefined && titleEl) titleEl.textContent = title || '';
 }
-
 export function yieldToUI() { return new Promise(r => setTimeout(r, 0)); }
-
 export function log(msg, isError) {
     const box = document.getElementById('logBox');
     if (!box) return;
@@ -132,8 +157,6 @@ export function log(msg, isError) {
     box.scrollTop = box.scrollHeight;
     while (box.children.length > 50) box.removeChild(box.firstChild);
 }
-
-// ===== Performance helpers =====
 export function debounce(fn, delay = 100) {
     let timer = null;
     return function (...args) {
@@ -141,7 +164,6 @@ export function debounce(fn, delay = 100) {
         timer = setTimeout(() => fn.apply(this, args), delay);
     };
 }
-
 export function destroyChart(chartRef) {
     if (chartRef) { try { chartRef.destroy(); } catch (e) { /* ignore */ } }
 }
