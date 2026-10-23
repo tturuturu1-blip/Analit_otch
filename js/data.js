@@ -36,20 +36,132 @@ export async function readExcelFiles(files) {
     return results.filter(r => r.ok);
 }
 
+// ===== Парсинг project/pool из имени файла =====
+// Формат: "Название проекта_название пула.xlsx"
+// Разделитель — ПЕРВЫЙ "_". Расширение отбрасывается.
+// Если разделителя нет — всё имя считается проектом, пул = null.
+function parseFileProjectPool(filename) {
+    if (!filename) return { project: null, pool: null };
+    const base = String(filename).replace(/\.(xlsx|xls)$/i, '').trim();
+    const idx = base.indexOf('_');
+    if (idx <= 0) {
+        return { project: base || null, pool: null };
+    }
+    const project = base.substring(0, idx).trim().replace(/_validate$/, '') || null;
+    const pool = base.substring(idx + 1).trim() || null;
+    return { project, pool };
+}
+
 export async function processNewRows(results) {
-    let addedM = 0, addedV = 0, addedR = 0;
-    for (const { rows } of results) {
+    let addedM = 0, addedV = 0, addedR = 0, addedF = 0;
+    for (const { file, rows } of results) {
         for (const row of rows) {
             if (Object.values(row).filter(v => v !== null && v !== '').length < 2) continue;
             const type = detectTableType(row);
-            if (type === 'markers') { state.rawMarkers.push(row); addedM++; }
-            else if (type === 'validation') { state.rawValidation.push(row); addedV++; }
-            else if (type === 'recommendations') { state.rawRecommendations.push(row); addedR++; }
+            if (type === 'markers') {
+                state.rawMarkers.push(row);
+                addedM++;
+            } else if (type === 'validation') {
+                state.rawValidation.push(row);
+                addedV++;
+            } else if (type === 'recommendations') {
+                state.rawRecommendations.push(row);
+                addedR++;
+            } else if (type === 'validation_flat') {
+                // Применяем project/pool из имени файла только если их нет в самой строке
+                const rowWithMeta = Object.assign({}, row);
+                if (getVal(rowWithMeta, 'Проект') == null) {
+                    const meta = parseFileProjectPool(file);
+                    if (meta.project) rowWithMeta['Проект'] = meta.project;
+                    if (meta.pool) rowWithMeta['Пул'] = meta.pool;
+                } else if (getVal(rowWithMeta, 'Пул') == null) {
+                    const meta = parseFileProjectPool(file);
+                    if (meta.pool) rowWithMeta['Пул'] = meta.pool;
+                }
+                state.rawFlatValidations.push(rowWithMeta);
+                addedF++;
+            }
         }
     }
-    log(`Добавлено: Markers (${addedM}), Валидация (${addedV}), Рекомендации (${addedR})`);
+    log(`Добавлено: Markers (${addedM}), Валидация (${addedV}), Рекомендации (${addedR}), Плоская валидация (${addedF})`);
     saveToStorage();
     await recomputeDashboard();
+}
+
+// ===== Обработка плоского формата =====
+// Одна строка файла = одно задание.
+//   "меток с учетом предразметки" → totalFragments
+//   "некорректных меток"          → totalErrors
+//   "radio"                       → тип ошибки (если ошибок нет — пусто/нет колонки)
+//   "file_name"                   → stripJson (убираем .json)
+//   "email"                       → разметчик
+//   "email проверяющего"          → валидатор
+//   "Проект" / "Пул"              → из имени файла (добавлены в processNewRows)
+// quality = 1 - (totalErrors * weight) / totalFragments,
+//   weight = 0.5 для "Некритичная ошибка", иначе 1.
+function processFlatValidations() {
+    if (!state.rawFlatValidations || state.rawFlatValidations.length === 0) return;
+
+    let addedRows = 0;
+    let processedTasks = 0;
+
+    for (const r of state.rawFlatValidations) {
+        if (!r) continue;
+        processedTasks++;
+
+        const project = (getVal(r, 'Проект') || '').replace(/_validate$/, '').trim() || null;
+        const pool = (getVal(r, 'Пул') || '').trim() || null;
+        const fileName = stripJson(getVal(r, 'file_name'));
+        const date = parseExcelDate(getVal(r, 'дата разметки'));
+        const marker = getVal(r, 'email');
+        const validator = getVal(r, 'email проверяющего');
+
+        const totalFragments = Number(getVal(r, 'меток с учетом предразметки')) || 0;
+        const totalErrors = Number(getVal(r, 'некорректных меток')) || 0;
+        let radio = getVal(r, 'radio');
+
+        if (totalErrors === 0) {
+            // Ошибок нет → одна запись «Ошибки не выявлены»
+            state.processedData.push({
+                _id: 'vf_' + Math.random().toString(36).slice(2, 9),
+                _type: 'validation', _linked: null,
+                date, pool, marker, validator, project,
+                fileName,
+                result: 'Ошибки не выявлены',
+                errorType: null,
+                comment: null,
+                quality: 1,
+                interval: null,
+                fragments: totalFragments
+            });
+            addedRows++;
+        } else {
+            // Есть ошибки. Если radio отсутствует — считаем тип «Неизвестная ошибка».
+            if (!radio) radio = 'Неизвестная ошибка';
+            const weightPerError = radio === 'Некритичная ошибка' ? 0.5 : 1;
+            const sumWeights = totalErrors * weightPerError;
+            const quality = totalFragments > 0 ? 1 - (sumWeights / totalFragments) : 1;
+
+            // Создаём по одной записи на каждую ошибку (совместимо с текущей таблицей/графиками)
+            for (let k = 0; k < totalErrors; k++) {
+                state.processedData.push({
+                    _id: 'vf_' + Math.random().toString(36).slice(2, 9),
+                    _type: 'validation', _linked: null,
+                    date, pool, marker, validator, project,
+                    fileName,
+                    result: 'Ошибка',
+                    errorType: radio,
+                    comment: null,
+                    quality,
+                    interval: null,
+                    fragments: totalFragments
+                });
+                addedRows++;
+            }
+        }
+    }
+
+    log(`Плоский формат: обработано заданий (${processedTasks}), записей (${addedRows})`);
 }
 
 // ===== Основной пересчёт =====
@@ -155,6 +267,10 @@ export async function recomputeDashboard() {
         }
     }
 
+    updateProgress(65, 'Обработка плоского формата...', 'Пересчет');
+    await yieldToUI();
+    processFlatValidations();
+
     updateProgress(80, 'Обработка рекомендаций...', 'Пересчет');
     await yieldToUI();
 
@@ -201,8 +317,6 @@ export async function recomputeDashboard() {
 }
 
 // ===== Фильтрация =====
-// Динамический фильтр по проекту: сравнивает усечённое имя проекта в строке
-// с текущим state.currentTab. Усечение — снимаем суффикс "_validate" и пробелы.
 export function matchesTab(r) {
     if (state.currentTab === 'all') return true;
     const project = (r.project || '').replace(/_validate$/, '').trim();
