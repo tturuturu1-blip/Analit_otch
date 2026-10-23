@@ -45,8 +45,6 @@ export function formatInterval(start, finish) {
     return `${fmt(start)}-${fmt(finish)}`;
 }
 
-// Извлечь число из HTML-ячейки вида
-// "<div style="...">572.2</div>" → "572,2"
 export function parseHtmlNumber(val) {
     if (val == null) return '';
     let s = String(val).trim();
@@ -58,7 +56,6 @@ export function parseHtmlNumber(val) {
     return s;
 }
 
-// Норматив: "98.5" / "98,5" / "0.985" / "98%" → 98.5 (проценты)
 export function parseNorm(val) {
     if (val == null) return null;
     let s = String(val).trim().replace(',', '.').replace('%', '').replace(/\s+/g, '');
@@ -70,27 +67,31 @@ export function parseNorm(val) {
 export function detectTableType(row) {
     const keys = Object.keys(row).map(k => k.toLowerCase().trim());
 
-    // Superset 3: ФИО + Норматив / Размечено б
+    // employee_map: только ФИО + Почта (или email)
+    if (keys.includes('фио') && (keys.includes('почта') || keys.includes('email'))
+        && !keys.includes('норматив') && !keys.includes('проект') && !keys.includes('задача')
+        && !keys.includes('дата')) {
+        return 'employee_map';
+    }
+
+    // superset3: ФИО + Норматив/Размечено б
     if (keys.includes('фио') && (keys.includes('норматив') || keys.includes('размечено б') || keys.includes('размечено, б'))) {
         return 'superset3';
     }
-    // Superset 2: Норма качества / Ханипотов / Источник качества
+    // superset2: Норма качества и т.п.
     if (keys.includes('норма качества') || keys.includes('ханипотов или заданий с качеством') || keys.includes('источник качества')) {
         return 'superset2';
     }
-    // Superset 1: Заказчик / Факт баллов/час / Кпроизв в час / Медиана проекта
+    // superset1: производительность/цены
     if (keys.includes('заказчик') || keys.includes('факт баллов/час') || keys.includes('кпроизв в час') || keys.includes('медиана проекта')) {
         return 'superset1';
     }
-    // Flat validation
+    // flat validation
     if (keys.includes('url задания') && keys.includes('file_name') && keys.includes('меток с учетом предразметки')) {
         return 'validation_flat';
     }
-    // Old validation
     if (keys.includes('assignment_id') || keys.includes('output:marks') || keys.includes('output_marks')) return 'validation';
-    // Old markers
     if (keys.includes('id разметчика') || keys.includes('id задачи')) return 'markers';
-    // Old recommendations
     if (keys.includes('комментарий') && (keys.includes('почта разметчика') || keys.includes('пул'))) return 'recommendations';
     return 'unknown';
 }
