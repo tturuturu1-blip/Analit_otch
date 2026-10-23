@@ -57,7 +57,7 @@ function detectRadioColumn(rows) {
 
 export async function processNewRows(results) {
     let addedM = 0, addedV = 0, addedR = 0, addedF = 0;
-    let addedS1 = 0, addedS2 = 0, addedS3 = 0;
+    let addedS1 = 0, addedS2 = 0, addedS3 = 0, addedEmp = 0;
 
     for (const { file, rows } of results) {
         const hasRadioColumn = detectRadioColumn(rows);
@@ -69,6 +69,7 @@ export async function processNewRows(results) {
             if (type === 'markers') { state.rawMarkers.push(row); addedM++; }
             else if (type === 'validation') { state.rawValidation.push(row); addedV++; }
             else if (type === 'recommendations') { state.rawRecommendations.push(row); addedR++; }
+            else if (type === 'employee_map') { state.rawEmployeeMap.push(row); addedEmp++; }
             else if (type === 'validation_flat') {
                 const rowWithMeta = Object.assign({}, row);
                 if (getVal(rowWithMeta, 'Проект') == null) {
@@ -89,7 +90,7 @@ export async function processNewRows(results) {
         }
     }
 
-    log(`Добавлено: Markers (${addedM}), Валидация (${addedV}), Рекомендации (${addedR}), Плоская (${addedF}), Сет1 (${addedS1}), Сет2 (${addedS2}), Сет3 (${addedS3})`);
+    log(`Добавлено: Markers (${addedM}), Валидация (${addedV}), Рекомендации (${addedR}), Плоская (${addedF}), Сотрудники (${addedEmp}), Сет1 (${addedS1}), Сет2 (${addedS2}), Сет3 (${addedS3})`);
     saveToStorage();
     await recomputeDashboard();
 }
