@@ -3,7 +3,7 @@ import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
 import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
     populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable, toggleRow,
-    buildProjectTabs
+    buildProjectTabs, renderMarkersTasksStatus
 } from './ui.js';
 import { renderFeedbackTable, editFeedback, deleteFeedback, initFeedbackForm } from './feedback.js';
 import {
@@ -32,6 +32,7 @@ if (projectTabsContainer) {
 window.addEventListener('app:data-updated', () => {
     populateAllMultiSelects();
     buildProjectTabs();
+    renderMarkersTasksStatus();
     triggerFilterUpdate();
 });
 
@@ -182,6 +183,7 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.processedData = [];
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
     buildProjectTabs();
+    renderMarkersTasksStatus();
     triggerFilterUpdate();
     updateProgress(0, '', 'Готово');
 });
@@ -212,9 +214,11 @@ if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommenda
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
         buildProjectTabs();
+        renderMarkersTasksStatus();
         try { triggerFilterUpdate(); } catch (e2) { /* ignore */ }
     });
 } else {
     buildProjectTabs();
+    renderMarkersTasksStatus();
     triggerFilterUpdate();
 }
