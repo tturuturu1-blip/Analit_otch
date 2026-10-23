@@ -16,7 +16,19 @@ body {
     background: var(--card); border-bottom: 1px solid var(--border);
     height: 60px; padding: 0 20px; z-index: 100;
 }
-.tabs { display: flex; gap: 8px; }
+
+/* ▼▼▼ НОВОЕ: бренд ▼▼▼ */
+.brand {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text);
+    margin-right: 24px;
+    white-space: nowrap;
+    letter-spacing: -0.02em;
+}
+/* ▲▲▲ КОНЕЦ НОВОГО ▲▲▲ */
+
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
 .tab {
     padding: 8px 16px; border-radius: 7px; cursor: pointer; font-size: 0.85rem;
     font-weight: 600; color: var(--muted); transition: all 0.2s;
