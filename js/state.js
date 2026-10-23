@@ -1,6 +1,8 @@
 export const STORAGE_KEY = 'validation_dashboard_data_v3';
 export const FB_STORAGE_KEY = 'validation_feedback_data_v1';
 
+const DEFAULT_NORM_HISTORY = [{ date: '2000-01-01', value: 580 }];
+
 export const state = {
     rawMarkers: [],
     rawValidation: [],
@@ -28,14 +30,33 @@ export const state = {
         table1: [],
         table2: [],
         table3: [],
-        cards: [],
-        ballsCards: [],   // ← НОВОЕ: [{ project, avg }] — Факт баллов/час
-        prodCards: [],    // ← НОВОЕ: [{ project, avg }] — Кпроизв в час
+        filteredTable1: [],
+        filteredTable2: [],
+        filteredTable3: [],
+        kpis: {
+            qualityFact: null,
+            qualityPlan: null,
+            ballsPerHour: null,
+            prodPerHour: null,
+            avgTime: null
+        },
         norms: {
             byProjectPool: {},
             byProject: {},
             globalAvg: null
-        }
+        },
+        filters: {
+            project: 'all',
+            dateFrom: '',
+            dateTo: '',
+            tasks: new Set()
+        },
+        tableFilters: {
+            t1: {},
+            t2: {},
+            t3: {}
+        },
+        normHistory: DEFAULT_NORM_HISTORY.slice()
     }
 };
 
@@ -48,7 +69,8 @@ export function saveToStorage() {
             f: state.rawFlatValidations,
             s1: state.rawSuperset1,
             s2: state.rawSuperset2,
-            s3: state.rawSuperset3
+            s3: state.rawSuperset3,
+            normHistory: state.superset.normHistory
         }));
     } catch (e) {
         console.error('Ошибка сохранения:', e.message);
@@ -68,6 +90,9 @@ export function loadFromStorage() {
                 state.rawSuperset1 = Array.isArray(parsed.s1) ? parsed.s1 : [];
                 state.rawSuperset2 = Array.isArray(parsed.s2) ? parsed.s2 : [];
                 state.rawSuperset3 = Array.isArray(parsed.s3) ? parsed.s3 : [];
+                state.superset.normHistory = Array.isArray(parsed.normHistory) && parsed.normHistory.length > 0
+                    ? parsed.normHistory
+                    : DEFAULT_NORM_HISTORY.slice();
             }
         }
     } catch (e) {
@@ -78,6 +103,7 @@ export function loadFromStorage() {
         state.rawSuperset1 = [];
         state.rawSuperset2 = [];
         state.rawSuperset3 = [];
+        state.superset.normHistory = DEFAULT_NORM_HISTORY.slice();
     }
 }
 
