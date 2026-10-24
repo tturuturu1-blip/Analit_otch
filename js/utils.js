@@ -1,5 +1,17 @@
 import { state } from './state.js';
 
+// ▼▼▼ НАСТРОЙКА БАЗОВОГО URL ДЛЯ ВИДЕО ▼▼▼
+// Замените эту ссылку на реальный адрес сервера из вашего Excel-файла
+const BASE_VIDEO_URL = 'https://your-video-server.com/watch/';
+// ▲▲▲
+
+export function getVideoUrl(fileName) {
+    if (!fileName) return '#';
+    // Убираем .json, если вдруг осталось
+    const cleanName = String(fileName).replace(/\.json$/i, '');
+    return BASE_VIDEO_URL + encodeURIComponent(cleanName);
+}
+
 export function parseExcelDate(v) {
     if (!v) return null;
     if (v instanceof Date) return v;
@@ -67,26 +79,21 @@ export function parseNorm(val) {
 export function detectTableType(row) {
     const keys = Object.keys(row).map(k => k.toLowerCase().trim());
 
-    // employee_map: только ФИО + Почта (или email)
     if (keys.includes('фио') && (keys.includes('почта') || keys.includes('email'))
         && !keys.includes('норматив') && !keys.includes('проект') && !keys.includes('задача')
         && !keys.includes('дата')) {
         return 'employee_map';
     }
 
-    // superset3: ФИО + Норматив/Размечено б
     if (keys.includes('фио') && (keys.includes('норматив') || keys.includes('размечено б') || keys.includes('размечено, б'))) {
         return 'superset3';
     }
-    // superset2: Норма качества и т.п.
     if (keys.includes('норма качества') || keys.includes('ханипотов или заданий с качеством') || keys.includes('источник качества')) {
         return 'superset2';
     }
-    // superset1: производительность/цены
     if (keys.includes('заказчик') || keys.includes('факт баллов/час') || keys.includes('кпроизв в час') || keys.includes('медиана проекта')) {
         return 'superset1';
     }
-    // flat validation
     if (keys.includes('url задания') && keys.includes('file_name') && keys.includes('меток с учетом предразметки')) {
         return 'validation_flat';
     }
