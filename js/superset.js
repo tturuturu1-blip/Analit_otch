@@ -111,7 +111,7 @@ export function getNormsForPeriod(dateFrom, dateTo) {
         return { value: s.value, label };
     });
 
-    // ▼▼▼ Возвращаем от нового (текущего) к старому
+    // Текущее сверху, прошлое снизу
     return mapped.reverse();
 }
 
@@ -538,19 +538,17 @@ function buildKPIs() {
     const prices = t1.map(r => parsePriceToFloat(r.price)).filter(v => v !== null);
     const avgPrice = avg(prices);
 
-    // ▼ Среднее время разметки: сначала по задачам, потом среднее по задачам
+    // ▼ Среднее время разметки:
+    //   1) для каждой задачи:  t = (Цена × 60) / Факт баллов/час
+    //   2) затем среднее по задачам (равный вес каждой задачи)
     const timesByTask = {};
     for (const r of t1) {
         const priceNum = parsePriceToFloat(r.price);
-        const prodV = parseHtmlNumberToFloat(r.prodPerHour);
+        const ballsV = parseHtmlNumberToFloat(r.ballsPerHour);
         if (priceNum === null || priceNum <= 0) continue;
-        if (prodV === null || prodV <= 0) continue;
+        if (ballsV === null || ballsV <= 0) continue;
 
-        const dateISO = r.dateStart ? formatISODate(r.dateStart) : (r.dateEnd ? formatISODate(r.dateEnd) : null);
-        const normV = getNormForDate(dateISO || new Date().toISOString().slice(0, 10));
-        if (!normV || normV <= 0) continue;
-
-        const t = (priceNum * prodV * 60) / normV;
+        const t = (priceNum * 60) / ballsV;   // минуты
         const key = (r.project || '') + '|' + (r.task || '');
         if (!timesByTask[key]) timesByTask[key] = [];
         timesByTask[key].push(t);
@@ -562,6 +560,7 @@ function buildKPIs() {
         if (a !== null) taskAverages.push(a);
     }
     const avgTime = avg(taskAverages);
+    // ─────────────────────────────
 
     state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime, avgPrice };
 }
