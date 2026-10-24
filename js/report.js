@@ -1,8 +1,9 @@
 import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 
-// Генерирует автономный HTML-файл с дашбордом "Главная".
-// Иконка вкладки — эмодзи 📊 через SVG data-URL (работает при открытии file://).
+// Задайте тот же URL, что и в utils.js
+const BASE_VIDEO_URL = 'https://your-video-server.com/watch/';
+
 export async function generateHtmlReport() {
     if (state.processedData.length === 0 && state.feedbackData.length === 0) {
         alert('Нет данных для отчёта');
@@ -29,13 +30,10 @@ export async function generateHtmlReport() {
         chartJsText = results[1];
         runtimeText = results[2];
     } catch (err) {
-        alert('Не удалось собрать отчёт: ' + err.message + '\n\n' +
-              'Убедитесь, что файлы css/styles.css, chart.umd.min.js и js/report-runtime.js ' +
-              'доступны по тому же адресу, что и страница.');
+        alert('Не удалось собрать отчёт: ' + err.message);
         return;
     }
 
-    // === Динамические табы проектов ===
     const projectSet = new Set();
     for (const r of state.processedData) {
         if (!r.project) continue;
@@ -61,7 +59,8 @@ export async function generateHtmlReport() {
 
     const reportData = {
         processedData: state.processedData,
-        feedbackData: state.feedbackData
+        feedbackData: state.feedbackData,
+        videoBaseUrl: BASE_VIDEO_URL // <-- Передаем URL
     };
     const reportDataJson = JSON.stringify(reportData).replace(/</g, '\\u003c');
 
@@ -149,7 +148,7 @@ export async function generateHtmlReport() {
                         <tr>
                             <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
                             <th>Итог</th><th>Тип ошибки</th><th>Комментарий</th><th>Интервал</th>
-                            <th>Качество</th><th>Связь</th>
+                            <th>Качество</th><th>Ссылка на задание</th><th>Связь</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
