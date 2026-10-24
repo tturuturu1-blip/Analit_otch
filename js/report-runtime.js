@@ -4,15 +4,12 @@
     var REPORT_DATA = JSON.parse(document.getElementById('report-data').textContent);
     var processedData = REPORT_DATA.processedData || [];
     var feedbackData = REPORT_DATA.feedbackData || [];
+    var baseVideoUrl = REPORT_DATA.videoBaseUrl || '';
 
     var filteredData = [];
     var charts = {};
     var currentTab = 'all';
-    var filterState = {
-        pool: new Set(),
-        marker: new Set(),
-        result: new Set()
-    };
+    var filterState = { pool: new Set(), marker: new Set(), result: new Set() };
 
     function formatDate(d) {
         if (!d) return '';
@@ -30,6 +27,12 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    function getVideoLink(fileName) {
+        if (!fileName) return '#';
+        var cleanName = String(fileName).replace(/\.json$/i, '');
+        return baseVideoUrl + encodeURIComponent(cleanName);
     }
 
     function matchesTab(r) {
@@ -104,10 +107,7 @@
     }
 
     function destroyChart(k) {
-        if (charts[k]) {
-            try { charts[k].destroy(); } catch (e) { /* ignore */ }
-            delete charts[k];
-        }
+        if (charts[k]) { try { charts[k].destroy(); } catch (e) {} delete charts[k]; }
     }
 
     function buildQualityChart() {
@@ -337,21 +337,22 @@
         var html = '';
         for (var i = 0; i < rows.length; i++) {
             var r = rows[i];
-            var badgeClass = r.result === 'Ошибка' ? 'badge-error'
-                : r.result === 'Рекомендация' ? 'badge-rec'
-                : 'badge-ok';
+            var badgeClass = r.result === 'Ошибка' ? 'badge-error' : r.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
+            
             var link = r.result === 'Рекомендация'
-                ? (r._linked
-                    ? '<span class="badge badge-linked">связано</span>'
-                    : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
-                : '';
+                ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
+                : '—';
+
+            var videoLink = r.fileName
+                ? '<a href="' + getVideoLink(r.fileName) + '" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>'
+                : '—';
+
             var fileName = r.fileName ? escapeHtml(r.fileName.slice(0, 40)) : '';
             var fileNameTitle = escapeHtml(r.fileName || '');
-            var comment = r.comment ? escapeHtml(r.comment.slice(0, 60)) : '';
+            var comment = r.comment ? escapeHtml(r.comment.slice(0, 100)) : '';
             var commentTitle = escapeHtml(r.comment || '');
-            var quality = (r.quality !== null && !isNaN(r.quality))
-                ? (r.quality * 100).toFixed(1) + '%'
-                : '';
+            var quality = (r.quality !== null && !isNaN(r.quality)) ? (r.quality * 100).toFixed(1) + '%' : '';
+            
             html += '<tr>' +
                 '<td>' + (r.date ? formatDate(r.date) : '') + '</td>' +
                 '<td>' + escapeHtml((r.project || '').replace('_validate', '')) + '</td>' +
@@ -363,6 +364,7 @@
                 '<td title="' + commentTitle + '">' + comment + '</td>' +
                 '<td>' + escapeHtml(r.interval || '') + '</td>' +
                 '<td>' + quality + '</td>' +
+                '<td>' + videoLink + '</td>' +
                 '<td>' + link + '</td>' +
             '</tr>';
         }
