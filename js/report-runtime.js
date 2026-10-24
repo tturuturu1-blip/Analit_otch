@@ -14,7 +14,6 @@
         result: new Set()
     };
 
-    // ===== Утилиты =====
     function formatDate(d) {
         if (!d) return '';
         var dt = new Date(d);
@@ -33,24 +32,9 @@
             .replace(/'/g, '&#39;');
     }
 
-    // ===== Проект по пулам (fallback) =====
-    function deriveProjectFromPools(poolsStr) {
-        if (!poolsStr) return null;
-        var pools = String(poolsStr).split(',').map(function (p) { return p.trim(); }).filter(Boolean);
-        for (var i = 0; i < pools.length; i++) {
-            for (var j = 0; j < processedData.length; j++) {
-                if (processedData[j].pool === pools[i] && processedData[j].project) {
-                    return processedData[j].project.replace(/_validate$/, '').trim();
-                }
-            }
-        }
-        return null;
-    }
-
-    // ===== Фильтр по проекту =====
     function matchesTab(r) {
         if (currentTab === 'all') return true;
-        var project = (r.project || '').replace(/_validate$/, '').trim();
+        var project = (r.project || '').trim();
         return project === currentTab;
     }
 
@@ -82,7 +66,6 @@
         });
     }
 
-    // ===== KPI =====
     function updateKPI() {
         var uniqueFiles = new Set();
         var totalFragments = 0;
@@ -120,7 +103,6 @@
         document.getElementById('kpiQuality').textContent = avgQ !== null ? (avgQ * 100).toFixed(1) + '%' : '—';
     }
 
-    // ===== Графики =====
     function destroyChart(k) {
         if (charts[k]) {
             try { charts[k].destroy(); } catch (e) { /* ignore */ }
@@ -153,19 +135,19 @@
                     {
                         label: 'Ср. качество, %',
                         data: values,
-                        backgroundColor: values.map(function (v) { return v < 98 ? '#ef4444' : v < 99 ? '#f59e0b' : '#10b981'; }),
+                        backgroundColor: values.map(function (v) { return v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'; }),
                         borderRadius: 4, order: 2
                     },
-                    { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, order: 1 },
-                    { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, order: 1 }
+                    { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f2c94c', borderWidth: 2, pointRadius: 0, order: 1 },
+                    { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#f07171', borderWidth: 2, pointRadius: 0, order: 1 }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } },
+                plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
                 scales: {
-                    y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; }, color: '#2e1065' } },
-                    x: { ticks: { color: '#2e1065' } }
+                    y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; }, color: '#6b4d38' } },
+                    x: { ticks: { color: '#6b4d38' } }
                 }
             }
         });
@@ -182,9 +164,9 @@
             type: 'doughnut',
             data: {
                 labels: Object.keys(byType),
-                datasets: [{ data: Object.keys(byType).map(function (k) { return byType[k]; }), backgroundColor: ['#1d9bf0', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899'] }]
+                datasets: [{ data: Object.keys(byType).map(function (k) { return byType[k]; }), backgroundColor: ['#85c4ae', '#f07171', '#f2c94c', '#6b4d38', '#a39081', '#fce8e8'] }]
             },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } } }
+            options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } } }
         });
     }
 
@@ -213,19 +195,19 @@
                     {
                         label: 'Ср. качество, %',
                         data: values,
-                        backgroundColor: values.map(function (v) { return v < 98 ? '#ef4444' : v < 99 ? '#f59e0b' : '#10b981'; }),
+                        backgroundColor: values.map(function (v) { return v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'; }),
                         borderRadius: 4, order: 2
                     },
-                    { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, order: 1 },
-                    { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, order: 1 }
+                    { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f2c94c', borderWidth: 2, pointRadius: 0, order: 1 },
+                    { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#f07171', borderWidth: 2, pointRadius: 0, order: 1 }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } },
+                plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
                 scales: {
-                    y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; }, color: '#2e1065' } },
-                    x: { ticks: { color: '#2e1065' } }
+                    y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; }, color: '#6b4d38' } },
+                    x: { ticks: { color: '#6b4d38' } }
                 }
             }
         });
@@ -260,16 +242,16 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Ср. качество, %', data: values, borderColor: '#1d9bf0', backgroundColor: 'rgba(29, 155, 240, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 },
-                    { label: 'Контрольная линия', data: targetLine, borderColor: '#ef4444', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: true, order: 1 }
+                    { label: 'Ср. качество, %', data: values, borderColor: '#85c4ae', backgroundColor: 'rgba(133, 196, 174, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 },
+                    { label: 'Контрольная линия', data: targetLine, borderColor: '#f07171', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: true, order: 1 }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } },
+                plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
                 scales: {
-                    y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; }, color: '#2e1065' } },
-                    x: { ticks: { color: '#2e1065' } }
+                    y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; }, color: '#6b4d38' } },
+                    x: { ticks: { color: '#6b4d38' } }
                 }
             }
         });
@@ -285,7 +267,7 @@
         }
         var markers = Array.from(markersSet).sort();
         var errorTypes = Array.from(typesSet).sort();
-        var colors = ['#ef4444', '#f59e0b', '#1d9bf0', '#10b981', '#8b5cf6', '#ec4899'];
+        var colors = ['#85c4ae', '#f07171', '#f2c94c', '#6b4d38', '#a39081', '#fce8e8'];
 
         var datasets = errorTypes.map(function (type, idx) {
             return {
@@ -306,10 +288,10 @@
             data: { labels: markers.map(function (m) { return m.length > 20 ? m.slice(0, 18) + '…' : m; }), datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } },
+                plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
                 scales: {
-                    x: { stacked: true, ticks: { color: '#2e1065' } },
-                    y: { stacked: true, beginAtZero: true, ticks: { color: '#2e1065' } }
+                    x: { stacked: true, ticks: { color: '#6b4d38' } },
+                    y: { stacked: true, beginAtZero: true, ticks: { color: '#6b4d38' } }
                 }
             }
         });
@@ -334,22 +316,21 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Ошибки', data: labels.map(function (l) { return byDate[l].errors; }), borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: .3, fill: true },
-                    { label: 'Рекомендации', data: labels.map(function (l) { return byDate[l].recs; }), borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: .3, fill: true }
+                    { label: 'Ошибки', data: labels.map(function (l) { return byDate[l].errors; }), borderColor: '#f07171', backgroundColor: 'rgba(240, 113, 113, 0.1)', tension: .3, fill: true },
+                    { label: 'Рекомендации', data: labels.map(function (l) { return byDate[l].recs; }), borderColor: '#f2c94c', backgroundColor: 'rgba(242, 201, 76, 0.1)', tension: .3, fill: true }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } },
+                plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
                 scales: {
-                    y: { beginAtZero: true, ticks: { color: '#2e1065' } },
-                    x: { ticks: { color: '#2e1065' } }
+                    y: { beginAtZero: true, ticks: { color: '#6b4d38' } },
+                    x: { ticks: { color: '#6b4d38' } }
                 }
             }
         });
     }
 
-    // ===== Таблица данных =====
     function buildTable() {
         var tbody = document.getElementById('tableBody');
         var rows = filteredData.slice(0, 300);
@@ -362,7 +343,7 @@
             var link = r.result === 'Рекомендация'
                 ? (r._linked
                     ? '<span class="badge badge-linked">связано</span>'
-                    : '<span class="badge" style="background:#fee2e2;color:#ef4444">нет пары</span>')
+                    : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
                 : '';
             var fileName = r.fileName ? escapeHtml(r.fileName.slice(0, 40)) : '';
             var fileNameTitle = escapeHtml(r.fileName || '');
@@ -388,23 +369,17 @@
         tbody.innerHTML = html;
     }
 
-    // ===== Таблица ОС на главной (без кнопок) =====
     function renderFeedbackTableHome() {
         var tbody = document.getElementById('fbTableBodyHome');
         if (!tbody) return;
 
         var validMarkers = new Set();
-        if (currentTab !== 'all') {
-            for (var i = 0; i < processedData.length; i++) {
-                if (matchesTab(processedData[i])) validMarkers.add(processedData[i].marker);
-            }
+        for (var i = 0; i < processedData.length; i++) {
+            if (matchesTab(processedData[i])) validMarkers.add(processedData[i].marker);
         }
 
         var filtered = feedbackData.filter(function (f) {
-            if (currentTab === 'all') return true;
-            var proj = f.project || deriveProjectFromPools(f.pools);
-            if (proj) return proj === currentTab;
-            return validMarkers.has(f.marker);
+            return currentTab === 'all' || validMarkers.has(f.marker);
         });
 
         filtered.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
@@ -412,21 +387,19 @@
         var html = '';
         for (var j = 0; j < filtered.length; j++) {
             var f = filtered[j];
-            var statusColor = f.status === 'Проведена' ? '#10b981'
-                : f.status === 'Отменена' ? '#ef4444'
-                : f.status === 'Перенесена' ? '#f59e0b'
-                : '#1d9bf0';
+            var statusColor = f.status === 'Проведена' ? '#85c4ae'
+                : f.status === 'Отменена' ? '#e55555'
+                : f.status === 'Перенесена' ? '#f2c94c'
+                : '#f07171';
             var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null)
                 ? (f.avgQuality * 100).toFixed(1) + '%'
                 : '—';
-            var displayProject = f.project || deriveProjectFromPools(f.pools) || '—';
             html += '<tr>' +
                 '<td>' + escapeHtml(f.date || '') + '</td>' +
                 '<td>' + escapeHtml(f.marker || '') + '</td>' +
                 '<td>' + escapeHtml(f.typeVKS || '—') + '</td>' +
                 '<td>' + escapeHtml(f.conductor || '—') + '</td>' +
                 '<td><span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '">' + escapeHtml(f.status) + '</span></td>' +
-                '<td>' + escapeHtml(displayProject) + '</td>' +
                 '<td>' + escapeHtml(f.pools || '') + '</td>' +
                 '<td><b>' + avgQText + '</b></td>' +
             '</tr>';
@@ -447,7 +420,6 @@
         renderFeedbackTableHome();
     }
 
-    // ===== Переключение табов проекта =====
     function switchTab(tabId, btn) {
         currentTab = tabId;
         document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
@@ -455,7 +427,6 @@
         triggerFilterUpdate();
     }
 
-    // ===== Multi-select =====
     function toggleDropdown(id) {
         var dropdown = document.getElementById(id + '_dropdown');
         if (!dropdown) return;
@@ -545,7 +516,6 @@
         updateLabel(containerId, stateKey);
     }
 
-    // ===== Сброс =====
     function resetFilters() {
         document.getElementById('filterDateFrom').value = '';
         document.getElementById('filterDateTo').value = '';
@@ -566,7 +536,6 @@
         triggerFilterUpdate();
     }
 
-    // ===== Экспорт в window для inline-обработчиков =====
     window.switchTab = switchTab;
     window.toggleDropdown = toggleDropdown;
     window.filterMsOptions = filterMsOptions;
@@ -574,7 +543,6 @@
     window.onOptionChange = onOptionChange;
     window.resetFilters = resetFilters;
 
-    // ===== Инициализация =====
     function init() {
         var poolsSet = new Set();
         var markersSet = new Set();
