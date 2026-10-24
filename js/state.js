@@ -42,7 +42,7 @@ export const state = {
             ballsPerHour: null,
             prodPerHour: null,
             avgTime: null,
-            avgPrice: null       // ← НОВОЕ
+            avgPrice: null
         },
         norms: {
             byProjectPool: {},
@@ -50,7 +50,7 @@ export const state = {
             globalAvg: null
         },
         filters: {
-            projects: new Set(),
+            // projects: больше не используется — фильтрация идёт через state.currentTab
             dateFrom: '',
             dateTo: '',
             tasks: new Set()
@@ -62,7 +62,8 @@ export const state = {
             t4: {}
         },
         normHistory: DEFAULT_NORM_HISTORY.slice(),
-        employeeMap: { fioToEmail: {}, emailToFio: {} }
+        employeeMap: { fioToEmail: {}, emailToFio: {} },
+        _mainProjects: null   // Set<string> — кэш проектов главной страницы
     }
 };
 
