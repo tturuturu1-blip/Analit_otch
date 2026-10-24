@@ -249,6 +249,7 @@ export function triggerFilterUpdate() {
     renderFeedbackTableHome();
 }
 
+// ===== KPI Логика с цветами =====
 export function updateKPI() {
     const uniqueFiles = new Set();
     let totalFragments = 0;
@@ -275,15 +276,47 @@ export function updateKPI() {
 
     const errorPercent = totalFragments > 0 ? (errorsCount / totalFragments) * 100 : 0;
     const avgQ = qualityCount ? qualitySum / qualityCount : null;
-
-    document.getElementById('kpiTotalFragments').textContent = totalFragments;
-    document.getElementById('kpiTotalMarkers').textContent = uniqueMarkers.size;
-    document.getElementById('kpiErrorsPercent').textContent = errorPercent.toFixed(2) + '%';
-    document.getElementById('kpiQuality').textContent = avgQ !== null ? (avgQ * 100).toFixed(1) + '%' : '—';
-
+    const avgQPct = avgQ !== null ? avgQ * 100 : 0;
+    
     const target = state.superset.norms.globalAvg;
-    const targetEl = document.getElementById('kpiTargetQuality');
-    if (targetEl) targetEl.textContent = target != null ? target.toFixed(1) + '%' : '—';
+    const targetVal = target != null ? target : 98;
+
+    const elTotalFragments = document.getElementById('kpiTotalFragments');
+    const elTotalMarkers = document.getElementById('kpiTotalMarkers');
+    const elErrorsPercent = document.getElementById('kpiErrorsPercent');
+    const elQuality = document.getElementById('kpiQuality');
+    const elTargetQuality = document.getElementById('kpiTargetQuality');
+
+    elTotalFragments.textContent = totalFragments;
+    elTotalMarkers.textContent = uniqueMarkers.size;
+    elErrorsPercent.textContent = errorPercent.toFixed(2) + '%';
+    elQuality.textContent = avgQ !== null ? avgQPct.toFixed(1) + '%' : '—';
+    elTargetQuality.textContent = target != null ? target.toFixed(1) + '%' : '—';
+
+    // Сброс классов
+    [elTotalFragments, elTotalMarkers, elErrorsPercent, elQuality, elTargetQuality].forEach(el => {
+        if (el) el.classList.remove('val-brown', 'val-red', 'val-green');
+    });
+
+    // Темно-коричневый для 3 карточек
+    if (elTotalFragments) elTotalFragments.classList.add('val-brown');
+    if (elTotalMarkers) elTotalMarkers.classList.add('val-brown');
+    if (elTargetQuality) elTargetQuality.classList.add('val-brown');
+
+    // Логика для Ошибок и Качества
+    const isRed = (errorPercent > 5) && (avgQPct < targetVal);
+    const isGreen = (errorPercent <= 5) && (avgQPct >= targetVal);
+
+    if (isRed) {
+        if (elErrorsPercent) elErrorsPercent.classList.add('val-red');
+        if (elQuality) elQuality.classList.add('val-red');
+    } else if (isGreen) {
+        if (elErrorsPercent) elErrorsPercent.classList.add('val-green');
+        if (elQuality) elQuality.classList.add('val-green');
+    } else {
+        if (elErrorsPercent) elErrorsPercent.classList.add('val-brown');
+        if (elQuality) elQuality.classList.add('val-brown');
+    }
 }
 
 function targetLinesForLabels(labels) {
@@ -439,17 +472,21 @@ export function buildTable() {
             ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
             : '—';
 
-        // ▼▼▼ ЛОГИКА ССЫЛКИ: url из плоского отчёта ИЛИ сборка из ID ▼▼▼
         let valLink = '—';
+        let hasLink = false;
+        let linkUrl = '';
+
         if (r.url) {
-            // Если есть прямая ссылка из "Линейного отчёта"
-            valLink = `<a href="${r.url}" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>`;
+            linkUrl = r.url;
+            hasLink = true;
         } else if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
-            // Если это Marks_validate, собираем ссылку из ID
-            const url = getValidationUrl(r.orgId, r.assignmentId, r.itemId);
-            if (url) valLink = `<a href="${url}" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>`;
+            linkUrl = getValidationUrl(r.orgId, r.assignmentId, r.itemId);
+            if (linkUrl) hasLink = true;
         }
-        // ▲▲▲
+
+        if (hasLink) {
+            valLink = `<a href="${linkUrl}" target="_blank" class="badge-link">Перейти</a>`;
+        }
 
         const fileName = r.fileName ? escapeHtml(r.fileName.slice(0, 40)) : '';
         const fileNameTitle = escapeHtml(r.fileName || '');
@@ -473,14 +510,21 @@ export function buildTable() {
     }).join('');
 }
 
+// ============================================================
+// ============ СТРАНИЦА "ТОП ОШИБОК" (КАРТОЧКИ) ==============
+// ============================================================
+
 export function renderErrorsTable() {
-    const tbody = document.getElementById('errorsTableBody');
+    const container = document.getElementById('errorsCardsContainer');
+    if (!container) return;
+
     const from = document.getElementById('errFilterDateFrom').value;
     const to = document.getElementById('errFilterDateTo').value;
     const fromDate = from ? new Date(from) : null;
     const toDate = to ? new Date(to) : null;
     if (toDate) toDate.setDate(toDate.getDate() + 1);
 
+    // 1. Фильтрация данных
     const filtered = state.processedData.filter(r => {
         if (r._type !== 'validation') return false;
         if (!matchesTab(r)) return false;
@@ -489,82 +533,161 @@ export function renderErrorsTable() {
         return true;
     });
 
+    // 2. Сбор статистики
     const markerStats = {};
-    const processedFiles = new Set();
-
+    
     for (const r of filtered) {
         if (!r.marker) continue;
-        if (!markerStats[r.marker]) markerStats[r.marker] = { totalErrors: 0, totalFragments: 0, errorTypes: {} };
+        if (!markerStats[r.marker]) {
+            markerStats[r.marker] = { 
+                totalErrors: 0, 
+                totalFragments: 0, 
+                errorTypes: {},
+                projectQuality: {} 
+            };
+        }
+        
+        // Уникальные фрагменты
         const fileKey = r.marker + '|' + r.fileName + '|' + r.fragments;
-        if (!processedFiles.has(fileKey)) {
-            processedFiles.add(fileKey);
+        if (!markerStats[r.marker]._files) markerStats[r.marker]._files = new Set();
+        if (!markerStats[r.marker]._files.has(fileKey)) {
+            markerStats[r.marker]._files.add(fileKey);
             markerStats[r.marker].totalFragments += (r.fragments || 0);
         }
+
+        // Качество по проекту (берем из валидных записей)
+        if (r.project && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+            if (!markerStats[r.marker].projectQuality[r.project]) {
+                markerStats[r.marker].projectQuality[r.project] = [];
+            }
+            markerStats[r.marker].projectQuality[r.project].push(r.quality);
+        }
+
+        // Ошибки
         if (r.result === 'Ошибка') {
             markerStats[r.marker].totalErrors++;
             const type = r.errorType || 'Неизвестная';
-            if (!markerStats[r.marker].errorTypes[type]) markerStats[r.marker].errorTypes[type] = { count: 0, pools: {} };
+            if (!markerStats[r.marker].errorTypes[type]) {
+                markerStats[r.marker].errorTypes[type] = { count: 0, pools: {} };
+            }
             markerStats[r.marker].errorTypes[type].count++;
+            
             const pool = r.pool || 'Неизвестный пул';
-            if (!markerStats[r.marker].errorTypes[type].pools[pool]) markerStats[r.marker].errorTypes[type].pools[pool] = { count: 0, comments: [] };
+            if (!markerStats[r.marker].errorTypes[type].pools[pool]) {
+                markerStats[r.marker].errorTypes[type].pools[pool] = { count: 0, comments: [] };
+            }
             markerStats[r.marker].errorTypes[type].pools[pool].count++;
-            if (r.comment) markerStats[r.marker].errorTypes[type].pools[pool].comments.push(r.comment);
+            if (r.comment && !markerStats[r.marker].errorTypes[type].pools[pool].comments.includes(r.comment)) {
+                markerStats[r.marker].errorTypes[type].pools[pool].comments.push(r.comment);
+            }
         }
     }
 
+    // 3. Словарь ФИО
+    const emailToFio = {};
+    for (const emp of state.rawEmployeeMap) {
+        const email = getVal(emp, 'Почта', 'Почта разметчика', 'Email', 'email');
+        const fio = getVal(emp, 'ФИО', 'Фио', 'ФИО разметчика');
+        if (email && fio) emailToFio[String(email).trim().toLowerCase()] = String(fio).trim();
+    }
+
+    // 4. Формирование HTML
     let html = '';
     const sortedMarkers = Object.keys(markerStats).filter(m => markerStats[m].totalErrors > 0).sort();
 
-    sortedMarkers.forEach((marker, mIdx) => {
-        const stats = markerStats[marker];
-        const rate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
-        const markerId = `m_${mIdx}`;
-        html += `<tr class="expandable-row l1-row" onclick="toggleRow('${markerId}_details', this, event)">
-            <td><span class="toggle-icon">▶</span> <b>${escapeHtml(marker)}</b></td>
-            <td><b>${rate.toFixed(2)}%</b> <span style="font-weight:normal;color:var(--muted)">(${stats.totalErrors} из ${stats.totalFragments})</span></td>
-        </tr>`;
+    if (sortedMarkers.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color: var(--muted); padding: 20px;">Нет данных об ошибках за выбранный период.</div>';
+        return;
+    }
 
-        let l2Html = '';
+    for (const markerEmail of sortedMarkers) {
+        const stats = markerStats[markerEmail];
+        const fio = emailToFio[markerEmail.toLowerCase()] || markerEmail;
+        const errorRate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
+
+        // Блок "Качество по проекту"
+        let qualityHtml = '<ul class="project-quality-list">';
+        for (const proj in stats.projectQuality) {
+            const arr = stats.projectQuality[proj];
+            const avg = (arr.reduce((a, b) => a + b, 0) / arr.length) * 100;
+            qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${avg.toFixed(1)}%</strong></li>`;
+        }
+        qualityHtml += '</ul>';
+        if (Object.keys(stats.projectQuality).length === 0) {
+            qualityHtml = '<div style="font-size:0.85rem; color:var(--muted);">Нет данных</div>';
+        }
+
+        // Блок "Типы ошибок"
+        let typesHtml = '';
         const sortedTypes = Object.keys(stats.errorTypes).sort((a, b) => stats.errorTypes[b].count - stats.errorTypes[a].count);
-        sortedTypes.forEach((type, tIdx) => {
+        
+        for (const type of sortedTypes) {
             const typeData = stats.errorTypes[type];
             const typeRate = (typeData.count / stats.totalErrors) * 100;
-            const typeId = `${markerId}_t_${tIdx}`;
-            l2Html += `<tr class="expandable-row l2-row" id="${typeId}" onclick="toggleRow('${typeId}_details', this, event)">
-                <td style="padding-left: 30px;"><span class="toggle-icon">▶</span> ${escapeHtml(type)}</td>
-                <td>${typeRate.toFixed(2)}% <span style="color:var(--muted)">(${typeData.count})</span></td>
-            </tr>`;
-            let l3Html = '';
+            
+            let poolListHtml = '<ul class="pool-list">';
             const sortedPools = Object.keys(typeData.pools).sort((a, b) => typeData.pools[b].count - typeData.pools[a].count);
-            sortedPools.forEach((pool, pIdx) => {
+            
+            for (const pool of sortedPools) {
                 const poolData = typeData.pools[pool];
                 const poolRate = (poolData.count / typeData.count) * 100;
-                const poolId = `${typeId}_p_${pIdx}`;
-                l3Html += `<tr class="expandable-row l3-row" id="${poolId}" onclick="toggleRow('${poolId}_details', this, event)">
-                    <td style="padding-left: 60px;"><span class="toggle-icon">▶</span> ${escapeHtml(pool)}</td>
-                    <td>${poolRate.toFixed(2)}% <span style="color:var(--muted)">(${poolData.count})</span></td>
-                </tr>`;
-                let commentsHtml = poolData.comments.map(c => `<li>${escapeHtml(c)}</li>`).join('');
-                if (!commentsHtml) commentsHtml = '<li>Нет комментариев</li>';
-                l3Html += `<tr class="details-row" id="${poolId}_details" style="display:none;">
-                    <td colspan="2" style="padding-left: 90px; background: #fdf8e4;">
-                        <ul class="comment-list">${commentsHtml}</ul>
-                    </td>
-                </tr>`;
-            });
-            l2Html += `<tr class="details-row" id="${typeId}_details" style="display:none;">
-                <td colspan="2" style="padding:0;">
-                    <table style="margin:0; box-shadow:none; border:none;"><tbody>${l3Html}</tbody></table>
-                </td>
-            </tr>`;
-        });
-        html += `<tr class="details-row" id="${markerId}_details" style="display:none;">
-            <td colspan="2" style="padding:0;">
-                <table style="margin:0; box-shadow:none; border:none;"><tbody>${l2Html}</tbody></table>
-            </td>
-        </tr>`;
-    });
-    tbody.innerHTML = html;
+                const comments = poolData.comments.map(c => `<div class="pool-comment">— ${escapeHtml(c)}</div>`).join('');
+                
+                poolListHtml += `<li class="pool-item">
+                    <div class="pool-header">
+                        <span>${escapeHtml(pool)}</span>
+                        <span>${poolRate.toFixed(1)}% (${poolData.count})</span>
+                    </div>
+                    ${comments}
+                </li>`;
+            }
+            poolListHtml += '</ul>';
+
+            typesHtml += `
+                <div class="error-type-block">
+                    <div class="error-type-header">
+                        <span>${escapeHtml(type)}</span>
+                    </div>
+                    <div class="error-type-rate">${typeRate.toFixed(1)}% от всех ошибок</div>
+                    ${poolListHtml}
+                </div>
+            `;
+        }
+
+        html += `
+            <div class="marker-card">
+                <div class="marker-header">
+                    <div class="avatar">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </div>
+                    <div class="marker-info">
+                        <div class="marker-name" title="${escapeHtml(fio)}">${escapeHtml(fio)}</div>
+                        <div class="marker-email" title="${escapeHtml(markerEmail)}">${escapeHtml(markerEmail)}</div>
+                    </div>
+                </div>
+
+                <div class="inner-cards-container">
+                    <div class="inner-card">
+                        <div class="inner-card-title">Качество по проектам</div>
+                        ${qualityHtml}
+                    </div>
+
+                    <div class="inner-card">
+                        <div class="inner-card-title">Процент ошибок</div>
+                        <div class="inner-card-value" style="color: var(--danger);">${errorRate.toFixed(2)}%</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 4px;">${stats.totalErrors} из ${stats.totalFragments} фрагментов</div>
+                    </div>
+
+                    <div class="inner-card">
+                        <div class="inner-card-title">Процент ошибок по типам</div>
+                        ${typesHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
 }
 
 export function toggleRow(id, rowElement, event) {
