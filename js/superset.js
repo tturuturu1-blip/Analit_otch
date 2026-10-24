@@ -31,7 +31,6 @@ function parseHtmlNumberToFloat(val) {
     return isNaN(n) ? null : n;
 }
 
-// Парсер цены: число / "580,00" / "580.00" / с пробелами
 function parsePriceToFloat(val) {
     if (val == null || val === '') return null;
     const s = String(val).replace(/\s+/g, '').replace(',', '.');
@@ -100,7 +99,7 @@ export function getNormsForPeriod(dateFrom, dateTo) {
         return [{ value: segments[0].value, label: null }];
     }
 
-    return segments.map((s, idx) => {
+    const mapped = segments.map((s, idx) => {
         let label = null;
         if (idx < segments.length - 1) {
             const endDate = new Date(s.end + 'T00:00:00');
@@ -111,6 +110,9 @@ export function getNormsForPeriod(dateFrom, dateTo) {
         }
         return { value: s.value, label };
     });
+
+    // ▼▼▼ Возвращаем от нового (текущего) к старому
+    return mapped.reverse();
 }
 
 export function addNormEntry(dateISO, value) {
@@ -190,7 +192,7 @@ function buildEmployeeMap() {
     return state.superset.employeeMap;
 }
 
-// ===== Индекс качества по email (с учётом фильтров) =====
+// ===== Индекс качества по email =====
 function computeEmployeeQualityIndex() {
     const byEmailOnly = {};
     const byEmailProject = {};
@@ -509,7 +511,7 @@ function rebuildTable4() {
     state.superset.table4 = rows;
 }
 
-// ▼▼▼ ИЗМЕНЕНО: сначала среднее по каждой задаче (пулу), затем среднее по задачам
+// ===== KPI =====
 function buildKPIs() {
     const t1 = state.superset.filteredTable1;
     const qualities = [];
@@ -532,9 +534,11 @@ function buildKPIs() {
     const prods = t1.map(r => parseHtmlNumberToFloat(r.prodPerHour)).filter(v => v !== null);
     const prodPerHour = avg(prods);
 
-    // ─── Среднее время разметки ───
-    // 1) Для каждой задачи (project|task) считаем среднее время по её строкам.
-    // 2) Затем усредняем эти средние по задачам (равный вес каждой задачи).
+    // ▼ Средняя цена
+    const prices = t1.map(r => parsePriceToFloat(r.price)).filter(v => v !== null);
+    const avgPrice = avg(prices);
+
+    // ▼ Среднее время разметки: сначала по задачам, потом среднее по задачам
     const timesByTask = {};
     for (const r of t1) {
         const priceNum = parsePriceToFloat(r.price);
@@ -546,7 +550,7 @@ function buildKPIs() {
         const normV = getNormForDate(dateISO || new Date().toISOString().slice(0, 10));
         if (!normV || normV <= 0) continue;
 
-        const t = (priceNum * prodV * 60) / normV;  // минуты
+        const t = (priceNum * prodV * 60) / normV;
         const key = (r.project || '') + '|' + (r.task || '');
         if (!timesByTask[key]) timesByTask[key] = [];
         timesByTask[key].push(t);
@@ -558,11 +562,9 @@ function buildKPIs() {
         if (a !== null) taskAverages.push(a);
     }
     const avgTime = avg(taskAverages);
-    // ─────────────────────────────
 
-    state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime };
+    state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime, avgPrice };
 }
-// ▲▲▲
 
 export function applySupersetFilters() {
     const t1Config = getTable1Config();
