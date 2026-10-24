@@ -3,8 +3,6 @@ import { formatDate, maskEmail, escapeHtml, updateLabel } from './utils.js';
 import { matchesTab } from './data.js';
 
 // ===== Определение проекта по пулам записи =====
-// Используется, если в записи нет поля project (старые записи)
-// или если пользователь выбрал пулы для новой записи.
 function deriveProjectFromPools(poolsStr) {
     if (!poolsStr) return null;
     const pools = String(poolsStr).split(',').map(p => p.trim()).filter(Boolean);
@@ -20,13 +18,10 @@ function deriveProjectFromPools(poolsStr) {
 }
 
 // ===== Общий рендер строк таблицы обратной связи =====
-// tbodyId       — id контейнера <tbody>, куда рендерить
-// includeActions — true → добавить колонку с кнопками "Редактировать/Удалить"
 function renderFeedbackRows(tbodyId, includeActions) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
 
-    // Маркеры, у которых есть данные в выбранном проекте (fallback для старых записей без project)
     const validMarkers = new Set();
     if (state.currentTab !== 'all') {
         for (const r of state.processedData) {
@@ -34,7 +29,6 @@ function renderFeedbackRows(tbodyId, includeActions) {
         }
     }
 
-    // Фильтр по проекту (приоритет — поле project, fallback — маркер)
     const filteredFb = state.feedbackData.filter(f => {
         if (state.currentTab === 'all') return true;
         const proj = f.project || deriveProjectFromPools(f.pools);
@@ -46,14 +40,22 @@ function renderFeedbackRows(tbodyId, includeActions) {
         .slice()
         .sort((a, b) => new Date(b.date) - new Date(a.date))
         .map((f) => {
-            const statusColor = f.status === 'Проведена' ? '#10b981'
-                : f.status === 'Отменена' ? '#ef4444'
-                : f.status === 'Перенесена' ? '#f59e0b'
-                : '#1d9bf0';
+            const statusColor = f.status === 'Проведена' ? '#85c4ae'
+                : f.status === 'Отменена' ? '#e55555'
+                : f.status === 'Перенесена' ? '#f2c94c'
+                : '#f07171';
             const avgQText = f.avgQuality !== undefined && f.avgQuality !== null
                 ? (f.avgQuality * 100).toFixed(1) + '%'
                 : '—';
             const displayProject = f.project || deriveProjectFromPools(f.pools) || '—';
+
+            // ▼▼▼ ФОРМАТ ДАТЫ ДД.ММ.ГГГГ ▼▼▼
+            let displayDate = f.date || '';
+            if (displayDate.includes('-')) {
+                const parts = displayDate.split('-');
+                if (parts.length === 3) displayDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+            }
+            // ▲▲▲
 
             let actionsCell = '';
             if (includeActions) {
@@ -69,7 +71,7 @@ function renderFeedbackRows(tbodyId, includeActions) {
             }
 
             return `<tr>
-                <td>${escapeHtml(f.date || '')}</td>
+                <td>${escapeHtml(displayDate)}</td>
                 <td>${escapeHtml(f.marker || '')}</td>
                 <td>${escapeHtml(f.typeVKS || '—')}</td>
                 <td>${escapeHtml(f.conductor || '—')}</td>
@@ -82,7 +84,6 @@ function renderFeedbackRows(tbodyId, includeActions) {
         }).join('');
 }
 
-// ===== Полная таблица на странице "Обратная связь" (с кнопками) =====
 export function renderFeedbackTable() {
     const markerSelect = document.getElementById('fbMarker');
     if (markerSelect) {
@@ -104,12 +105,10 @@ export function renderFeedbackTable() {
     renderFeedbackRows('fbTableBodyHome', false);
 }
 
-// ===== Только таблица на главной (без кнопок) =====
 export function renderFeedbackTableHome() {
     renderFeedbackRows('fbTableBodyHome', false);
 }
 
-// ===== Редактирование записи =====
 export function editFeedback(idx) {
     const f = state.feedbackData[idx];
     if (!f) return;
@@ -135,7 +134,6 @@ export function editFeedback(idx) {
     document.getElementById('btnAddFeedback').textContent = 'Сохранить';
 }
 
-// ===== Удаление записи =====
 export function deleteFeedback(idx) {
     if (!confirm('Удалить запись?')) return;
     state.feedbackData.splice(idx, 1);
@@ -143,7 +141,6 @@ export function deleteFeedback(idx) {
     renderFeedbackTable();
 }
 
-// ===== Добавление / сохранение записи =====
 function handleAddFeedback() {
     const marker = document.getElementById('fbMarker').value;
     const dateStr = document.getElementById('fbDate').value;
@@ -155,7 +152,6 @@ function handleAddFeedback() {
     if (!marker || !dateStr) { alert('Выберите разметчика и дату'); return; }
     if (!pools) { alert('Выберите хотя бы один пул с ошибками'); return; }
 
-    // Проект выводим из пулов (первый найденный)
     const project = deriveProjectFromPools(pools);
 
     const currentDate = new Date(dateStr);
@@ -204,7 +200,6 @@ function handleAddFeedback() {
     updateLabel('msFbFormPools', 'fbFormPools');
 }
 
-// ===== Генерация фидбеков по пулам (Excel) =====
 export async function generateFeedback() {
     const selectedPools = Array.from(state.filterState.feedbackPool);
     if (selectedPools.length === 0) {
@@ -255,7 +250,6 @@ export async function generateFeedback() {
     log('Фидбеки сформированы (по файлу на пул)', false);
 }
 
-// ===== Инициализация формы =====
 export function initFeedbackForm() {
     document.getElementById('btnAddFeedback').addEventListener('click', handleAddFeedback);
     document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedback);
