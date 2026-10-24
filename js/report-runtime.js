@@ -4,7 +4,6 @@
     var REPORT_DATA = JSON.parse(document.getElementById('report-data').textContent);
     var processedData = REPORT_DATA.processedData || [];
     var feedbackData = REPORT_DATA.feedbackData || [];
-    var baseVideoUrl = REPORT_DATA.videoBaseUrl || '';
 
     var filteredData = [];
     var charts = {};
@@ -29,11 +28,15 @@
             .replace(/'/g, '&#39;');
     }
 
-    function getVideoLink(fileName) {
-        if (!fileName) return '#';
-        var cleanName = String(fileName).replace(/\.json$/i, '');
-        return baseVideoUrl + encodeURIComponent(cleanName);
+    // ▼▼▼ ЛОГИКА ССЫЛКИ ДЛЯ ОТЧЕТА ▼▼▼
+    function getValidationLink(r) {
+        if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
+            var url = 'https://tag.devaices.ru/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
+            return '<a href="' + url + '" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>';
+        }
+        return '—';
     }
+    // ▲▲▲
 
     function matchesTab(r) {
         if (currentTab === 'all') return true;
@@ -343,9 +346,7 @@
                 ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
                 : '—';
 
-            var videoLink = r.fileName
-                ? '<a href="' + getVideoLink(r.fileName) + '" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>'
-                : '—';
+            var valLink = getValidationLink(r);
 
             var fileName = r.fileName ? escapeHtml(r.fileName.slice(0, 40)) : '';
             var fileNameTitle = escapeHtml(r.fileName || '');
@@ -364,7 +365,7 @@
                 '<td title="' + commentTitle + '">' + comment + '</td>' +
                 '<td>' + escapeHtml(r.interval || '') + '</td>' +
                 '<td>' + quality + '</td>' +
-                '<td>' + videoLink + '</td>' +
+                '<td>' + valLink + '</td>' +
                 '<td>' + link + '</td>' +
             '</tr>';
         }
