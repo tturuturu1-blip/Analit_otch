@@ -31,6 +31,14 @@ function parseHtmlNumberToFloat(val) {
     return isNaN(n) ? null : n;
 }
 
+// Парсер цены: число / "580,00" / "580.00" / с пробелами
+function parsePriceToFloat(val) {
+    if (val == null || val === '') return null;
+    const s = String(val).replace(/\s+/g, '').replace(',', '.');
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+}
+
 export function formatISODate(date) {
     if (!date) return null;
     const d = date instanceof Date ? date : new Date(date);
@@ -182,7 +190,7 @@ function buildEmployeeMap() {
     return state.superset.employeeMap;
 }
 
-// ===== Индекс качества по email =====
+// ===== Индекс качества по email (с учётом фильтров) =====
 function computeEmployeeQualityIndex() {
     const byEmailOnly = {};
     const byEmailProject = {};
@@ -501,6 +509,7 @@ function rebuildTable4() {
     state.superset.table4 = rows;
 }
 
+// ▼▼▼ ИЗМЕНЕНО: новая формула (Цена × Кпроизв в час × 60) / Норма у.е. в час → минуты
 function buildKPIs() {
     const t1 = state.superset.filteredTable1;
     const qualities = [];
@@ -523,20 +532,26 @@ function buildKPIs() {
     const prods = t1.map(r => parseHtmlNumberToFloat(r.prodPerHour)).filter(v => v !== null);
     const prodPerHour = avg(prods);
 
-    // Среднее время разметки = (ballsPerHour / norm) — часы; * 60 → минуты
+    // Среднее время разметки = avg( (Цена × Кпроизв в час × 60) / Норма у.е. в час )
+    // Результат в минутах.
     const times = [];
     for (const r of t1) {
-        const ballsV = parseHtmlNumberToFloat(r.ballsPerHour);
-        if (ballsV === null || ballsV <= 0) continue;
+        const priceNum = parsePriceToFloat(r.price);
+        const prodV = parseHtmlNumberToFloat(r.prodPerHour);
+        if (priceNum === null || priceNum <= 0) continue;
+        if (prodV === null || prodV <= 0) continue;
+
         const dateISO = r.dateStart ? formatISODate(r.dateStart) : (r.dateEnd ? formatISODate(r.dateEnd) : null);
         const normV = getNormForDate(dateISO || new Date().toISOString().slice(0, 10));
         if (!normV || normV <= 0) continue;
-        times.push((ballsV / normV) * 60);   // часы → минуты
+
+        times.push((priceNum * prodV * 60) / normV);
     }
     const avgTime = avg(times);
 
     state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime };
 }
+// ▲▲▲
 
 export function applySupersetFilters() {
     const t1Config = getTable1Config();
