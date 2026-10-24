@@ -5,12 +5,12 @@ import {
     populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable, toggleRow,
     buildProjectTabs, renderMarkersTasksStatus, renderSupersetPage,
     renderSupersetFilters, renderSupersetKPIs,
-    updateSupersetTaskLabel, updateSupersetProjectLabel,
-    onSupersetTaskChange, onSupersetProjectChange, onSupersetDateChange,
+    updateSupersetTaskLabel,
+    onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange
 } from './ui.js';
 import { renderFeedbackTable, editFeedback, deleteFeedback, initFeedbackForm } from './feedback.js';
-import { buildSuperset, applySupersetFilters } from './superset.js';
+import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw } from './superset.js';
 import {
     progressStartTimer, updateProgress, yieldToUI, log, formatDate
 } from './utils.js';
@@ -21,7 +21,6 @@ Object.assign(window, {
     onOptionChange, toggleRow, renderErrorsTable,
     editFeedback, deleteFeedback,
     onSupersetTaskChange,
-    onSupersetProjectChange,
     onSupersetDateChange,
     resetSupersetFilters,
     editSupersetNorm,
@@ -43,7 +42,6 @@ if (supersetDateFrom) supersetDateFrom.addEventListener('change', onSupersetDate
 if (supersetDateTo) supersetDateTo.addEventListener('change', onSupersetDateChange);
 
 window.addEventListener('app:data-updated', () => {
-    state.superset.filters.projects.clear();
     state.superset.filters.dateFrom = '';
     state.superset.filters.dateTo = '';
     state.superset.filters.tasks.clear();
@@ -96,6 +94,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
     e.target.value = '';
 });
 
+// ===== Экспорт в Excel — Суперсет фильтруется по проектам главной страницы =====
 document.getElementById('btnExport').addEventListener('click', () => {
     if (!state.processedData.length && !state.feedbackData.length) {
         alert('Нет данных для экспорта');
@@ -149,12 +148,16 @@ document.getElementById('btnExport').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawRecommendations), "Рекомендации (сырые)");
         if (state.rawFlatValidations.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
-        if (state.rawSuperset1.length > 0)
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawSuperset1), "Суперсет 1 (сырые)");
-        if (state.rawSuperset2.length > 0)
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawSuperset2), "Суперсет 2 (сырые)");
-        if (state.rawSuperset3.length > 0)
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawSuperset3), "Суперсет 3 (сырые)");
+
+        // ▼▼▼ Суперсет — только проекты главной страницы ▼▼▼
+        const { s1, s2, s3 } = getFilteredSupersetRaw();
+        if (s1.length > 0)
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s1), "Суперсет 1 (сырые)");
+        if (s2.length > 0)
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s2), "Суперсет 2 (сырые)");
+        if (s3.length > 0)
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s3), "Суперсет 3 (сырые)");
+        // ▲▲▲
 
         XLSX.writeFile(wb, `full_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
         log('Полный экспорт выполнен', false);
@@ -224,7 +227,8 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null, avgPrice: null };
     state.superset.norms = { byProjectPool: {}, byProject: {}, globalAvg: null };
     state.superset.employeeMap = { fioToEmail: {}, emailToFio: {} };
-    state.superset.filters = { projects: new Set(), dateFrom: '', dateTo: '', tasks: new Set() };
+    state.superset._mainProjects = null;
+    state.superset.filters = { dateFrom: '', dateTo: '', tasks: new Set() };
     state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
     buildProjectTabs();
