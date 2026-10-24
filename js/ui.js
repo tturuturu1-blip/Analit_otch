@@ -232,7 +232,6 @@ export function triggerFilterUpdate() {
     renderFeedbackTableHome();
 }
 
-// ===== KPI =====
 export function updateKPI() {
     const uniqueFiles = new Set();
     let totalFragments = 0;
@@ -551,7 +550,6 @@ export function toggleRow(id, rowElement, event) {
 
 export function renderSupersetPage() {
     renderSupersetFilters();
-    renderSupersetNormCard();
     renderSupersetKPIs();
     renderSupersetTable1();
     renderSupersetTable2();
@@ -678,34 +676,6 @@ export function resetSupersetFilters() {
     renderSupersetPage();
 }
 
-export function renderSupersetNormCard() {
-    const container = document.getElementById('supersetNormCard');
-    if (!container) return;
-
-    const { dateFrom, dateTo } = state.superset.filters;
-    const norms = getNormsForPeriod(dateFrom, dateTo);
-
-    const editBtn = `<button class="norm-edit-btn" onclick="editSupersetNorm()" title="Редактировать">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-    </button>`;
-
-    let valuesHtml = '';
-    if (norms.length === 1) {
-        valuesHtml = `<div class="value">${norms[0].value.toFixed(0)}</div>`;
-    } else {
-        valuesHtml = '<div class="norm-values-multi">';
-        for (const n of norms) {
-            valuesHtml += `<div class="norm-value-item">
-                <div class="value">${n.value.toFixed(0)}</div>
-                ${n.label ? `<div class="norm-label">${escapeHtml(n.label)}</div>` : ''}
-            </div>`;
-        }
-        valuesHtml += '</div>';
-    }
-
-    container.innerHTML = editBtn + '<div class="label">Норма у.е. в час</div>' + valuesHtml;
-}
-
 export function editSupersetNorm() {
     const today = new Date().toISOString().slice(0, 10);
     const currentNorm = getNormForDate(today);
@@ -722,28 +692,55 @@ export function editSupersetNorm() {
     }
 }
 
+// ▼▼▼ KPI: Норма + Цена + 5 метрик в одном ряду
 export function renderSupersetKPIs() {
     const container = document.getElementById('supersetKpis');
     if (!container) return;
     const k = state.superset.kpis || {};
 
-    // ▼ Среднее время разметки — теперь в минутах (формула с ×60)
-    const cards = [
+    // Значения нормы (текущее сверху, прошлое снизу)
+    const { dateFrom, dateTo } = state.superset.filters;
+    const norms = getNormsForPeriod(dateFrom, dateTo);
+
+    let normValuesHtml = '';
+    if (norms.length === 1) {
+        normValuesHtml = `<div class="value">${norms[0].value.toFixed(0)}</div>`;
+    } else {
+        normValuesHtml = '<div class="norm-values-multi">';
+        for (const n of norms) {
+            normValuesHtml += `<div class="norm-value-item">
+                <div class="value">${n.value.toFixed(0)}</div>
+                ${n.label ? `<div class="norm-label">${escapeHtml(n.label)}</div>` : ''}
+            </div>`;
+        }
+        normValuesHtml += '</div>';
+    }
+
+    const normCard = `<div class="kpi-card">
+        <button class="norm-edit-btn" onclick="editSupersetNorm()" title="Редактировать">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        </button>
+        <div class="label">Норма у.е. в час</div>
+        ${normValuesHtml}
+    </div>`;
+
+    const otherCards = [
+        { label: 'Цена', value: k.avgPrice != null ? k.avgPrice.toFixed(2) : '—' },
         { label: 'Качество факт', value: k.qualityFact != null ? (k.qualityFact * 100).toFixed(1) + '%' : '—' },
         { label: 'Качество план', value: k.qualityPlan != null ? k.qualityPlan.toFixed(1) + '%' : '—' },
         { label: 'Факт у.е. в час', value: k.ballsPerHour != null ? k.ballsPerHour.toFixed(1) : '—' },
         { label: 'Коэффициент', value: k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—' },
         { label: 'Среднее время разметки', value: k.avgTime != null ? k.avgTime.toFixed(1) + ' мин' : '—' }
     ];
-    // ▲
 
-    container.innerHTML = cards.map(c => `
+    container.innerHTML = normCard + otherCards.map(c => `
         <div class="kpi-card">
             <div class="label">${escapeHtml(c.label)}</div>
             <div class="value">${escapeHtml(c.value)}</div>
         </div>
     `).join('');
 }
+// ▲▲▲
 
 // ===== Фильтры столбцов =====
 function renderTableFilters(tableId, configs, fullRows) {
