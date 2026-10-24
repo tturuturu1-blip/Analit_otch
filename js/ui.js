@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
-import { formatDate, updateLabel, escapeHtml, destroyChart, getVal } from './utils.js';
+import { formatDate, updateLabel, escapeHtml, destroyChart, getVal, getVideoUrl } from './utils.js';
 import { renderFeedbackTable, renderFeedbackTableHome } from './feedback.js';
 import {
     applySupersetFilters, formatPeriod, getNormForDate, getNormsForPeriod,
@@ -434,13 +434,24 @@ export function buildTable() {
     const rows = state.filteredData.slice(0, 300);
     tbody.innerHTML = rows.map(r => {
         const badgeClass = r.result === 'Ошибка' ? 'badge-error' : r.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
+        
+        // ▼▼▼ ИЗМЕНЕНО: прочерк для пустых ячеек
         const link = r.result === 'Рекомендация'
             ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
-            : '';
+            : '—';
+        // ▲▲▲
+
+        // ▼▼▼ НОВАЯ КОЛОНКА: ссылка на видео
+        const videoLink = r.fileName
+            ? `<a href="${getVideoUrl(r.fileName)}" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>`
+            : '—';
+        // ▲▲▲
+
         const fileName = r.fileName ? escapeHtml(r.fileName.slice(0, 40)) : '';
         const fileNameTitle = escapeHtml(r.fileName || '');
-        const comment = r.comment ? escapeHtml(r.comment.slice(0, 60)) : '';
+        const comment = r.comment ? escapeHtml(r.comment.slice(0, 100)) : ''; // Увеличили лимит
         const commentTitle = escapeHtml(r.comment || '');
+        
         return `<tr>
             <td>${r.date ? formatDate(r.date) : ''}</td>
             <td>${escapeHtml(r.project || '')}</td>
@@ -452,6 +463,7 @@ export function buildTable() {
             <td title="${commentTitle}">${comment}</td>
             <td>${escapeHtml(r.interval || '')}</td>
             <td>${r.quality !== null && !isNaN(r.quality) ? (r.quality * 100).toFixed(1) + '%' : ''}</td>
+            <td>${videoLink}</td>
             <td>${link}</td>
         </tr>`;
     }).join('');
