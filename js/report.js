@@ -39,7 +39,7 @@ export async function generateHtmlReport() {
     const projectSet = new Set();
     for (const r of state.processedData) {
         if (!r.project) continue;
-        const name = String(r.project).replace(/_validate$/, '').trim();
+        const name = String(r.project).trim();
         if (name) projectSet.add(name);
     }
     const projects = Array.from(projectSet).sort();
@@ -70,14 +70,17 @@ export async function generateHtmlReport() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ГС PRO — Отчёт по валидации</title>
+<title>Валидатор PRO — Отчёт по валидации</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
 <style>${cssText}</style>
 </head>
 <body>
 
 <header class="top-bar" id="topBar">
-    <div class="brand">ГС PRO</div>
+    <div class="brand">
+        <span class="brand-accent">Валидатор</span>
+        <span class="brand-pro">PRO</span>
+    </div>
     ${tabsHtml}
 </header>
 
@@ -193,7 +196,7 @@ export async function generateHtmlReport() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ГС_PRO_Отчет_${new Date().toISOString().slice(0, 10)}.html`;
+    a.download = `Валидатор_PRO_Отчет_${new Date().toISOString().slice(0, 10)}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
