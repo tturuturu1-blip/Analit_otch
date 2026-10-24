@@ -118,7 +118,9 @@ function processFlatValidations() {
         const first = rows[0];
         processedTasks++;
 
+        // ▼ Плоский формат — данные для главной страницы → обрезаем _validate
         const project = (getVal(first, 'Проект') || '').replace(/_validate$/, '').trim() || null;
+        // ▲
         const pool = (getVal(first, 'Пул') || '').trim() || null;
         const fileName = stripJson(getVal(first, 'file_name'));
         const date = parseExcelDate(getVal(first, 'дата разметки'));
@@ -207,7 +209,14 @@ export async function recomputeDashboard() {
         }
         const taskId = getVal(m, 'ID задачи');
         const markerId = getVal(m, 'ID разметчика');
-        const project = getVal(m, 'Проект');
+
+        // ▼▼▼ ИСПРАВЛЕНО: Markers — данные для главной страницы,
+        // проект из столбца «Проект» приходит как «Название_validate»,
+        // но это проект «Название» (валидация — это отдельная сущность
+        // только в Суперсете, а не в Markers/Validation). Обрезаем _validate.
+        const project = (getVal(m, 'Проект') || '').replace(/_validate$/, '').trim() || null;
+        // ▲▲▲
+
         if (taskId && markerId) {
             markerDict[`${taskId}|${markerId}`] = {
                 pool, marker, validator: getVal(m, 'Email'), project
@@ -244,7 +253,10 @@ export async function recomputeDashboard() {
         const markerId = getVal(v, 'marker_id');
         const fileName = stripJson(getVal(v, 'file_name', 'Наименование файла'));
         const date = parseExcelDate(getVal(v, 'start_date', 'Дата валидации'));
+
+        // ▼ mInfo.project уже содержит чистое имя (обрезано в Markers)
         const mInfo = markerDict[`${taskId}|${markerId}`] || { pool: null, marker: null, validator: null, project: null };
+        // ▲
 
         const jsonStr = getVal(v, 'OUTPUT:marks');
         let totalFragments = 0, mistakes = [];
@@ -338,9 +350,10 @@ export async function recomputeDashboard() {
     window.dispatchEvent(new CustomEvent('app:data-updated'));
 }
 
+// ===== Фильтрация (по полному имени — для главной страницы проекты уже без _validate) =====
 export function matchesTab(r) {
     if (state.currentTab === 'all') return true;
-    const project = (r.project || '').replace(/_validate$/, '').trim();
+    const project = (r.project || '').trim();
     return project === state.currentTab;
 }
 
