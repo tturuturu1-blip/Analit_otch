@@ -1,13 +1,36 @@
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
 
-// ===== Кэш проектов главной страницы =====
+// ===== Утилиты =====
+function normalizeProject(project) {
+    return (project || '').trim();
+}
+
+// ===== Кэш проектов главной страницы (с _validate вариантами) =====
 function computeMainProjectsSet() {
     const set = new Set();
+
+    // 1. Все проекты из processedData (как есть — с _validate и без)
     for (const r of state.processedData) {
         if (!r.project) continue;
-        const name = String(r.project).replace(/_validate$/, '').trim();
+        const name = String(r.project).trim();
         if (name) set.add(name);
+    }
+
+    // 2. Дополнительно — проекты Суперсета с _validate, у которых есть «родитель»
+    const supersetProjects = new Set();
+    for (const arr of [state.rawSuperset1, state.rawSuperset2, state.rawSuperset3]) {
+        for (const r of arr) {
+            const proj = getVal(r, 'Проект');
+            if (proj) supersetProjects.add(String(proj).trim());
+        }
+    }
+    for (const sp of supersetProjects) {
+        if (!sp.endsWith('_validate')) continue;
+        const parent = sp.substring(0, sp.length - '_validate'.length).trim();
+        if (set.has(parent)) {
+            set.add(sp);
+        }
     }
     return set;
 }
@@ -19,15 +42,13 @@ function getMainProjects() {
     return state.superset._mainProjects;
 }
 
-function cleanProject(project) {
-    return (project || '').replace(/_validate$/, '').trim();
-}
-
-// ===== Обработка сырых данных для экспорта =====
-// Возвращает только те строки, чей проект присутствует на главной странице.
+// ===== Экспорт — только проекты с главной страницы (включая _validate с «родителем») =====
 export function getFilteredSupersetRaw() {
     const mainSet = getMainProjects();
-    const filterFn = (r) => mainSet.has(cleanProject(getVal(r, 'Проект')));
+    const filterFn = (r) => {
+        const proj = (getVal(r, 'Проект') || '').trim();
+        return mainSet.has(proj);
+    };
     return {
         s1: state.rawSuperset1.filter(filterFn),
         s2: state.rawSuperset2.filter(filterFn),
@@ -35,13 +56,13 @@ export function getFilteredSupersetRaw() {
     };
 }
 
-// ===== Утилиты =====
+// ===== Остальные утилиты =====
 function calcFactQuality() {
     const byProjectPool = {};
     const byProject = {};
     for (const r of state.processedData) {
         if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
-        const project = cleanProject(r.project);
+        const project = normalizeProject(r.project);
         if (!project) continue;
         const pool = r.pool || '';
         const key = project + '|' + pool;
@@ -159,37 +180,37 @@ export function addNormEntry(dateISO, value) {
     return true;
 }
 
-// ===== Нормативы качества =====
+// ===== Нормативы качества (только для НЕ-_validate проектов) =====
 function buildNorms() {
     const byProjectPool = {};
     const byProject = {};
     const mainSet = getMainProjects();
 
     for (const r of state.rawSuperset2) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
+        if (project.endsWith('_validate')) continue;  // у _validate нет нормы
+
         const task = getVal(r, 'Задача');
         const norm = parseNorm(getVal(r, 'Норма качества'));
         if (norm === null) continue;
-        if (project && task) byProjectPool[project + '|' + task] = norm;
-        if (project) {
-            if (!byProject[project]) byProject[project] = [];
-            byProject[project].push(norm);
-        }
+        if (task) byProjectPool[project + '|' + task] = norm;
+        if (!byProject[project]) byProject[project] = [];
+        byProject[project].push(norm);
     }
     for (const r of state.rawSuperset3) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
+        if (project.endsWith('_validate')) continue;
+
         const task = getVal(r, 'Задача');
         const norm = parseNorm(getVal(r, 'Норматив'));
         if (norm === null) continue;
-        if (project && task && byProjectPool[project + '|' + task] == null) {
+        if (task && byProjectPool[project + '|' + task] == null) {
             byProjectPool[project + '|' + task] = norm;
         }
-        if (project) {
-            if (!byProject[project]) byProject[project] = [];
-            byProject[project].push(norm);
-        }
+        if (!byProject[project]) byProject[project] = [];
+        byProject[project].push(norm);
     }
 
     const avgByProject = {};
@@ -248,7 +269,7 @@ function computeEmployeeQualityIndex() {
             if (dateTo && iso > dateTo) continue;
         }
 
-        const proj = cleanProject(r.project);
+        const proj = normalizeProject(r.project);
         if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
 
         const pool = r.pool || '';
@@ -273,14 +294,13 @@ function computeEmployeeQualityIndex() {
 }
 
 // ===== Фильтры =====
-// Проект валиден, если: (1) он есть на главной и (2) соответствует текущему табу
 function matchesProject(project) {
-    const cleanProj = cleanProject(project);
-    if (!cleanProj) return false;
+    const name = normalizeProject(project);
+    if (!name) return false;
     const mainSet = getMainProjects();
-    if (!mainSet.has(cleanProj)) return false;
+    if (!mainSet.has(name)) return false;
     if (state.currentTab === 'all') return true;
-    return cleanProj === state.currentTab;
+    return name === state.currentTab;
 }
 
 function matchesDateRangeRow(date) {
@@ -375,10 +395,10 @@ function buildTable1() {
 
     const idx1 = {};
     for (const r of state.rawSuperset1) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
         const task = getVal(r, 'Задача');
-        const key = (project || '') + '|' + (task || '');
+        const key = project + '|' + (task || '');
         if (!idx1[key]) idx1[key] = r;
     }
 
@@ -386,22 +406,25 @@ function buildTable1() {
     const seen = new Set();
 
     for (const r of state.rawSuperset2) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
         const task = getVal(r, 'Задача') || '';
         const key = project + '|' + task;
         seen.add(key);
         const perf = idx1[key] || {};
 
+        // Для _validate проектов — норма/комментарий/без качества = ''
+        const isValidate = project.endsWith('_validate');
+
         rows.push({
             dateStart: parseExcelDate(getVal(r, 'Дата начала')),
             dateEnd: parseExcelDate(getVal(r, 'Дата окончания')),
             project, task,
             fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
-            normQuality: getVal(r, 'Норма качества') || '',
+            normQuality: isValidate ? '' : (getVal(r, 'Норма качества') || ''),
             quality: getVal(r, 'Качество') || '',
-            comment: getVal(r, 'Комментарий') || '',
-            withoutQuality: getVal(r, 'Без качества, шт', 'Без качества шт') || '',
+            comment: isValidate ? '' : (getVal(r, 'Комментарий') || ''),
+            withoutQuality: isValidate ? '' : (getVal(r, 'Без качества, шт', 'Без качества шт') || ''),
             ballsPerHour: parseHtmlNumber(getVal(perf, 'Факт баллов/час')),
             prodPerHour: parseHtmlNumber(getVal(perf, 'Кпроизв в час')),
             price: getVal(perf, 'Цена') || '',
@@ -410,7 +433,7 @@ function buildTable1() {
     }
 
     for (const r of state.rawSuperset1) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
         const task = getVal(r, 'Задача') || '';
         const key = project + '|' + task;
@@ -439,7 +462,7 @@ function rebuildTable2() {
     const rows = [];
 
     for (const r of state.rawSuperset3) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
 
         const fio = getVal(r, 'ФИО') || '';
@@ -465,14 +488,16 @@ function rebuildTable2() {
             }
         }
 
+        const isValidate = project.endsWith('_validate');
+
         rows.push({
             date, fio, project, task,
             fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
             balls: getVal(r, 'Размечено, б', 'Размечено б') || '',
             qualitySuperset: getVal(r, 'Качество') || '',
             qualityFact: factQuality,
-            norm: getVal(r, 'Норматив') || '',
-            withoutQuality: getVal(r, 'Без качества, шт', 'Без качества шт') || ''
+            norm: isValidate ? '' : (getVal(r, 'Норматив') || ''),
+            withoutQuality: isValidate ? '' : (getVal(r, 'Без качества, шт', 'Без качества шт') || '')
         });
     }
 
@@ -483,7 +508,7 @@ function buildTable3() {
     const mainSet = getMainProjects();
     const byProject = {};
     for (const r of state.rawSuperset1) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
         const price = getVal(r, 'Цена');
         if (!byProject[project]) byProject[project] = { project, prices: [] };
@@ -492,14 +517,14 @@ function buildTable3() {
 
     const projectDates = {};
     for (const r of state.rawSuperset2) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
         const date = parseExcelDate(getVal(r, 'Дата окончания'));
         if (!date) continue;
         if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
     }
     for (const r of state.rawSuperset3) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
         const date = parseExcelDate(getVal(r, 'Дата'));
         if (!date) continue;
@@ -526,7 +551,7 @@ function rebuildTable4() {
 
     const byFio = {};
     for (const r of state.rawSuperset3) {
-        const project = cleanProject(getVal(r, 'Проект'));
+        const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
 
         const fio = getVal(r, 'ФИО') || '';
@@ -541,8 +566,11 @@ function rebuildTable4() {
         if (!matchesTask(task)) continue;
 
         if (!byFio[fio]) byFio[fio] = { fio, norms: [] };
-        const norm = parseNorm(getVal(r, 'Норматив'));
-        if (norm !== null) byFio[fio].norms.push(norm);
+        // Для _validate проектов норматив не учитывается
+        if (!project.endsWith('_validate')) {
+            const norm = parseNorm(getVal(r, 'Норматив'));
+            if (norm !== null) byFio[fio].norms.push(norm);
+        }
     }
 
     const rows = [];
@@ -573,7 +601,7 @@ function buildKPIs() {
 
     for (const r of state.processedData) {
         if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
-        const proj = cleanProject(r.project);
+        const proj = normalizeProject(r.project);
         if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
         if (r.date && !matchesDateRangeRow(r.date)) continue;
         qualities.push(r.quality);
@@ -592,7 +620,7 @@ function buildKPIs() {
     const prices = t1.map(r => parsePriceToFloat(r.price)).filter(v => v !== null);
     const avgPrice = avg(prices);
 
-    // Среднее время: сначала по задачам, затем среднее по задачам
+    // Среднее время: сначала по задачам, потом среднее по задачам
     const timesByTask = {};
     for (const r of t1) {
         const priceNum = parsePriceToFloat(r.price);
@@ -657,7 +685,6 @@ export function applySupersetFilters() {
 }
 
 export function buildSuperset() {
-    // Кэш проектов главной (обновляем до построения таблиц)
     state.superset._mainProjects = computeMainProjectsSet();
 
     buildNorms();
@@ -668,9 +695,10 @@ export function buildSuperset() {
 }
 
 export function getTargetQuality(project, pool) {
-    const cleanProj = cleanProject(project);
-    const key = cleanProj + '|' + (pool || '');
+    const name = normalizeProject(project);
+    if (name.endsWith('_validate')) return null;  // у _validate нет нормы качества
+    const key = name + '|' + (pool || '');
     if (state.superset.norms.byProjectPool[key] != null) return state.superset.norms.byProjectPool[key];
-    if (state.superset.norms.byProject[cleanProj] != null) return state.superset.norms.byProject[cleanProj];
+    if (state.superset.norms.byProject[name] != null) return state.superset.norms.byProject[name];
     return state.superset.norms.globalAvg;
 }
