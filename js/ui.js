@@ -43,21 +43,17 @@ export function switchTab(tabId, btn) {
     }
 }
 
-// ▼▼▼ Авто-формируемые табы: базовые + _validate-варианты (если для них есть «родитель») ▼▼▼
 export function buildProjectTabs() {
     const tabsContainer = document.getElementById('projectTabs');
     if (!tabsContainer) return;
 
     const projectSet = new Set();
-
-    // 1. Проекты из processedData (как есть — с _validate и без)
     for (const r of state.processedData) {
         if (!r.project) continue;
         const name = String(r.project).trim();
         if (name) projectSet.add(name);
     }
 
-    // 2. Дополнительно — проекты Суперсета с _validate, у которых есть «родитель»
     const supersetProjects = new Set();
     for (const arr of [state.rawSuperset1, state.rawSuperset2, state.rawSuperset3]) {
         for (const r of arr) {
@@ -68,9 +64,7 @@ export function buildProjectTabs() {
     for (const sp of supersetProjects) {
         if (!sp.endsWith('_validate')) continue;
         const parent = sp.substring(0, sp.length - '_validate'.length).trim();
-        if (projectSet.has(parent)) {
-            projectSet.add(sp);
-        }
+        if (projectSet.has(parent)) projectSet.add(sp);
     }
 
     const projects = Array.from(projectSet).sort();
@@ -94,7 +88,6 @@ export function buildProjectTabs() {
     }
     tabsContainer.innerHTML = html;
 }
-// ▲▲▲
 
 export function renderMarkersTasksStatus() {
     const container = document.getElementById('markersStatusList');
@@ -171,7 +164,6 @@ export function renderMarkersTasksStatus() {
     container.style.display = 'block';
 }
 
-// ===== Multi-select =====
 export function toggleDropdown(id) {
     const dropdown = document.getElementById(id + '_dropdown');
     if (!dropdown) return;
@@ -297,11 +289,11 @@ export function updateKPI() {
 function targetLinesForLabels(labels) {
     const target = state.superset.norms.globalAvg;
     if (target != null) {
-        return [{ label: 'Целевое (суперсет)', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#1d9bf0', borderWidth: 2, pointRadius: 0, order: 1 }];
+        return [{ label: 'Целевое (суперсет)', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#f07171', borderWidth: 2, pointRadius: 0, order: 1 }];
     }
     return [
-        { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, order: 1 },
-        { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, order: 1 }
+        { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f2c94c', borderWidth: 2, pointRadius: 0, order: 1 },
+        { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#f07171', borderWidth: 2, pointRadius: 0, order: 1 }
     ];
 }
 
@@ -316,13 +308,13 @@ export function buildQualityChart() {
     const labels = Object.keys(byMarker).sort();
     const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
     const datasets = [
-        { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#ef4444' : v < 99 ? '#f59e0b' : '#10b981'), borderRadius: 4, order: 2 },
+        { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'), borderRadius: 4, order: 2 },
         ...targetLinesForLabels(labels)
     ];
     state.charts.quality = new Chart(document.getElementById('chartQuality'), {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 25 ? l.slice(0, 22) + '…' : l), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#2e1065' } }, x: { ticks: { color: '#2e1065' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#6b4d38' } }, x: { ticks: { color: '#6b4d38' } } } }
     });
 }
 
@@ -334,8 +326,8 @@ export function buildErrorChart() {
     }
     state.charts.errors = new Chart(document.getElementById('chartErrors'), {
         type: 'doughnut',
-        data: { labels: Object.keys(byType), datasets: [{ data: Object.values(byType), backgroundColor: ['#1d9bf0', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899'] }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } } }
+        data: { labels: Object.keys(byType), datasets: [{ data: Object.values(byType), backgroundColor: ['#85c4ae', '#f07171', '#f2c94c', '#6b4d38', '#a39081', '#fce8e8'] }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } } }
     });
 }
 
@@ -350,13 +342,13 @@ export function buildPoolQualityChart() {
     const labels = Object.keys(byPool).sort();
     const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
     const datasets = [
-        { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#ef4444' : v < 99 ? '#f59e0b' : '#10b981'), borderRadius: 4, order: 2 },
+        { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'), borderRadius: 4, order: 2 },
         ...targetLinesForLabels(labels)
     ];
     state.charts.poolQuality = new Chart(document.getElementById('chartPoolQuality'), {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#2e1065' } }, x: { ticks: { color: '#2e1065' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#6b4d38' } }, x: { ticks: { color: '#6b4d38' } } } }
     });
 }
 
@@ -378,23 +370,23 @@ export function buildDayQualityChart() {
     if (target != null) {
         targetData = labels.map(() => target);
         targetLabel = 'Целевое качество (суперсет)';
-        targetColor = '#1d9bf0';
+        targetColor = '#f07171';
     } else {
         targetData = labels.map(d => {
             const p = d.split('.');
             return new Date(p[2], p[1] - 1, p[0]) < new Date(2026, 9, 20) ? 98 : 99;
         });
         targetLabel = 'Контрольная линия';
-        targetColor = '#ef4444';
+        targetColor = '#f07171';
     }
 
     state.charts.dayQuality = new Chart(document.getElementById('chartDayQuality'), {
         type: 'line',
         data: { labels, datasets: [
-            { label: 'Ср. качество, %', data: values, borderColor: '#1d9bf0', backgroundColor: 'rgba(29, 155, 240, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 },
+            { label: 'Ср. качество, %', data: values, borderColor: '#85c4ae', backgroundColor: 'rgba(133, 196, 174, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 },
             { label: targetLabel, data: targetData, borderColor: targetColor, borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: target == null, order: 1 }
         ]},
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#2e1065' } }, x: { ticks: { color: '#2e1065' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#6b4d38' } }, x: { ticks: { color: '#6b4d38' } } } }
     });
 }
 
@@ -402,7 +394,7 @@ export function buildErrorsByMarkerChart() {
     destroyChart(state.charts.errorsByMarker);
     const markers = [...new Set(state.filteredData.map(r => r.marker).filter(Boolean))].sort();
     const errorTypes = [...new Set(state.filteredData.map(r => r.errorType).filter(Boolean))].sort();
-    const colors = ['#ef4444', '#f59e0b', '#1d9bf0', '#10b981', '#8b5cf6', '#ec4899'];
+    const colors = ['#85c4ae', '#f07171', '#f2c94c', '#6b4d38', '#a39081', '#fce8e8'];
     const datasets = errorTypes.map((type, idx) => ({
         label: type,
         data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
@@ -411,7 +403,7 @@ export function buildErrorsByMarkerChart() {
     state.charts.errorsByMarker = new Chart(document.getElementById('chartErrorsByMarker'), {
         type: 'bar',
         data: { labels: markers.map(m => m.length > 20 ? m.slice(0, 18) + '…' : m), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { x: { stacked: true, ticks: { color: '#2e1065' } }, y: { stacked: true, beginAtZero: true, ticks: { color: '#2e1065' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { x: { stacked: true, ticks: { color: '#6b4d38' } }, y: { stacked: true, beginAtZero: true, ticks: { color: '#6b4d38' } } } }
     });
 }
 
@@ -430,10 +422,10 @@ export function buildTrendChart() {
     state.charts.trend = new Chart(document.getElementById('chartTrend'), {
         type: 'line',
         data: { labels, datasets: [
-            { label: 'Ошибки', data: labels.map(l => byDate[l].errors), borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', tension: .3, fill: true },
-            { label: 'Рекомендации', data: labels.map(l => byDate[l].recs), borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: .3, fill: true }
+            { label: 'Ошибки', data: labels.map(l => byDate[l].errors), borderColor: '#f07171', backgroundColor: 'rgba(240, 113, 113, 0.1)', tension: .3, fill: true },
+            { label: 'Рекомендации', data: labels.map(l => byDate[l].recs), borderColor: '#f2c94c', backgroundColor: 'rgba(242, 201, 76, 0.1)', tension: .3, fill: true }
         ]},
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#2e1065' } } }, scales: { y: { beginAtZero: true, ticks: { color: '#2e1065' } }, x: { ticks: { color: '#2e1065' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { y: { beginAtZero: true, ticks: { color: '#6b4d38' } }, x: { ticks: { color: '#6b4d38' } } } }
     });
 }
 
@@ -443,7 +435,7 @@ export function buildTable() {
     tbody.innerHTML = rows.map(r => {
         const badgeClass = r.result === 'Ошибка' ? 'badge-error' : r.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
         const link = r.result === 'Рекомендация'
-            ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fee2e2;color:#ef4444">нет пары</span>')
+            ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
             : '';
         const fileName = r.fileName ? escapeHtml(r.fileName.slice(0, 40)) : '';
         const fileNameTitle = escapeHtml(r.fileName || '');
@@ -539,7 +531,7 @@ export function renderErrorsTable() {
                 let commentsHtml = poolData.comments.map(c => `<li>${escapeHtml(c)}</li>`).join('');
                 if (!commentsHtml) commentsHtml = '<li>Нет комментариев</li>';
                 l3Html += `<tr class="details-row" id="${poolId}_details" style="display:none;">
-                    <td colspan="2" style="padding-left: 90px; background: #f8fafc;">
+                    <td colspan="2" style="padding-left: 90px; background: #fdf8e4;">
                         <ul class="comment-list">${commentsHtml}</ul>
                     </td>
                 </tr>`;
@@ -718,7 +710,6 @@ export function renderSupersetKPIs() {
     `).join('');
 }
 
-// ===== Фильтры столбцов =====
 function renderTableFilters(tableId, configs, fullRows) {
     return configs.map(cfg => {
         const values = new Set();
