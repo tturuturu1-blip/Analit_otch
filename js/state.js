@@ -11,7 +11,7 @@ export const state = {
     rawSuperset1: [],
     rawSuperset2: [],
     rawSuperset3: [],
-    rawEmployeeMap: [],           // ← НОВОЕ: [{ФИО, Почта}]
+    rawEmployeeMap: [],
     processedData: [],
     filteredData: [],
     feedbackData: [],
@@ -31,17 +31,18 @@ export const state = {
         table1: [],
         table2: [],
         table3: [],
-        table4: [],               // ← НОВОЕ
+        table4: [],
         filteredTable1: [],
         filteredTable2: [],
         filteredTable3: [],
-        filteredTable4: [],       // ← НОВОЕ
+        filteredTable4: [],
         kpis: {
             qualityFact: null,
             qualityPlan: null,
             ballsPerHour: null,
             prodPerHour: null,
-            avgTime: null
+            avgTime: null,
+            avgPrice: null       // ← НОВОЕ
         },
         norms: {
             byProjectPool: {},
@@ -49,7 +50,7 @@ export const state = {
             globalAvg: null
         },
         filters: {
-            projects: new Set(),      // ← вместо строки 'project'
+            projects: new Set(),
             dateFrom: '',
             dateTo: '',
             tasks: new Set()
