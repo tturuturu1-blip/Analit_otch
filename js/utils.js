@@ -1,16 +1,11 @@
 import { state } from './state.js';
 
-// ▼▼▼ НАСТРОЙКА БАЗОВОГО URL ДЛЯ ВИДЕО ▼▼▼
-// Замените эту ссылку на реальный адрес сервера из вашего Excel-файла
-const BASE_VIDEO_URL = 'https://your-video-server.com/watch/';
-// ▲▲▲
-
-export function getVideoUrl(fileName) {
-    if (!fileName) return '#';
-    // Убираем .json, если вдруг осталось
-    const cleanName = String(fileName).replace(/\.json$/i, '');
-    return BASE_VIDEO_URL + encodeURIComponent(cleanName);
+// ▼▼▼ НОВАЯ ФУНКЦИЯ ДЛЯ ССЫЛКИ НА ВАЛИДАЦИЮ ▼▼▼
+export function getValidationUrl(orgId, assignmentId, itemId) {
+    if (!orgId || !assignmentId || !itemId) return null;
+    return `https://tag.devaices.ru/company/${orgId}/assignment/${assignmentId}/reel?size=10&page=1&item=${itemId}`;
 }
+// ▲▲▲
 
 export function parseExcelDate(v) {
     if (!v) return null;
