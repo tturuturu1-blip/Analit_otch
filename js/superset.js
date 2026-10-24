@@ -509,7 +509,7 @@ function rebuildTable4() {
     state.superset.table4 = rows;
 }
 
-// ▼▼▼ ИЗМЕНЕНО: новая формула (Цена × Кпроизв в час × 60) / Норма у.е. в час → минуты
+// ▼▼▼ ИЗМЕНЕНО: сначала среднее по каждой задаче (пулу), затем среднее по задачам
 function buildKPIs() {
     const t1 = state.superset.filteredTable1;
     const qualities = [];
@@ -532,9 +532,10 @@ function buildKPIs() {
     const prods = t1.map(r => parseHtmlNumberToFloat(r.prodPerHour)).filter(v => v !== null);
     const prodPerHour = avg(prods);
 
-    // Среднее время разметки = avg( (Цена × Кпроизв в час × 60) / Норма у.е. в час )
-    // Результат в минутах.
-    const times = [];
+    // ─── Среднее время разметки ───
+    // 1) Для каждой задачи (project|task) считаем среднее время по её строкам.
+    // 2) Затем усредняем эти средние по задачам (равный вес каждой задачи).
+    const timesByTask = {};
     for (const r of t1) {
         const priceNum = parsePriceToFloat(r.price);
         const prodV = parseHtmlNumberToFloat(r.prodPerHour);
@@ -545,9 +546,19 @@ function buildKPIs() {
         const normV = getNormForDate(dateISO || new Date().toISOString().slice(0, 10));
         if (!normV || normV <= 0) continue;
 
-        times.push((priceNum * prodV * 60) / normV);
+        const t = (priceNum * prodV * 60) / normV;  // минуты
+        const key = (r.project || '') + '|' + (r.task || '');
+        if (!timesByTask[key]) timesByTask[key] = [];
+        timesByTask[key].push(t);
     }
-    const avgTime = avg(times);
+
+    const taskAverages = [];
+    for (const key in timesByTask) {
+        const a = avg(timesByTask[key]);
+        if (a !== null) taskAverages.push(a);
+    }
+    const avgTime = avg(taskAverages);
+    // ─────────────────────────────
 
     state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime };
 }
