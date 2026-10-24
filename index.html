@@ -280,19 +280,6 @@
                         <input type="date" id="supersetDateTo">
                     </div>
                     <div class="filter-group">
-                        <label>Проект</label>
-                        <div class="multi-select" id="msSupersetProject">
-                            <div class="ms-header" onclick="toggleDropdown('msSupersetProject')">
-                                <span class="ms-label empty" id="msSupersetProject_label">Все проекты</span>
-                                <span class="ms-arrow">▼</span>
-                            </div>
-                            <div class="ms-dropdown" id="msSupersetProject_dropdown">
-                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                <div id="msSupersetProject_options"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="filter-group">
                         <label>Задача (пул)</label>
                         <div class="multi-select" id="msSupersetTask">
                             <div class="ms-header" onclick="toggleDropdown('msSupersetTask')">
@@ -309,7 +296,6 @@
                 </div>
             </div>
 
-            <!-- Все карточки, включая Норму у.е. в час, теперь в одном ряду -->
             <div class="kpi-row" id="supersetKpis"></div>
 
             <h3 style="margin-bottom: 15px;">Сводная таблица (проект + задача)</h3>
