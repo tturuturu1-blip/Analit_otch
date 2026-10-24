@@ -29,7 +29,6 @@ export function switchMenu(menuId, btn) {
     }
 }
 
-// Верхние табы теперь влияют и на страницу Суперсет
 export function switchTab(tabId, btn) {
     state.currentTab = tabId;
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -44,16 +43,36 @@ export function switchTab(tabId, btn) {
     }
 }
 
+// ▼▼▼ Авто-формируемые табы: базовые + _validate-варианты (если для них есть «родитель») ▼▼▼
 export function buildProjectTabs() {
     const tabsContainer = document.getElementById('projectTabs');
     if (!tabsContainer) return;
 
     const projectSet = new Set();
+
+    // 1. Проекты из processedData (как есть — с _validate и без)
     for (const r of state.processedData) {
         if (!r.project) continue;
-        const name = String(r.project).replace(/_validate$/, '').trim();
+        const name = String(r.project).trim();
         if (name) projectSet.add(name);
     }
+
+    // 2. Дополнительно — проекты Суперсета с _validate, у которых есть «родитель»
+    const supersetProjects = new Set();
+    for (const arr of [state.rawSuperset1, state.rawSuperset2, state.rawSuperset3]) {
+        for (const r of arr) {
+            const proj = getVal(r, 'Проект');
+            if (proj) supersetProjects.add(String(proj).trim());
+        }
+    }
+    for (const sp of supersetProjects) {
+        if (!sp.endsWith('_validate')) continue;
+        const parent = sp.substring(0, sp.length - '_validate'.length).trim();
+        if (projectSet.has(parent)) {
+            projectSet.add(sp);
+        }
+    }
+
     const projects = Array.from(projectSet).sort();
     state.projects = projects;
 
@@ -75,6 +94,7 @@ export function buildProjectTabs() {
     }
     tabsContainer.innerHTML = html;
 }
+// ▲▲▲
 
 export function renderMarkersTasksStatus() {
     const container = document.getElementById('markersStatusList');
@@ -431,7 +451,7 @@ export function buildTable() {
         const commentTitle = escapeHtml(r.comment || '');
         return `<tr>
             <td>${r.date ? formatDate(r.date) : ''}</td>
-            <td>${escapeHtml((r.project || '').replace('_validate', ''))}</td>
+            <td>${escapeHtml(r.project || '')}</td>
             <td>${escapeHtml(r.pool || '')}</td>
             <td>${escapeHtml(r.marker || '')}</td>
             <td title="${fileNameTitle}">${fileName}</td>
@@ -562,7 +582,6 @@ export function renderSupersetPage() {
     renderSupersetTable4();
 }
 
-// Фильтры Суперсета: даты + задачи (без проекта — проект задаётся верхним табом)
 export function renderSupersetFilters() {
     const dateFromEl = document.getElementById('supersetDateFrom');
     const dateToEl = document.getElementById('supersetDateTo');
@@ -776,7 +795,7 @@ function renderSupersetTable1() {
 
     const rows = state.superset.filteredTable1 || [];
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; color: var(--muted);">Нет данных. Загрузите файлы типов 1 и/или 2, а также Markers/Validation.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; color: var(--muted);">Нет данных.</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `<tr>
