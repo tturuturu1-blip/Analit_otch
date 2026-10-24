@@ -439,9 +439,13 @@ export function buildTable() {
             ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
             : '—';
 
-        // ▼▼▼ НОВАЯ ЛОГИКА ССЫЛКИ НА ВАЛИДАЦИЮ ▼▼▼
+        // ▼▼▼ ЛОГИКА ССЫЛКИ: url из плоского отчёта ИЛИ сборка из ID ▼▼▼
         let valLink = '—';
-        if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
+        if (r.url) {
+            // Если есть прямая ссылка из "Линейного отчёта"
+            valLink = `<a href="${r.url}" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>`;
+        } else if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
+            // Если это Marks_validate, собираем ссылку из ID
             const url = getValidationUrl(r.orgId, r.assignmentId, r.itemId);
             if (url) valLink = `<a href="${url}" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>`;
         }
