@@ -214,27 +214,8 @@ tr:hover { background: #f8fafc; }
 }
 
 /* ============ Superset: карточка нормы ============ */
-#section-superset .norm-card {
+#section-superset .kpi-card {
     position: relative;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 20px;
-    text-align: center;
-}
-#section-superset .norm-card .label {
-    font-size: 0.75rem;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600;
-}
-#section-superset .norm-card .value {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-top: 5px;
-    color: var(--accent);
 }
 #section-superset .norm-edit-btn {
     position: absolute;
@@ -257,25 +238,25 @@ tr:hover { background: #f8fafc; }
     color: var(--accent);
     opacity: 1;
 }
-#section-superset .norm-values-multi {
+#section-superset .kpi-card .norm-values-multi {
     display: flex;
     flex-direction: column;
     gap: 6px;
     margin-top: 6px;
 }
-#section-superset .norm-value-item {
+#section-superset .kpi-card .norm-value-item {
     padding: 4px 0;
     border-bottom: 1px dashed var(--border);
 }
-#section-superset .norm-value-item:last-child {
+#section-superset .kpi-card .norm-value-item:last-child {
     border-bottom: none;
 }
-#section-superset .norm-value-item .value {
-    font-size: 1.5rem;
+#section-superset .kpi-card .norm-value-item .value {
+    font-size: 1.4rem;
     font-weight: 700;
     color: var(--accent);
 }
-#section-superset .norm-label {
+#section-superset .kpi-card .norm-label {
     font-size: 0.7rem;
     color: var(--muted);
     margin-top: 2px;
