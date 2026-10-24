@@ -34,7 +34,7 @@
             return '<a href="' + r.url + '" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>';
         }
         if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
-            var constructedUrl = 'https://tag.devaices.ru/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
+            var constructedUrl = 'https://tagme.sberdevices.ru/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
             return '<a href="' + constructedUrl + '" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>';
         }
         return '—';
