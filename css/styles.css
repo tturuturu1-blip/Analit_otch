@@ -17,27 +17,37 @@ body {
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
 }
 
+/* Top bar */
 .top-bar {
     display: flex; align-items: center; justify-content: flex-start;
     background: var(--card); border-bottom: 1px solid var(--border);
     height: 60px; padding: 0 20px; z-index: 100;
 }
 
+/* Логотип «Валидатор PRO» */
 .brand {
-    display: flex; align-items: center; gap: 6px; margin-right: 24px; white-space: nowrap; letter-spacing: -0.02em;
+    display: flex; align-items: center; gap: 6px; margin-right: 24px;
+    white-space: nowrap; letter-spacing: -0.02em;
 }
 .brand-accent {
     background: linear-gradient(135deg, #f07171 0%, #85c4ae 100%);
     color: #ffffff; font-weight: 700; font-size: 1rem; padding: 6px 14px;
     border-radius: 8px; letter-spacing: 0.2px; box-shadow: 0 2px 6px rgba(240, 113, 113, 0.25); line-height: 1;
 }
-.brand-pro { color: var(--text); font-weight: 800; font-size: 1rem; letter-spacing: 1px; padding-left: 2px; line-height: 1; }
+.brand-pro {
+    color: var(--text); font-weight: 800; font-size: 1rem;
+    letter-spacing: 1px; padding-left: 2px; line-height: 1;
+}
 
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-.tab { padding: 8px 16px; border-radius: 7px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--muted); transition: all 0.2s; }
+.tab {
+    padding: 8px 16px; border-radius: 7px; cursor: pointer; font-size: 0.85rem;
+    font-weight: 600; color: var(--muted); transition: all 0.2s;
+}
 .tab:hover { background: #fce8e8; color: var(--text); }
 .tab.active { background: var(--accent); color: #fff; }
 
+/* Layout */
 .main-container { display: flex; flex: 1; overflow: hidden; }
 .sidebar {
     width: var(--sidebar-w); background: var(--card); border-right: 1px solid var(--border);
@@ -87,10 +97,14 @@ input[type="file"] { display: none; }
 .log .err { color: var(--danger); }
 .log .ok { color: var(--success); }
 
+/* ============ KPI КАРТОЧКИ ============ */
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
 .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
 .kpi-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; word-break: break-word; }
-.kpi-card .value { font-size: 2rem; font-weight: 700; margin-top: 5px; color: var(--accent); }
+
+/* ▼▼▼ Цвет значений на карточках (Мятно-зелёный) ▼▼▼ */
+.kpi-card .value { font-size: 2rem; font-weight: 700; margin-top: 5px; color: var(--success); }
+/* ▲▲▲ */
 
 .filters {
     display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; align-items: flex-end;
@@ -249,7 +263,11 @@ td:nth-child(10), th:nth-child(10) /* Качество */ {
 #section-superset .kpi-card .norm-values-multi { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 #section-superset .kpi-card .norm-value-item { padding: 4px 0; border-bottom: 1px dashed var(--border); }
 #section-superset .kpi-card .norm-value-item:last-child { border-bottom: none; }
-#section-superset .kpi-card .norm-value-item .value { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
+
+/* ▼▼▼ Цвет норматива (Мятно-зелёный) ▼▼▼ */
+#section-superset .kpi-card .norm-value-item .value { font-size: 1.4rem; font-weight: 700; color: var(--success); }
+/* ▲▲▲ */
+
 #section-superset .kpi-card .norm-label { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
 
 #section-superset .ms-compact .ms-header { padding: 4px 6px; min-height: 28px; font-size: 0.72rem; }
