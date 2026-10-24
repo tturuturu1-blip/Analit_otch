@@ -151,9 +151,10 @@
             <div class="kpi-row">
                 <div class="kpi-card"><div class="label">Всего размеченных фрагментов</div><div class="value" id="kpiTotalFragments">0</div></div>
                 <div class="kpi-card"><div class="label">Разметчиков</div><div class="value" id="kpiTotalMarkers">0</div></div>
+                <!-- Изменён порядок: Целевое качество идёт перед Ошибками -->
+                <div class="kpi-card"><div class="label">Целевое качество</div><div class="value" id="kpiTargetQuality">—</div></div>
                 <div class="kpi-card"><div class="label">Ошибок</div><div class="value" id="kpiErrorsPercent">0%</div></div>
                 <div class="kpi-card"><div class="label">Качество</div><div class="value" id="kpiQuality">—</div></div>
-                <div class="kpi-card"><div class="label">Целевое качество</div><div class="value" id="kpiTargetQuality">—</div></div>
             </div>
 
             <div class="table-card">
@@ -162,7 +163,7 @@
                         <tr>
                             <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
                             <th>Итог</th><th>Тип ошибки</th><th>Комментарий</th><th>Интервал</th>
-                            <th>Качество</th><th>Ссылка на задание</th><th>Связь</th>
+                            <th>Качество</th><th>Ссылка</th><th>Связь</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -199,12 +200,9 @@
                 <div class="filter-group"><label>Дата по</label><input type="date" id="errFilterDateTo" onchange="renderErrorsTable()"></div>
                 <button onclick="document.getElementById('errFilterDateFrom').value=''; document.getElementById('errFilterDateTo').value=''; renderErrorsTable();" style="height:38px;">Сбросить даты</button>
             </div>
-            <div class="table-card" style="max-height: 600px;">
-                <table id="errorsTable">
-                    <thead><tr><th>Почта разметчика</th><th>Процент совершения ошибок</th></tr></thead>
-                    <tbody id="errorsTableBody"></tbody>
-                </table>
-            </div>
+            
+            <!-- Таблица заменена на контейнер для карточек -->
+            <div id="errorsCardsContainer" class="errors-cards-grid"></div>
         </section>
 
         <section id="section-feedback" class="section">
