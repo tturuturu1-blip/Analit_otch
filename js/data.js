@@ -126,6 +126,10 @@ function processFlatValidations() {
         const validator = getVal(first, 'email проверяющего');
         const totalFragments = Number(getVal(first, 'меток с учетом предразметки')) || 0;
         const declaredErrors = Number(getVal(first, 'некорректных меток')) || 0;
+        
+        // ▼▼▼ ИЗВЛЕКАЕМ URL ЗАДАНИЯ ▼▼▼
+        const taskUrl = getVal(first, 'url задания');
+        // ▲▲▲
 
         const flag = first._hasRadio;
         let hasRadio;
@@ -168,7 +172,8 @@ function processFlatValidations() {
                 _type: 'validation', _linked: null,
                 date, pool, marker, validator, project, fileName,
                 result: 'Ошибки не выявлены', errorType: null, comment: null,
-                quality: 1, interval: null, fragments: totalFragments
+                quality: 1, interval: null, fragments: totalFragments,
+                url: taskUrl // <-- Добавлено
             });
             addedRows++;
         } else {
@@ -178,7 +183,8 @@ function processFlatValidations() {
                     _type: 'validation', _linked: null,
                     date, pool, marker, validator, project, fileName,
                     result: 'Ошибка', errorType: mis.typ, comment: null,
-                    quality, interval: null, fragments: totalFragments
+                    quality, interval: null, fragments: totalFragments,
+                    url: taskUrl // <-- Добавлено
                 });
                 addedRows++;
             }
@@ -245,11 +251,9 @@ export async function recomputeDashboard() {
         const fileName = stripJson(getVal(v, 'file_name', 'Наименование файла'));
         const date = parseExcelDate(getVal(v, 'start_date', 'Дата валидации'));
 
-        // ▼▼▼ ИЗВЛЕКАЕМ ID ДЛЯ ССЫЛКИ ▼▼▼
         const orgId = getVal(v, 'organization_id');
         const assignmentId = getVal(v, 'assignment_id');
         const itemId = getVal(v, 'item_id');
-        // ▲▲▲
 
         const mInfo = markerDict[`${taskId}|${markerId}`] || { pool: null, marker: null, validator: null, project: null };
 
@@ -282,7 +286,7 @@ export async function recomputeDashboard() {
                 date, pool: mInfo.pool, marker: mInfo.marker, validator: mInfo.validator, project: mInfo.project,
                 fileName, result: 'Ошибки не выявлены', errorType: null, comment: null,
                 quality: 1, interval: null, fragments: totalFragments,
-                orgId, assignmentId, itemId // <-- Добавлено
+                orgId, assignmentId, itemId
             });
         } else {
             for (const mis of mistakes) {
@@ -292,7 +296,7 @@ export async function recomputeDashboard() {
                     date, pool: mInfo.pool, marker: mInfo.marker, validator: mInfo.validator, project: mInfo.project,
                     fileName, result: 'Ошибка', errorType: mis.typ, comment: mis.comm,
                     quality, interval: mis.interval, fragments: totalFragments,
-                    orgId, assignmentId, itemId // <-- Добавлено
+                    orgId, assignmentId, itemId
                 });
             }
         }
