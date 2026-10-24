@@ -1,12 +1,47 @@
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
 
+// ===== Кэш проектов главной страницы =====
+function computeMainProjectsSet() {
+    const set = new Set();
+    for (const r of state.processedData) {
+        if (!r.project) continue;
+        const name = String(r.project).replace(/_validate$/, '').trim();
+        if (name) set.add(name);
+    }
+    return set;
+}
+
+function getMainProjects() {
+    if (!state.superset._mainProjects) {
+        state.superset._mainProjects = computeMainProjectsSet();
+    }
+    return state.superset._mainProjects;
+}
+
+function cleanProject(project) {
+    return (project || '').replace(/_validate$/, '').trim();
+}
+
+// ===== Обработка сырых данных для экспорта =====
+// Возвращает только те строки, чей проект присутствует на главной странице.
+export function getFilteredSupersetRaw() {
+    const mainSet = getMainProjects();
+    const filterFn = (r) => mainSet.has(cleanProject(getVal(r, 'Проект')));
+    return {
+        s1: state.rawSuperset1.filter(filterFn),
+        s2: state.rawSuperset2.filter(filterFn),
+        s3: state.rawSuperset3.filter(filterFn)
+    };
+}
+
+// ===== Утилиты =====
 function calcFactQuality() {
     const byProjectPool = {};
     const byProject = {};
     for (const r of state.processedData) {
         if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
-        const project = (r.project || '').replace(/_validate$/, '').trim();
+        const project = cleanProject(r.project);
         if (!project) continue;
         const pool = r.pool || '';
         const key = project + '|' + pool;
@@ -111,7 +146,6 @@ export function getNormsForPeriod(dateFrom, dateTo) {
         return { value: s.value, label };
     });
 
-    // Текущее сверху, прошлое снизу
     return mapped.reverse();
 }
 
@@ -129,9 +163,11 @@ export function addNormEntry(dateISO, value) {
 function buildNorms() {
     const byProjectPool = {};
     const byProject = {};
+    const mainSet = getMainProjects();
 
     for (const r of state.rawSuperset2) {
-        const project = getVal(r, 'Проект');
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
         const task = getVal(r, 'Задача');
         const norm = parseNorm(getVal(r, 'Норма качества'));
         if (norm === null) continue;
@@ -142,7 +178,8 @@ function buildNorms() {
         }
     }
     for (const r of state.rawSuperset3) {
-        const project = getVal(r, 'Проект');
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
         const task = getVal(r, 'Задача');
         const norm = parseNorm(getVal(r, 'Норматив'));
         if (norm === null) continue;
@@ -192,12 +229,12 @@ function buildEmployeeMap() {
     return state.superset.employeeMap;
 }
 
-// ===== Индекс качества по email =====
+// ===== Индекс качества по email (с учётом currentTab и дат) =====
 function computeEmployeeQualityIndex() {
     const byEmailOnly = {};
     const byEmailProject = {};
     const byEmailProjectTask = {};
-    const { dateFrom, dateTo, projects } = state.superset.filters;
+    const { dateFrom, dateTo } = state.superset.filters;
 
     for (const r of state.processedData) {
         if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
@@ -211,8 +248,8 @@ function computeEmployeeQualityIndex() {
             if (dateTo && iso > dateTo) continue;
         }
 
-        const proj = (r.project || '').replace(/_validate$/, '').trim();
-        if (projects.size > 0 && proj && !projects.has(proj)) continue;
+        const proj = cleanProject(r.project);
+        if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
 
         const pool = r.pool || '';
 
@@ -236,10 +273,14 @@ function computeEmployeeQualityIndex() {
 }
 
 // ===== Фильтры =====
+// Проект валиден, если: (1) он есть на главной и (2) соответствует текущему табу
 function matchesProject(project) {
-    const set = state.superset.filters.projects;
-    if (!set || set.size === 0) return true;
-    return set.has(project || '');
+    const cleanProj = cleanProject(project);
+    if (!cleanProj) return false;
+    const mainSet = getMainProjects();
+    if (!mainSet.has(cleanProj)) return false;
+    if (state.currentTab === 'all') return true;
+    return cleanProj === state.currentTab;
 }
 
 function matchesDateRangeRow(date) {
@@ -330,9 +371,12 @@ export function getTable4Config() {
 
 // ===== Построение таблиц =====
 function buildTable1() {
+    const mainSet = getMainProjects();
+
     const idx1 = {};
     for (const r of state.rawSuperset1) {
-        const project = getVal(r, 'Проект');
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
         const task = getVal(r, 'Задача');
         const key = (project || '') + '|' + (task || '');
         if (!idx1[key]) idx1[key] = r;
@@ -342,7 +386,8 @@ function buildTable1() {
     const seen = new Set();
 
     for (const r of state.rawSuperset2) {
-        const project = getVal(r, 'Проект') || '';
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
         const task = getVal(r, 'Задача') || '';
         const key = project + '|' + task;
         seen.add(key);
@@ -365,7 +410,8 @@ function buildTable1() {
     }
 
     for (const r of state.rawSuperset1) {
-        const project = getVal(r, 'Проект') || '';
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
         const task = getVal(r, 'Задача') || '';
         const key = project + '|' + task;
         if (seen.has(key)) continue;
@@ -387,13 +433,16 @@ function buildTable1() {
 }
 
 function rebuildTable2() {
+    const mainSet = getMainProjects();
     const { fioToEmail } = state.superset.employeeMap || { fioToEmail: {} };
     const qualityIdx = computeEmployeeQualityIndex();
     const rows = [];
 
     for (const r of state.rawSuperset3) {
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
+
         const fio = getVal(r, 'ФИО') || '';
-        const project = getVal(r, 'Проект') || '';
         const task = getVal(r, 'Задача') || '';
         const date = parseExcelDate(getVal(r, 'Дата'));
 
@@ -431,26 +480,29 @@ function rebuildTable2() {
 }
 
 function buildTable3() {
+    const mainSet = getMainProjects();
     const byProject = {};
     for (const r of state.rawSuperset1) {
-        const project = getVal(r, 'Проект');
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
         const price = getVal(r, 'Цена');
-        if (!project) continue;
         if (!byProject[project]) byProject[project] = { project, prices: [] };
         if (price != null && price !== '') byProject[project].prices.push(price);
     }
 
     const projectDates = {};
     for (const r of state.rawSuperset2) {
-        const project = getVal(r, 'Проект');
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
         const date = parseExcelDate(getVal(r, 'Дата окончания'));
-        if (!project || !date) continue;
+        if (!date) continue;
         if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
     }
     for (const r of state.rawSuperset3) {
-        const project = getVal(r, 'Проект');
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
         const date = parseExcelDate(getVal(r, 'Дата'));
-        if (!project || !date) continue;
+        if (!date) continue;
         if (!projectDates[project] || date > projectDates[project]) projectDates[project] = date;
     }
 
@@ -468,15 +520,18 @@ function buildTable3() {
 }
 
 function rebuildTable4() {
+    const mainSet = getMainProjects();
     const { fioToEmail } = state.superset.employeeMap || { fioToEmail: {} };
     const qualityIdx = computeEmployeeQualityIndex();
 
     const byFio = {};
     for (const r of state.rawSuperset3) {
+        const project = cleanProject(getVal(r, 'Проект'));
+        if (!mainSet.has(project)) continue;
+
         const fio = getVal(r, 'ФИО') || '';
         if (!fio) continue;
 
-        const project = getVal(r, 'Проект') || '';
         if (!matchesProject(project)) continue;
 
         const date = parseExcelDate(getVal(r, 'Дата'));
@@ -518,8 +573,8 @@ function buildKPIs() {
 
     for (const r of state.processedData) {
         if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
-        const proj = (r.project || '').replace(/_validate$/, '').trim();
-        if (state.superset.filters.projects.size > 0 && proj && !state.superset.filters.projects.has(proj)) continue;
+        const proj = cleanProject(r.project);
+        if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
         if (r.date && !matchesDateRangeRow(r.date)) continue;
         qualities.push(r.quality);
     }
@@ -534,13 +589,10 @@ function buildKPIs() {
     const prods = t1.map(r => parseHtmlNumberToFloat(r.prodPerHour)).filter(v => v !== null);
     const prodPerHour = avg(prods);
 
-    // ▼ Средняя цена
     const prices = t1.map(r => parsePriceToFloat(r.price)).filter(v => v !== null);
     const avgPrice = avg(prices);
 
-    // ▼ Среднее время разметки:
-    //   1) для каждой задачи:  t = (Цена × 60) / Факт баллов/час
-    //   2) затем среднее по задачам (равный вес каждой задачи)
+    // Среднее время: сначала по задачам, затем среднее по задачам
     const timesByTask = {};
     for (const r of t1) {
         const priceNum = parsePriceToFloat(r.price);
@@ -548,7 +600,7 @@ function buildKPIs() {
         if (priceNum === null || priceNum <= 0) continue;
         if (ballsV === null || ballsV <= 0) continue;
 
-        const t = (priceNum * 60) / ballsV;   // минуты
+        const t = (priceNum * 60) / ballsV;
         const key = (r.project || '') + '|' + (r.task || '');
         if (!timesByTask[key]) timesByTask[key] = [];
         timesByTask[key].push(t);
@@ -560,12 +612,19 @@ function buildKPIs() {
         if (a !== null) taskAverages.push(a);
     }
     const avgTime = avg(taskAverages);
-    // ─────────────────────────────
 
     state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime, avgPrice };
 }
 
 export function applySupersetFilters() {
+    // Всегда обновляем кэш проектов
+    state.superset._mainProjects = computeMainProjectsSet();
+
+    // Если текущий таб не существует в проектах главной — сбрасываем на «Все»
+    if (state.currentTab !== 'all' && !state.superset._mainProjects.has(state.currentTab)) {
+        state.currentTab = 'all';
+    }
+
     const t1Config = getTable1Config();
     const t2Config = getTable2Config();
     const t3Config = getTable3Config();
@@ -598,6 +657,9 @@ export function applySupersetFilters() {
 }
 
 export function buildSuperset() {
+    // Кэш проектов главной (обновляем до построения таблиц)
+    state.superset._mainProjects = computeMainProjectsSet();
+
     buildNorms();
     buildEmployeeMap();
     buildTable1();
@@ -606,9 +668,9 @@ export function buildSuperset() {
 }
 
 export function getTargetQuality(project, pool) {
-    const cleanProject = (project || '').replace(/_validate$/, '').trim();
-    const key = cleanProject + '|' + (pool || '');
+    const cleanProj = cleanProject(project);
+    const key = cleanProj + '|' + (pool || '');
     if (state.superset.norms.byProjectPool[key] != null) return state.superset.norms.byProjectPool[key];
-    if (state.superset.norms.byProject[cleanProject] != null) return state.superset.norms.byProject[cleanProject];
+    if (state.superset.norms.byProject[cleanProj] != null) return state.superset.norms.byProject[cleanProj];
     return state.superset.norms.globalAvg;
 }
