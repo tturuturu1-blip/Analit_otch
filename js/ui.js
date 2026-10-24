@@ -727,6 +727,7 @@ export function renderSupersetKPIs() {
     if (!container) return;
     const k = state.superset.kpis || {};
 
+    // ▼ Среднее время разметки — теперь в минутах (формула с ×60)
     const cards = [
         { label: 'Качество факт', value: k.qualityFact != null ? (k.qualityFact * 100).toFixed(1) + '%' : '—' },
         { label: 'Качество план', value: k.qualityPlan != null ? k.qualityPlan.toFixed(1) + '%' : '—' },
@@ -734,6 +735,7 @@ export function renderSupersetKPIs() {
         { label: 'Коэффициент', value: k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—' },
         { label: 'Среднее время разметки', value: k.avgTime != null ? k.avgTime.toFixed(1) + ' мин' : '—' }
     ];
+    // ▲
 
     container.innerHTML = cards.map(c => `
         <div class="kpi-card">
