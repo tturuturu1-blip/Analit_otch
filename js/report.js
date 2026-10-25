@@ -2,7 +2,6 @@ import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 
 // Генерирует автономный HTML-файл с дашбордом "Главная".
-// Иконка вкладки — эмодзи 📊 через SVG data-URL (работает при открытии file://).
 export async function generateHtmlReport() {
     if (state.processedData.length === 0 && state.feedbackData.length === 0) {
         alert('Нет данных для отчёта');
@@ -59,9 +58,13 @@ export async function generateHtmlReport() {
     const safeChartJs = chartJsText.replace(/<\/script>/gi, '<\\/script>');
     const safeRuntime = runtimeText.replace(/<\/script>/gi, '<\\/script>');
 
+    // Передаем целевое качество (глобальное среднее из Суперсета)
+    const targetQuality = state.superset.norms.globalAvg;
+
     const reportData = {
         processedData: state.processedData,
-        feedbackData: state.feedbackData
+        feedbackData: state.feedbackData,
+        targetQuality: targetQuality // <-- Передаем норматив
     };
     const reportDataJson = JSON.stringify(reportData).replace(/</g, '\\u003c');
 
