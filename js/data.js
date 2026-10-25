@@ -70,7 +70,6 @@ export async function processNewRows(results) {
             else if (type === 'validation') { state.rawValidation.push(row); addedV++; }
             else if (type === 'recommendations') { state.rawRecommendations.push(row); addedR++; }
             else if (type === 'employee_map') { 
-                // Сюда попадают файлы с ФИО, Почтой и (новым) столбцом Группа
                 state.rawEmployeeMap.push(row); 
                 addedEmp++; 
             }
@@ -130,7 +129,6 @@ function processFlatValidations() {
         const validator = getVal(first, 'email проверяющего');
         const totalFragments = Number(getVal(first, 'меток с учетом предразметки')) || 0;
         const declaredErrors = Number(getVal(first, 'некорректных меток')) || 0;
-        
         const taskUrl = getVal(first, 'url задания');
 
         const flag = first._hasRadio;
@@ -153,6 +151,7 @@ function processFlatValidations() {
                 if (radio == null) continue;
                 const s = String(radio).trim();
                 if (s === '' || s === '-') continue;
+                // Учет веса для некритичных ошибок
                 const weight = s === 'Некритичная ошибка' ? 0.5 : 1;
                 mistakes.push({ typ: s, weight });
             }
@@ -164,6 +163,7 @@ function processFlatValidations() {
         }
 
         const sumWeights = mistakes.reduce((a, b) => a + b.weight, 0);
+        // Итоговое качество по заданию (1 - взвешенные ошибки / фрагменты)
         const quality = (totalFragments === 0 || mistakes.length === 0)
             ? 1
             : 1 - (sumWeights / totalFragments);
@@ -271,6 +271,7 @@ export async function recomputeDashboard() {
                     mistakes = segments.filter(d => d.entityId === 'mistake').map(m => {
                         const typ = m.fields?.radio?.value || 'Неизвестная ошибка';
                         const comm = m.fields?.comment?.value || '';
+                        // Учет веса для некритичных ошибок
                         const weight = typ === 'Некритичная ошибка' ? 0.5 : 1;
                         return { typ, comm, weight, interval: formatInterval(m.position?.start, m.position?.finish) };
                     });
