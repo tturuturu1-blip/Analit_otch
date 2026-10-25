@@ -1,5 +1,5 @@
 import { state, saveFeedbackToStorage } from './state.js';
-import { formatDate, maskEmail, escapeHtml, updateLabel } from './utils.js';
+import { formatDate, maskEmail, escapeHtml, updateLabel, getVal } from './utils.js';
 import { matchesTab } from './data.js';
 
 // ===== Определение проекта по пулам записи =====
@@ -17,7 +17,29 @@ function deriveProjectFromPools(poolsStr) {
     return null;
 }
 
-// ===== Общий рендер строк таблицы обратной связи =====
+// ===== Работа с группами =====
+function getGroups() {
+    const groups = new Set();
+    for (const emp of state.rawEmployeeMap) {
+        const g = getVal(emp, 'Группа', 'группа', 'Group');
+        if (g) groups.add(String(g).trim());
+    }
+    return Array.from(groups).sort();
+}
+
+function getMarkerGroup(markerEmail) {
+    if (!markerEmail) return '';
+    for (const emp of state.rawEmployeeMap) {
+        const email = getVal(emp, 'Почта', 'Почта разметчика', 'Email', 'email');
+        if (email && String(email).trim().toLowerCase() === markerEmail.toLowerCase()) {
+            const g = getVal(emp, 'Группа', 'группа', 'Group');
+            return g ? String(g).trim() : '';
+        }
+    }
+    return '';
+}
+
+// ===== Рендер таблиц обратной связи (Существующая логика) =====
 function renderFeedbackRows(tbodyId, includeActions) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
@@ -49,13 +71,11 @@ function renderFeedbackRows(tbodyId, includeActions) {
                 : '—';
             const displayProject = f.project || deriveProjectFromPools(f.pools) || '—';
 
-            // ▼▼▼ ФОРМАТ ДАТЫ ДД.ММ.ГГГГ ▼▼▼
             let displayDate = f.date || '';
             if (displayDate.includes('-')) {
                 const parts = displayDate.split('-');
                 if (parts.length === 3) displayDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
             }
-            // ▲▲▲
 
             let actionsCell = '';
             if (includeActions) {
@@ -101,6 +121,25 @@ export function renderFeedbackTable() {
             .join('');
     }
 
+    // Заполняем фильтр групп
+    const groupOptions = document.getElementById('msFbGroup_options');
+    if (groupOptions) {
+        const groups = getGroups();
+        const currentSelected = state.filterState.feedbackGroup;
+        
+        // Удаляем несуществующие
+        for (const g of Array.from(currentSelected)) {
+            if (!groups.includes(g)) currentSelected.delete(g);
+        }
+
+        groupOptions.innerHTML = groups.map(g => {
+            const safe = escapeHtml(g);
+            const checked = currentSelected.has(g) ? 'checked' : '';
+            return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onOptionChange('msFbGroup', 'feedbackGroup', this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
+        }).join('');
+    }
+    updateLabel('msFbGroup', 'feedbackGroup');
+
     renderFeedbackRows('fbTableBody', true);
     renderFeedbackRows('fbTableBodyHome', false);
 }
@@ -109,6 +148,326 @@ export function renderFeedbackTableHome() {
     renderFeedbackRows('fbTableBodyHome', false);
 }
 
+// ===== Новая логика создания фидбека =====
+
+export function applyFeedbackFilters() {
+    const container = document.getElementById('feedbackGenerationBlocks');
+    if (!container) return;
+
+    const selectedPools = state.filterState.feedbackPool;
+    const selectedGroups = state.filterState.feedbackGroup;
+
+    // Фильтруем данные
+    const filtered = state.processedData.filter(r => {
+        if (r._type !== 'validation') return false;
+        if (state.currentTab !== 'all' && r.project !== state.currentTab) return false;
+        
+        // Если выбраны пулы, фильтруем по ним. Если не выбраны - показываем все
+        if (selectedPools.size > 0 && !selectedPools.has(r.pool)) return false;
+        
+        // Фильтр по группе
+        if (selectedGroups.size > 0) {
+            const group = getMarkerGroup(r.marker);
+            if (!selectedGroups.has(group)) return false;
+        }
+        
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:var(--muted); padding:20px;">Нет данных для выбранных фильтров.</div>';
+        return;
+    }
+
+    // Группируем по разметчику -> пул -> файлы
+    const tree = {};
+    for (const r of filtered) {
+        const marker = r.marker || 'Неизвестный разметчик';
+        const pool = r.pool || 'Неизвестный пул';
+        
+        if (!tree[marker]) tree[marker] = {};
+        if (!tree[marker][pool]) tree[marker][pool] = new Set();
+        
+        if (r.fileName) tree[marker][pool].add(r.fileName);
+    }
+
+    let html = '';
+    for (const marker in tree) {
+        html += `<div class="feedback-gen-block">
+            <div class="feedback-gen-marker">${escapeHtml(marker)}</div>`;
+        
+        for (const pool in tree[marker]) {
+            html += `<div class="feedback-gen-pool">
+                <div class="feedback-gen-pool-title">Пул: ${escapeHtml(pool)}</div>`;
+            
+            const files = Array.from(tree[marker][pool]).sort();
+            for (const file of files) {
+                const linkKey = `${marker}|${file}`;
+                const savedLink = state.feedbackGeneration.videoLinks[linkKey] || '';
+                html += `
+                <div class="feedback-link-input-group">
+                    <label>${escapeHtml(file)}</label>
+                    <input type="text" placeholder="Вставьте ссылку на Kinescope..." 
+                           value="${escapeHtml(savedLink)}" 
+                           oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">
+                </div>`;
+            }
+            html += `</div>`;
+        }
+        html += `</div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+export function handleVideoLinkInput(marker, file, value) {
+    const key = `${marker}|${file}`;
+    state.feedbackGeneration.videoLinks[key] = value;
+}
+
+export function generateFeedbackHtml() {
+    const selectedPools = state.filterState.feedbackPool;
+    const selectedGroups = state.filterState.feedbackGroup;
+
+    const filtered = state.processedData.filter(r => {
+        if (r._type !== 'validation') return false;
+        if (state.currentTab !== 'all' && r.project !== state.currentTab) return false;
+        if (selectedPools.size > 0 && !selectedPools.has(r.pool)) return false;
+        if (selectedGroups.size > 0) {
+            const group = getMarkerGroup(r.marker);
+            if (!selectedGroups.has(group)) return false;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        alert('Нет данных для генерации отчета. Проверьте фильтры.');
+        return;
+    }
+
+    // Структурируем данные для отчета: project -> pool -> marker -> data
+    const reportData = {};
+    for (const r of filtered) {
+        const proj = r.project ? r.project.replace(/_validate$/, '') : 'Неизвестный проект';
+        const pool = r.pool || 'Неизвестный пул';
+        const marker = r.marker || 'Неизвестный разметчик';
+
+        if (!reportData[proj]) reportData[proj] = {};
+        if (!reportData[proj][pool]) reportData[proj][pool] = {};
+        if (!reportData[proj][pool][marker]) {
+            reportData[proj][pool][marker] = {
+                errors: [],
+                totalFragments: 0,
+                uniqueFiles: new Set(),
+                quality: r.quality // берем из последней записи
+            };
+        }
+
+        const mData = reportData[proj][pool][marker];
+        const fileKey = r.fileName || 'unknown';
+        
+        // Считаем фрагменты один раз для уникального файла
+        if (!mData.uniqueFiles.has(fileKey)) {
+            mData.uniqueFiles.add(fileKey);
+            mData.totalFragments += (r.fragments || 0);
+        }
+        
+        if (r.result === 'Ошибка') {
+            mData.errors.push({
+                type: r.errorType || 'Неизвестная',
+                interval: r.interval || '',
+                comment: r.comment || ''
+            });
+        }
+    }
+
+    // Строим HTML
+    let bodyHtml = '';
+    for (const proj in reportData) {
+        bodyHtml += `<h1 class="main-title">Фидбэк по проекту: ${escapeHtml(proj)}</h1>`;
+        
+        for (const pool in reportData[proj]) {
+            bodyHtml += `<h2 class="pool-title">Пул: ${escapeHtml(pool)}</h2>`;
+            bodyHtml += `<div class="markers-container">`;
+
+            for (const marker in reportData[proj][pool]) {
+                const mData = reportData[proj][pool][marker];
+                
+                // Собираем ссылки на видео для этого разметчика в этом пуле
+                let videoHtml = '';
+                mData.uniqueFiles.forEach(file => {
+                    const link = state.feedbackGeneration.videoLinks[`${marker}|${file}`];
+                    if (link) {
+                        // Простейшая вставка iframe (подходит для Kinescope)
+                        let embedUrl = link;
+                        if (link.includes('kinescope.io') && !link.includes('/embed/')) {
+                            const parts = link.split('/');
+                            const id = parts[parts.length - 1].split('?')[0];
+                            embedUrl = `https://kinescope.io/embed/${id}`;
+                        }
+                        videoHtml += `
+                        <div class="video-wrapper">
+                            <p class="video-name">${escapeHtml(file)}</div>
+                            <iframe src="${embedUrl}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media;" allowfullscreen></iframe>
+                        </div>`;
+                    } else {
+                        videoHtml += `
+                        <div class="video-wrapper missing">
+                            <p class="video-name">${escapeHtml(file)}</p>
+                            <div class="video-placeholder">Ссылка на видео не указана</div>
+                        </div>`;
+                    }
+                });
+
+                // Группируем ошибки по типам
+                const errorsByType = {};
+                for (const err of mData.errors) {
+                    if (!errorsByType[err.type]) errorsByType[err.type] = [];
+                    errorsByType[err.type].push(err);
+                }
+
+                let errorsHtml = '';
+                const totalErrCount = mData.errors.length;
+                
+                for (const type in errorsByType) {
+                    const errs = errorsByType[type];
+                    const percent = mData.totalFragments > 0 
+                        ? ((errs.length / mData.totalFragments) * 100).toFixed(2) 
+                        : '0.00';
+                    
+                    let listHtml = '';
+                    for (const e of errs) {
+                        listHtml += `<li>
+                            <span class="interval">${escapeHtml(e.interval)}</span>
+                            ${e.comment ? `<span class="comment">${escapeHtml(e.comment)}</span>` : ''}
+                        </li>`;
+                    }
+
+                    errorsHtml += `
+                    <div class="error-group">
+                        <div class="error-header">
+                            <span class="error-name">${escapeHtml(type)}</span>
+                            <span class="error-percent">${percent}%</span>
+                        </div>
+                        <ul class="error-list">${listHtml}</ul>
+                    </div>`;
+                }
+
+                if (totalErrCount === 0) {
+                    errorsHtml = '<div class="no-errors">Ошибок не выявлено</div>';
+                }
+
+                const q = (mData.quality !== null && mData.quality !== undefined) 
+                    ? (mData.quality * 100).toFixed(1) + '%' 
+                    : '—';
+
+                bodyHtml += `
+                <details class="marker-card">
+                    <summary class="marker-summary">
+                        <div class="avatar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        </div>
+                        <div class="marker-info">
+                            <div class="marker-email">${escapeHtml(maskEmail(marker))}</div>
+                            <div class="marker-quality">Качество: <b>${q}</b></div>
+                        </div>
+                        <div class="toggle-icon">▼</div>
+                    </summary>
+                    <div class="marker-details">
+                        <div class="videos-section">
+                            ${videoHtml}
+                        </div>
+                        <div class="errors-section">
+                            <h4>Разбор ошибок</h4>
+                            ${errorsHtml}
+                        </div>
+                    </div>
+                </details>`;
+            }
+            bodyHtml += `</div>`;
+        }
+    }
+
+    // Шаблон документа
+    const htmlContent = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Фидбэк по проекту</title>
+    <style>
+        :root {
+            --bg: #f4f7f6; --card: #ffffff; --text: #1f1f1f; --muted: #7a7a7a; --border: #e0e0e0;
+            --accent: #4CAF50; --danger: #e55555;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 40px 20px; line-height: 1.5; }
+        .container { max-width: 900px; margin: 0 auto; }
+        
+        .main-title { font-size: 2rem; font-weight: 700; margin-bottom: 10px; color: #2c3e50; }
+        .pool-title { font-size: 1.5rem; font-weight: 600; margin-top: 40px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid var(--accent); color: #34495e; }
+        
+        .markers-container { display: flex; flex-direction: column; gap: 15px; }
+        
+        details.marker-card { background: var(--card); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid var(--border); }
+        details[open].marker-card { border-color: var(--accent); }
+        
+        summary.marker-summary { display: flex; align-items: center; padding: 15px 20px; cursor: pointer; list-style: none; user-select: none; background: #fafafa; transition: background 0.2s; }
+        summary.marker-summary::-webkit-details-marker { display: none; }
+        summary.marker-summary:hover { background: #f0f4f8; }
+        
+        .avatar { width: 48px; height: 48px; border-radius: 50%; background: #e0e0e0; color: #666; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 15px; }
+        .avatar svg { width: 24px; height: 24px; }
+        
+        .marker-info { flex: 1; display: flex; flex-direction: column; }
+        .marker-email { font-weight: 700; font-size: 1.1rem; color: #2c3e50; }
+        .marker-quality { font-size: 0.9rem; color: var(--muted); margin-top: 2px; }
+        
+        .toggle-icon { color: var(--muted); font-size: 0.8rem; transition: transform 0.3s; margin-left: 10px; }
+        details[open] .toggle-icon { transform: rotate(180deg); }
+        
+        .marker-details { padding: 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 20px; }
+        
+        .videos-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        .video-wrapper { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #000; }
+        .video-name { font-size: 0.8rem; padding: 8px 10px; background: #333; color: #fff; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .video-wrapper iframe { width: 100%; aspect-ratio: 16/9; border: none; display: block; }
+        
+        .video-wrapper.missing { background: #f9f9f9; }
+        .video-placeholder { aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.9rem; background: #eee; }
+        
+        .errors-section { background: #fdfdfd; border-radius: 8px; padding: 15px; border: 1px solid var(--border); }
+        .errors-section h4 { font-size: 1.1rem; margin-bottom: 15px; color: #2c3e50; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        
+        .error-group { margin-bottom: 15px; }
+        .error-header { display: flex; justify-content: space-between; font-weight: 600; font-size: 0.95rem; margin-bottom: 5px; color: var(--danger); }
+        .error-list { list-style: none; padding: 0; margin: 0; }
+        .error-list li { padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 0.85rem; display: flex; gap: 10px; }
+        .error-list li:last-child { border-bottom: none; }
+        .interval { font-family: monospace; background: #eee; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #333; white-space: nowrap; }
+        .comment { color: var(--muted); font-style: italic; }
+        .no-errors { color: var(--accent); font-weight: 600; padding: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        ${bodyHtml}
+    </div>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Фидбэк_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ===== CRUD для записей обратной связи =====
 export function editFeedback(idx) {
     const f = state.feedbackData[idx];
     if (!f) return;
@@ -200,57 +559,16 @@ function handleAddFeedback() {
     updateLabel('msFbFormPools', 'fbFormPools');
 }
 
-export async function generateFeedback() {
-    const selectedPools = Array.from(state.filterState.feedbackPool);
-    if (selectedPools.length === 0) {
-        alert('Выберите хотя бы один пул для формирования фидбека.');
-        return;
-    }
-
-    const markerPoolQualityMap = {};
-    for (const r of state.processedData) {
-        if (r.pool && r.marker && r.quality > 0) {
-            const key = `${r.pool}|${r.marker}`;
-            if (!markerPoolQualityMap[key]) markerPoolQualityMap[key] = { sum: 0, count: 0 };
-            markerPoolQualityMap[key].sum += r.quality;
-            markerPoolQualityMap[key].count++;
-        }
-    }
-    const getMarkerPoolQuality = (pool, marker) => {
-        const data = markerPoolQualityMap[`${pool}|${marker}`];
-        return data ? (data.sum / data.count) : null;
-    };
-
-    for (const pool of selectedPools) {
-        const poolData = state.processedData.filter(r => r.pool === pool);
-        const rows = poolData.map(r => ({
-            "Дата валидации": r.date ? formatDate(r.date) : "",
-            "Пул": r.pool || "",
-            "Почта разметчика": maskEmail(r.marker),
-            "Наименование файла": r.fileName || "",
-            "Итог": r.result || "",
-            "Тип ошибки": r.errorType || "",
-            "Комментарий": r.comment || "",
-            "Временной интервал фрагмента": r.interval || "",
-            "Почта валидатора": maskEmail(r.validator),
-            "Качество по задаче": r.quality !== null ? r.quality : "",
-            "Качество по пулу": getMarkerPoolQuality(r.pool, r.marker)
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        let baseName = pool.replace(/[\[\]*?/\\:]/g, '').substring(0, 28);
-        if (!baseName) baseName = "Пул";
-        XLSX.utils.book_append_sheet(wb, ws, baseName);
-        XLSX.writeFile(wb, `feedback_${baseName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-
-        await new Promise(r => setTimeout(r, 300));
-    }
-    const { log } = await import('./utils.js');
-    log('Фидбеки сформированы (по файлу на пул)', false);
-}
-
+// ===== Инициализация =====
 export function initFeedbackForm() {
     document.getElementById('btnAddFeedback').addEventListener('click', handleAddFeedback);
-    document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedback);
+    
+    // Кнопка "Применить" для групп
+    document.getElementById('btnApplyGroup').addEventListener('click', () => {
+        toggleDropdown('msFbGroup'); // Свернуть
+        applyFeedbackFilters();
+    });
+
+    // Кнопка "Создать" (генерация HTML)
+    document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedbackHtml);
 }
