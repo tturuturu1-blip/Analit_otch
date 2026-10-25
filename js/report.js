@@ -1,9 +1,8 @@
 import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 
-// Задайте тот же URL, что и в utils.js
-const BASE_VIDEO_URL = 'https://your-video-server.com/watch/';
-
+// Генерирует автономный HTML-файл с дашбордом "Главная".
+// Иконка вкладки — эмодзи 📊 через SVG data-URL (работает при открытии file://).
 export async function generateHtmlReport() {
     if (state.processedData.length === 0 && state.feedbackData.length === 0) {
         alert('Нет данных для отчёта');
@@ -30,14 +29,17 @@ export async function generateHtmlReport() {
         chartJsText = results[1];
         runtimeText = results[2];
     } catch (err) {
-        alert('Не удалось собрать отчёт: ' + err.message);
+        alert('Не удалось собрать отчёт: ' + err.message + '\n\n' +
+              'Убедитесь, что файлы css/styles.css, chart.umd.min.js и js/report-runtime.js ' +
+              'доступны по тому же адресу, что и страница.');
         return;
     }
 
+    // === Динамические табы проектов ===
     const projectSet = new Set();
     for (const r of state.processedData) {
         if (!r.project) continue;
-        const name = String(r.project).trim();
+        const name = String(r.project).replace(/_validate$/, '').trim();
         if (name) projectSet.add(name);
     }
     const projects = Array.from(projectSet).sort();
@@ -59,8 +61,7 @@ export async function generateHtmlReport() {
 
     const reportData = {
         processedData: state.processedData,
-        feedbackData: state.feedbackData,
-        videoBaseUrl: BASE_VIDEO_URL // <-- Передаем URL
+        feedbackData: state.feedbackData
     };
     const reportDataJson = JSON.stringify(reportData).replace(/</g, '\\u003c');
 
@@ -132,12 +133,13 @@ export async function generateHtmlReport() {
                 </div>
                 <div class="filter-group"><label>Дата с</label><input type="date" id="filterDateFrom"></div>
                 <div class="filter-group"><label>Дата по</label><input type="date" id="filterDateTo"></div>
-                <button id="btnResetFilters" style="height:38px; margin-bottom:1px;">Сбросить</button>
+                <button id="btnResetFilters" style="height:40px;">Сбросить</button>
             </div>
 
             <div class="kpi-row">
                 <div class="kpi-card"><div class="label">Всего размеченных фрагментов</div><div class="value" id="kpiTotalFragments">0</div></div>
                 <div class="kpi-card"><div class="label">Разметчиков</div><div class="value" id="kpiTotalMarkers">0</div></div>
+                <div class="kpi-card"><div class="label">Целевое качество</div><div class="value" id="kpiTargetQuality">—</div></div>
                 <div class="kpi-card"><div class="label">Ошибок</div><div class="value" id="kpiErrorsPercent">0%</div></div>
                 <div class="kpi-card"><div class="label">Качество</div><div class="value" id="kpiQuality">—</div></div>
             </div>
@@ -148,11 +150,15 @@ export async function generateHtmlReport() {
                         <tr>
                             <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
                             <th>Итог</th><th>Тип ошибки</th><th>Комментарий</th><th>Интервал</th>
-                            <th>Качество</th><th>Ссылка на задание</th><th>Связь</th>
+                            <th>Качество</th><th>Ссылка</th><th>Связь</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
                 </table>
+                <div class="pagination-container" id="pagination-data">
+                    <div class="pagination-info" id="pagination-data-info">Показано 0-0 из 0</div>
+                    <div class="pagination-controls" id="pagination-data-controls"></div>
+                </div>
             </div>
 
             <div class="charts-grid">
@@ -175,6 +181,10 @@ export async function generateHtmlReport() {
                     </thead>
                     <tbody id="fbTableBodyHome"></tbody>
                 </table>
+                <div class="pagination-container" id="pagination-fbHome">
+                    <div class="pagination-info" id="pagination-fbHome-info">Показано 0-0 из 0</div>
+                    <div class="pagination-controls" id="pagination-fbHome-controls"></div>
+                </div>
             </div>
 
             <footer class="page-footer">
