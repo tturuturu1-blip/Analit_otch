@@ -127,7 +127,6 @@ export function renderFeedbackTable() {
         const groups = getGroups();
         const currentSelected = state.filterState.feedbackGroup;
         
-        // Удаляем несуществующие
         for (const g of Array.from(currentSelected)) {
             if (!groups.includes(g)) currentSelected.delete(g);
         }
@@ -157,15 +156,12 @@ export function applyFeedbackFilters() {
     const selectedPools = state.filterState.feedbackPool;
     const selectedGroups = state.filterState.feedbackGroup;
 
-    // Фильтруем данные
     const filtered = state.processedData.filter(r => {
         if (r._type !== 'validation') return false;
         if (state.currentTab !== 'all' && r.project !== state.currentTab) return false;
         
-        // Если выбраны пулы, фильтруем по ним. Если не выбраны - показываем все
         if (selectedPools.size > 0 && !selectedPools.has(r.pool)) return false;
         
-        // Фильтр по группе
         if (selectedGroups.size > 0) {
             const group = getMarkerGroup(r.marker);
             if (!selectedGroups.has(group)) return false;
@@ -179,7 +175,6 @@ export function applyFeedbackFilters() {
         return;
     }
 
-    // Группируем по разметчику -> пул -> файлы
     const tree = {};
     for (const r of filtered) {
         const marker = r.marker || 'Неизвестный разметчик';
@@ -203,13 +198,12 @@ export function applyFeedbackFilters() {
             const files = Array.from(tree[marker][pool]).sort();
             for (const file of files) {
                 const linkKey = `${marker}|${file}`;
-                const savedLink = state.feedbackGeneration.videoLinks[linkKey] || '';
+                const savedCode = state.feedbackGeneration.videoLinks[linkKey] || '';
                 html += `
                 <div class="feedback-link-input-group">
-                    <label>${escapeHtml(file)}</label>
-                    <input type="text" placeholder="Вставьте ссылку на Kinescope..." 
-                           value="${escapeHtml(savedLink)}" 
-                           oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">
+                    <label>${escapeHtml(file)} (HTML-код видео)</label>
+                    <textarea rows="3" placeholder="Вставьте сюда HTML-код (iframe) с Kinescope..." 
+                           oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">${escapeHtml(savedCode)}</textarea>
                 </div>`;
             }
             html += `</div>`;
@@ -245,7 +239,7 @@ export function generateFeedbackHtml() {
         return;
     }
 
-    // Структурируем данные для отчета: project -> pool -> marker -> data
+    // Структурируем данные для отчета
     const reportData = {};
     for (const r of filtered) {
         const proj = r.project ? r.project.replace(/_validate$/, '') : 'Неизвестный проект';
@@ -259,14 +253,13 @@ export function generateFeedbackHtml() {
                 errors: [],
                 totalFragments: 0,
                 uniqueFiles: new Set(),
-                quality: r.quality // берем из последней записи
+                quality: r.quality
             };
         }
 
         const mData = reportData[proj][pool][marker];
         const fileKey = r.fileName || 'unknown';
         
-        // Считаем фрагменты один раз для уникального файла
         if (!mData.uniqueFiles.has(fileKey)) {
             mData.uniqueFiles.add(fileKey);
             mData.totalFragments += (r.fragments || 0);
@@ -276,12 +269,12 @@ export function generateFeedbackHtml() {
             mData.errors.push({
                 type: r.errorType || 'Неизвестная',
                 interval: r.interval || '',
-                comment: r.comment || ''
+                comment: r.comment || '',
+                fileName: fileKey // Сохраняем имя файла для каждой ошибки
             });
         }
     }
 
-    // Строим HTML
     let bodyHtml = '';
     for (const proj in reportData) {
         bodyHtml += `<h1 class="main-title">Фидбэк по проекту: ${escapeHtml(proj)}</h1>`;
@@ -293,69 +286,67 @@ export function generateFeedbackHtml() {
             for (const marker in reportData[proj][pool]) {
                 const mData = reportData[proj][pool][marker];
                 
-                // Собираем ссылки на видео для этого разметчика в этом пуле
-                let videoHtml = '';
+                // Формируем блоки для каждого уникального файла
+                let filesHtml = '';
                 mData.uniqueFiles.forEach(file => {
-                    const link = state.feedbackGeneration.videoLinks[`${marker}|${file}`];
-                    if (link) {
-                        // Простейшая вставка iframe (подходит для Kinescope)
-                        let embedUrl = link;
-                        if (link.includes('kinescope.io') && !link.includes('/embed/')) {
-                            const parts = link.split('/');
-                            const id = parts[parts.length - 1].split('?')[0];
-                            embedUrl = `https://kinescope.io/embed/${id}`;
-                        }
-                        videoHtml += `
-                        <div class="video-wrapper">
-                            <p class="video-name">${escapeHtml(file)}</div>
-                            <iframe src="${embedUrl}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media;" allowfullscreen></iframe>
-                        </div>`;
-                    } else {
-                        videoHtml += `
-                        <div class="video-wrapper missing">
-                            <p class="video-name">${escapeHtml(file)}</p>
-                            <div class="video-placeholder">Ссылка на видео не указана</div>
-                        </div>`;
-                    }
-                });
-
-                // Группируем ошибки по типам
-                const errorsByType = {};
-                for (const err of mData.errors) {
-                    if (!errorsByType[err.type]) errorsByType[err.type] = [];
-                    errorsByType[err.type].push(err);
-                }
-
-                let errorsHtml = '';
-                const totalErrCount = mData.errors.length;
-                
-                for (const type in errorsByType) {
-                    const errs = errorsByType[type];
-                    const percent = mData.totalFragments > 0 
-                        ? ((errs.length / mData.totalFragments) * 100).toFixed(2) 
-                        : '0.00';
+                    const embedCode = state.feedbackGeneration.videoLinks[`${marker}|${file}`] || '';
+                    const fileErrors = mData.errors.filter(e => e.fileName === file);
                     
-                    let listHtml = '';
-                    for (const e of errs) {
-                        listHtml += `<li>
-                            <span class="interval">${escapeHtml(e.interval)}</span>
-                            ${e.comment ? `<span class="comment">${escapeHtml(e.comment)}</span>` : ''}
-                        </li>`;
+                    let errorsHtml = '';
+                    if (fileErrors.length === 0) {
+                        errorsHtml = '<div class="no-errors">Ошибок не выявлено</div>';
+                    } else {
+                        const errorsByType = {};
+                        for (const err of fileErrors) {
+                            if (!errorsByType[err.type]) errorsByType[err.type] = [];
+                            errorsByType[err.type].push(err);
+                        }
+
+                        const totalErrCount = fileErrors.length;
+                        
+                        for (const type in errorsByType) {
+                            const errs = errorsByType[type];
+                            // Считаем процент от ОБЩЕГО числа фрагментов у разметчика в этом пуле
+                            const percent = mData.totalFragments > 0 
+                                ? ((errs.length / mData.totalFragments) * 100).toFixed(2) 
+                                : '0.00';
+                            
+                            let listHtml = '';
+                            for (const e of errs) {
+                                listHtml += `<li>
+                                    <span class="interval">${escapeHtml(e.interval)}</span>
+                                    ${e.comment ? `<span class="comment">${escapeHtml(e.comment)}</span>` : ''}
+                                </li>`;
+                            }
+
+                            errorsHtml += `
+                            <div class="error-group">
+                                <div class="error-header">
+                                    <span class="error-name">${escapeHtml(type)}</span>
+                                    <span class="error-percent">${percent}%</span>
+                                </div>
+                                <ul class="error-list">${listHtml}</ul>
+                            </div>`;
+                        }
                     }
 
-                    errorsHtml += `
-                    <div class="error-group">
-                        <div class="error-header">
-                            <span class="error-name">${escapeHtml(type)}</span>
-                            <span class="error-percent">${percent}%</span>
-                        </div>
-                        <ul class="error-list">${listHtml}</ul>
-                    </div>`;
-                }
+                    // Если embedCode пустой, показываем заглушку
+                    const videoContent = embedCode.trim() 
+                        ? embedCode 
+                        : '<div class="video-placeholder">Код видео не указан</div>';
 
-                if (totalErrCount === 0) {
-                    errorsHtml = '<div class="no-errors">Ошибок не выявлено</div>';
-                }
+                    filesHtml += `
+                    <div class="file-block">
+                        <h3 class="file-name">${escapeHtml(file)}</h3>
+                        <div class="video-wrapper">
+                            ${videoContent}
+                        </div>
+                        <div class="errors-section">
+                            <h4>Разбор ошибок</h4>
+                            ${errorsHtml}
+                        </div>
+                    </div>`;
+                });
 
                 const q = (mData.quality !== null && mData.quality !== undefined) 
                     ? (mData.quality * 100).toFixed(1) + '%' 
@@ -374,13 +365,7 @@ export function generateFeedbackHtml() {
                         <div class="toggle-icon">▼</div>
                     </summary>
                     <div class="marker-details">
-                        <div class="videos-section">
-                            ${videoHtml}
-                        </div>
-                        <div class="errors-section">
-                            <h4>Разбор ошибок</h4>
-                            ${errorsHtml}
-                        </div>
+                        ${filesHtml}
                     </div>
                 </details>`;
             }
@@ -388,7 +373,7 @@ export function generateFeedbackHtml() {
         }
     }
 
-    // Шаблон документа
+    // Шаблон документа с исправленной версткой (левое выравнивание, полная ширина)
     const htmlContent = `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -397,56 +382,93 @@ export function generateFeedbackHtml() {
     <title>Фидбэк по проекту</title>
     <style>
         :root {
-            --bg: #f4f7f6; --card: #ffffff; --text: #1f1f1f; --muted: #7a7a7a; --border: #e0e0e0;
-            --accent: #4CAF50; --danger: #e55555;
+            --bg: #f6f4ef; --card: #ede8e0; --text: #1c1c1c; --muted: #8e8e8e; 
+            --accent: #1c1c1c; --danger: #e55555; --border: rgba(0,0,0,0.05);
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 40px 20px; line-height: 1.5; }
-        .container { max-width: 900px; margin: 0 auto; }
+        body { 
+            font-family: 'Source Sans 3', -apple-system, sans-serif; 
+            background: var(--bg); color: var(--text); 
+            padding: 30px; text-align: left; 
+        }
+        .container { width: 100%; max-width: 1200px; margin: 0; }
         
-        .main-title { font-size: 2rem; font-weight: 700; margin-bottom: 10px; color: #2c3e50; }
-        .pool-title { font-size: 1.5rem; font-weight: 600; margin-top: 40px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid var(--accent); color: #34495e; }
+        .main-title { 
+            font-size: 2rem; font-weight: 700; margin-bottom: 10px; color: var(--text); 
+        }
+        .pool-title { 
+            font-size: 1.5rem; font-weight: 600; margin-top: 40px; margin-bottom: 20px; 
+            padding-bottom: 10px; border-bottom: 2px solid var(--text); color: var(--text); 
+        }
         
-        .markers-container { display: flex; flex-direction: column; gap: 15px; }
+        .markers-container { display: flex; flex-direction: column; gap: 20px; width: 100%; }
         
-        details.marker-card { background: var(--card); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid var(--border); }
-        details[open].marker-card { border-color: var(--accent); }
+        details.marker-card { 
+            background: var(--card); border-radius: 16px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03); overflow: hidden; 
+            border: 1px solid var(--border); width: 100%;
+        }
+        details[open].marker-card { border-color: var(--text); }
         
-        summary.marker-summary { display: flex; align-items: center; padding: 15px 20px; cursor: pointer; list-style: none; user-select: none; background: #fafafa; transition: background 0.2s; }
+        summary.marker-summary { 
+            display: flex; align-items: center; padding: 20px 25px; cursor: pointer; 
+            list-style: none; user-select: none; transition: background 0.2s; 
+        }
         summary.marker-summary::-webkit-details-marker { display: none; }
-        summary.marker-summary:hover { background: #f0f4f8; }
+        summary.marker-summary:hover { background: rgba(0,0,0,0.02); }
         
-        .avatar { width: 48px; height: 48px; border-radius: 50%; background: #e0e0e0; color: #666; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 15px; }
+        .avatar { 
+            width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.6); 
+            color: var(--muted); display: flex; align-items: center; justify-content: center; 
+            flex-shrink: 0; margin-right: 15px; 
+        }
         .avatar svg { width: 24px; height: 24px; }
         
         .marker-info { flex: 1; display: flex; flex-direction: column; }
-        .marker-email { font-weight: 700; font-size: 1.1rem; color: #2c3e50; }
+        .marker-email { font-weight: 700; font-size: 1.1rem; color: var(--text); }
         .marker-quality { font-size: 0.9rem; color: var(--muted); margin-top: 2px; }
         
         .toggle-icon { color: var(--muted); font-size: 0.8rem; transition: transform 0.3s; margin-left: 10px; }
         details[open] .toggle-icon { transform: rotate(180deg); }
         
-        .marker-details { padding: 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 20px; }
+        .marker-details { 
+            padding: 25px; border-top: 1px solid var(--border); 
+            display: flex; flex-direction: column; gap: 30px; 
+        }
         
-        .videos-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
-        .video-wrapper { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #000; }
-        .video-name { font-size: 0.8rem; padding: 8px 10px; background: #333; color: #fff; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-block {
+            display: flex; flex-direction: column; gap: 15px;
+        }
+        .file-name {
+            font-size: 1.1rem; font-weight: 600; color: var(--text);
+            word-break: break-all; margin-bottom: 5px;
+        }
+        
+        .video-wrapper { 
+            border-radius: 12px; overflow: hidden; border: 1px solid var(--border); 
+            background: #000; width: 100%; max-width: 800px;
+        }
         .video-wrapper iframe { width: 100%; aspect-ratio: 16/9; border: none; display: block; }
         
-        .video-wrapper.missing { background: #f9f9f9; }
-        .video-placeholder { aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.9rem; background: #eee; }
+        .video-placeholder { 
+            aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; 
+            color: #fff; font-size: 0.9rem; background: #222; 
+        }
         
-        .errors-section { background: #fdfdfd; border-radius: 8px; padding: 15px; border: 1px solid var(--border); }
-        .errors-section h4 { font-size: 1.1rem; margin-bottom: 15px; color: #2c3e50; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .errors-section { 
+            background: rgba(255,255,255,0.5); border-radius: 12px; padding: 20px; 
+            border: 1px solid var(--border); max-width: 800px;
+        }
+        .errors-section h4 { font-size: 1.1rem; margin-bottom: 15px; color: var(--text); }
         
         .error-group { margin-bottom: 15px; }
         .error-header { display: flex; justify-content: space-between; font-weight: 600; font-size: 0.95rem; margin-bottom: 5px; color: var(--danger); }
         .error-list { list-style: none; padding: 0; margin: 0; }
-        .error-list li { padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 0.85rem; display: flex; gap: 10px; }
+        .error-list li { padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 0.9rem; display: flex; gap: 10px; }
         .error-list li:last-child { border-bottom: none; }
         .interval { font-family: monospace; background: #eee; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #333; white-space: nowrap; }
         .comment { color: var(--muted); font-style: italic; }
-        .no-errors { color: var(--accent); font-weight: 600; padding: 10px 0; }
+        .no-errors { color: #4CAF50; font-weight: 600; padding: 10px 0; }
     </style>
 </head>
 <body>
@@ -563,12 +585,10 @@ function handleAddFeedback() {
 export function initFeedbackForm() {
     document.getElementById('btnAddFeedback').addEventListener('click', handleAddFeedback);
     
-    // Кнопка "Применить" для групп
     document.getElementById('btnApplyGroup').addEventListener('click', () => {
-        toggleDropdown('msFbGroup'); // Свернуть
+        toggleDropdown('msFbGroup');
         applyFeedbackFilters();
     });
 
-    // Кнопка "Создать" (генерация HTML)
     document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedbackHtml);
 }
