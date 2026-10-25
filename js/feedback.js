@@ -197,12 +197,15 @@ export function applyFeedbackFilters() {
             const files = Array.from(tree[marker][pool]).sort();
             for (const file of files) {
                 const linkKey = `${marker}|${file}`;
-                const savedCode = state.feedbackGeneration.videoLinks[linkKey] || '';
+                const savedUrl = state.feedbackGeneration.videoLinks[linkKey] || '';
+                
+                // Заменяем textarea на обычный input для ссылки
                 html += `
                 <div class="feedback-link-input-group">
-                    <label>${escapeHtml(file)} (HTML-код видео или ссылка)</label>
-                    <textarea rows="2" placeholder="Вставьте сюда код <iframe> или ссылку на видео..." 
-                           oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">${escapeHtml(savedCode)}</textarea>
+                    <label>${escapeHtml(file)} (Ссылка на видео)</label>
+                    <input type="text" placeholder="Вставьте прямую ссылку на видео..." 
+                           value="${escapeHtml(savedUrl)}" 
+                           oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">
                 </div>`;
             }
             html += `</div>`;
@@ -286,23 +289,18 @@ export function generateFeedbackHtml() {
                 
                 let filesHtml = '';
                 mData.uniqueFiles.forEach(file => {
-                    const embedCode = state.feedbackGeneration.videoLinks[`${marker}|${file}`] || '';
+                    const videoUrl = state.feedbackGeneration.videoLinks[`${marker}|${file}`] || '';
                     
-                    // ▼▼▼ Извлекаем URL видео для безопасного открытия в новой вкладке ▼▼▼
-                    let videoUrl = '';
-                    if (embedCode.includes('<iframe')) {
-                        const match = embedCode.match(/src=["']([^"']+)["']/);
-                        if (match) videoUrl = match[1];
-                    } else if (embedCode.trim().startsWith('http')) {
-                        videoUrl = embedCode.trim();
-                    }
+                    // Проверяем, что это ссылка, а не пустая строка
+                    const isValidUrl = videoUrl.trim().startsWith('http');
 
-                    const videoContent = videoUrl 
-                        ? `<a href="${videoUrl}" target="_blank" class="video-button">
-                               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                               Смотреть видео
+                    // ▼▼▼ Новая кнопка "Скачать видео" ▼▼▼
+                    const videoContent = isValidUrl 
+                        ? `<a href="${videoUrl.trim()}" download target="_blank" class="video-button">
+                               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                               Скачать видео
                            </a>`
-                        : '<div class="video-placeholder">Код видео не указан или неверен</div>';
+                        : '<div class="video-placeholder">Ссылка на видео не указана</div>';
                     // ▲▲▲
 
                     const fileErrors = mData.errors.filter(e => e.fileName === file);
@@ -455,12 +453,12 @@ export function generateFeedbackHtml() {
             width: 100%; max-width: 400px;
         }
         
-        /* Стили для новой кнопки видео */
+        /* Стили для кнопки скачивания */
         .video-button {
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            background: var(--text);
+            background: var(--accent);
             color: #fff;
             text-decoration: none;
             padding: 12px 24px;
