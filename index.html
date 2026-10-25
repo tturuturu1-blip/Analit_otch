@@ -23,24 +23,25 @@
 <div class="main-container">
     <aside class="sidebar" id="sidebar">
         <button class="nav-icon active" onclick="switchMenu('main', this)" title="Главная">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
         </button>
         <button class="nav-icon" onclick="switchMenu('errors', this)" title="Топ ошибок">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
         </button>
         <button class="nav-icon" onclick="switchMenu('feedback', this)" title="Обратная связь">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
         </button>
         <button class="nav-icon" onclick="switchMenu('superset', this)" title="Суперсет">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
         </button>
         <button class="nav-icon" onclick="switchMenu('data', this)" title="Управление данными">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
         </button>
     </aside>
 
     <main class="content">
 
+        <!-- ================= УПРАВЛЕНИЕ ДАННЫМИ ================= -->
         <section id="section-data" class="section">
             <h2 style="margin-bottom: 20px;">Управление данными</h2>
             <p style="color: var(--muted); margin-bottom: 20px;">Загружайте исходные файлы, импортируйте резервные копии или выгружайте результаты.</p>
@@ -78,6 +79,7 @@
             <div class="log" id="logBox"></div>
         </section>
 
+        <!-- ================= ГЛАВНАЯ ================= -->
         <section id="section-main" class="section active">
             <div class="filters">
                 <div class="filter-group">
@@ -124,7 +126,7 @@
                 </div>
                 <div class="filter-group"><label>Дата с</label><input type="date" id="filterDateFrom"></div>
                 <div class="filter-group"><label>Дата по</label><input type="date" id="filterDateTo"></div>
-                <button id="btnResetFilters" style="height:38px; margin-bottom:1px;">Сбросить</button>
+                <button id="btnResetFilters" style="height:40px;">Сбросить</button>
             </div>
 
             <div class="kpi-row">
@@ -146,6 +148,10 @@
                     </thead>
                     <tbody id="tableBody"></tbody>
                 </table>
+                <div class="pagination-container" id="pagination-data">
+                    <div class="pagination-info" id="pagination-data-info">Показано 0-0 из 0</div>
+                    <div class="pagination-controls" id="pagination-data-controls"></div>
+                </div>
             </div>
 
             <div class="charts-grid">
@@ -168,29 +174,34 @@
                     </thead>
                     <tbody id="fbTableBodyHome"></tbody>
                 </table>
+                <div class="pagination-container" id="pagination-fbHome">
+                    <div class="pagination-info" id="pagination-fbHome-info">Показано 0-0 из 0</div>
+                    <div class="pagination-controls" id="pagination-fbHome-controls"></div>
+                </div>
             </div>
         </section>
 
+        <!-- ================= ТОП ОШИБОК ================= -->
         <section id="section-errors" class="section">
             <h2 style="margin-bottom: 20px;">Топ ошибок разметчиков</h2>
             <div class="filters" style="margin-bottom: 15px;">
                 <div class="filter-group"><label>Дата с</label><input type="date" id="errFilterDateFrom" onchange="renderErrorsTable()"></div>
                 <div class="filter-group"><label>Дата по</label><input type="date" id="errFilterDateTo" onchange="renderErrorsTable()"></div>
-                <button onclick="document.getElementById('errFilterDateFrom').value=''; document.getElementById('errFilterDateTo').value=''; renderErrorsTable();" style="height:38px;">Сбросить даты</button>
+                <button onclick="document.getElementById('errFilterDateFrom').value=''; document.getElementById('errFilterDateTo').value=''; renderErrorsTable();" style="height:40px;">Сбросить даты</button>
             </div>
             
             <div id="errorsCardsContainer" class="errors-cards-grid"></div>
         </section>
 
+        <!-- ================= ОБРАТНАЯ СВЯЗЬ ================= -->
         <section id="section-feedback" class="section">
             <h2 style="margin-bottom: 20px;">Обратная связь</h2>
             
-            <!-- ▼▼▼ НОВАЯ КАРТОЧКА "СОЗДАНИЕ ФИДБЕКА" ▼▼▼ -->
+            <!-- Карточка создания фидбека -->
             <div class="card" style="margin-bottom: 20px;">
                 <h3 style="margin-bottom: 15px;">Создание фидбека</h3>
                 <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
                     
-                    <!-- Существующий выбор пулов -->
                     <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
                         <label>Выберите пулы</label>
                         <div class="multi-select" id="msFbPool">
@@ -206,7 +217,6 @@
                         </div>
                     </div>
 
-                    <!-- НОВЫЙ выбор групп разметчиков -->
                     <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
                         <label>Выберите группу разметчиков</label>
                         <div class="multi-select" id="msFbGroup">
@@ -218,22 +228,20 @@
                                 <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
                                 <label class="ms-item ms-all"><input type="checkbox" id="msFbGroup_all" onchange="toggleAll('msFbGroup', 'feedbackGroup')"> Выбрать все</label>
                                 <div id="msFbGroup_options"></div>
-                                <!-- Кнопка "Применить" -->
-                                <div style="padding: 10px; border-top: 1px solid var(--border); text-align: right; background: #f9f9f9;">
+                                <div class="ms-apply-container">
                                     <button id="btnApplyGroup" style="padding: 6px 16px; font-size: 0.8rem; height: auto;">Применить</button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <button class="success" id="btnGenerateFeedback" style="height: 38px;">Создать</button>
+                    <button class="success" id="btnGenerateFeedback" style="height: 40px;">Создать</button>
                 </div>
 
-                <!-- Контейнер для сгенерированных блоков с ссылками -->
                 <div id="feedbackGenerationBlocks" style="margin-top: 20px;"></div>
             </div>
-            <!-- ▲▲▲ КОНЕЦ НОВОЙ КАРТОЧКИ ▲▲▲ -->
 
+            <!-- Карточка добавления записи ОС -->
             <div class="card" style="margin-bottom: 20px;">
                 <h3 style="margin-bottom: 15px;">Добавить запись</h3>
                 <div class="form-grid">
@@ -281,6 +289,7 @@
                 <button id="btnAddFeedback" style="margin-top: 20px;">Добавить</button>
             </div>
 
+            <!-- Таблица ОС -->
             <div class="table-card">
                 <table id="fbTable">
                     <thead>
@@ -292,9 +301,14 @@
                     </thead>
                     <tbody id="fbTableBody"></tbody>
                 </table>
+                <div class="pagination-container" id="pagination-fbTable">
+                    <div class="pagination-info" id="pagination-fbTable-info">Показано 0-0 из 0</div>
+                    <div class="pagination-controls" id="pagination-fbTable-controls"></div>
+                </div>
             </div>
         </section>
 
+        <!-- ================= СУПЕРСЕТ ================= -->
         <section id="section-superset" class="section">
             <h2 style="margin-bottom: 20px;">Суперсет</h2>
 
@@ -321,7 +335,7 @@
                             </div>
                         </div>
                     </div>
-                    <button id="btnResetSupersetFilters" style="height:38px; margin-bottom:1px;" onclick="resetSupersetFilters()">Сбросить</button>
+                    <button id="btnResetSupersetFilters" style="height:40px;" onclick="resetSupersetFilters()">Сбросить</button>
                 </div>
             </div>
 
@@ -341,6 +355,10 @@
                     </thead>
                     <tbody id="supersetTable1Body"></tbody>
                 </table>
+                <div class="pagination-container" id="pagination-superset1">
+                    <div class="pagination-info" id="pagination-superset1-info">Показано 0-0 из 0</div>
+                    <div class="pagination-controls" id="pagination-superset1-controls"></div>
+                </div>
             </div>
 
             <h3 style="margin-bottom: 15px;">Качество по дням / ФИО</h3>
@@ -357,6 +375,10 @@
                     </thead>
                     <tbody id="supersetTable2Body"></tbody>
                 </table>
+                <div class="pagination-container" id="pagination-superset2">
+                    <div class="pagination-info" id="pagination-superset2-info">Показано 0-0 из 0</div>
+                    <div class="pagination-controls" id="pagination-superset2-controls"></div>
+                </div>
             </div>
 
             <div class="superset-tables-row">
@@ -370,6 +392,10 @@
                             </thead>
                             <tbody id="supersetTable3Body"></tbody>
                         </table>
+                        <div class="pagination-container" id="pagination-superset3">
+                            <div class="pagination-info" id="pagination-superset3-info">Показано 0-0 из 0</div>
+                            <div class="pagination-controls" id="pagination-superset3-controls"></div>
+                        </div>
                     </div>
                 </div>
                 <div>
@@ -382,6 +408,10 @@
                             </thead>
                             <tbody id="supersetTable4Body"></tbody>
                         </table>
+                        <div class="pagination-container" id="pagination-superset4">
+                            <div class="pagination-info" id="pagination-superset4-info">Показано 0-0 из 0</div>
+                            <div class="pagination-controls" id="pagination-superset4-controls"></div>
+                        </div>
                     </div>
                 </div>
             </div>
