@@ -6,18 +6,16 @@ function normalizeProject(project) {
     return (project || '').trim();
 }
 
-// ===== Кэш проектов главной страницы (с _validate вариантами) =====
+// ===== Кэш проектов главной страницы =====
 function computeMainProjectsSet() {
     const set = new Set();
 
-    // 1. Все проекты из processedData (как есть — с _validate и без)
     for (const r of state.processedData) {
         if (!r.project) continue;
         const name = String(r.project).trim();
         if (name) set.add(name);
     }
 
-    // 2. Дополнительно — проекты Суперсета с _validate, у которых есть «родитель»
     const supersetProjects = new Set();
     for (const arr of [state.rawSuperset1, state.rawSuperset2, state.rawSuperset3]) {
         for (const r of arr) {
@@ -42,7 +40,7 @@ function getMainProjects() {
     return state.superset._mainProjects;
 }
 
-// ===== Экспорт — только проекты с главной страницы (включая _validate с «родителем») =====
+// ===== Экспорт — только проекты с главной страницы =====
 export function getFilteredSupersetRaw() {
     const mainSet = getMainProjects();
     const filterFn = (r) => {
@@ -180,7 +178,7 @@ export function addNormEntry(dateISO, value) {
     return true;
 }
 
-// ===== Нормативы качества (только для НЕ-_validate проектов) =====
+// ===== Нормативы качества =====
 function buildNorms() {
     const byProjectPool = {};
     const byProject = {};
@@ -189,7 +187,7 @@ function buildNorms() {
     for (const r of state.rawSuperset2) {
         const project = normalizeProject(getVal(r, 'Проект'));
         if (!mainSet.has(project)) continue;
-        if (project.endsWith('_validate')) continue;  // у _validate нет нормы
+        if (project.endsWith('_validate')) continue;
 
         const task = getVal(r, 'Задача');
         const norm = parseNorm(getVal(r, 'Норма качества'));
@@ -250,12 +248,13 @@ function buildEmployeeMap() {
     return state.superset.employeeMap;
 }
 
-// ===== Индекс качества по email (с учётом currentTab и дат) =====
+// ===== Индекс качества по email (с дедупликацией по файлам) =====
 function computeEmployeeQualityIndex() {
     const byEmailOnly = {};
     const byEmailProject = {};
     const byEmailProjectTask = {};
     const { dateFrom, dateTo } = state.superset.filters;
+    const seen = new Set();
 
     for (const r of state.processedData) {
         if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
@@ -273,6 +272,10 @@ function computeEmployeeQualityIndex() {
         if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
 
         const pool = r.pool || '';
+
+        const key = em + '|' + proj + '|' + pool + '|' + (r.fileName || '');
+        if (seen.has(key)) continue;
+        seen.add(key);
 
         if (!byEmailOnly[em]) byEmailOnly[em] = [];
         byEmailOnly[em].push(r.quality);
@@ -413,7 +416,6 @@ function buildTable1() {
         seen.add(key);
         const perf = idx1[key] || {};
 
-        // Для _validate проектов — норма/комментарий/без качества = ''
         const isValidate = project.endsWith('_validate');
 
         rows.push({
@@ -566,7 +568,6 @@ function rebuildTable4() {
         if (!matchesTask(task)) continue;
 
         if (!byFio[fio]) byFio[fio] = { fio, norms: [] };
-        // Для _validate проектов норматив не учитывается
         if (!project.endsWith('_validate')) {
             const norm = parseNorm(getVal(r, 'Норматив'));
             if (norm !== null) byFio[fio].norms.push(norm);
@@ -594,23 +595,43 @@ function rebuildTable4() {
     state.superset.table4 = rows;
 }
 
-// ===== KPI =====
+// ▼▼▼ ОБНОВЛЕННАЯ ФУНКЦИЯ buildKPIs ▼▼▼
 function buildKPIs() {
     const t1 = state.superset.filteredTable1;
     const qualities = [];
+    const seen = new Set();
 
+    // Фактическое качество (с дедупликацией по файлам)
     for (const r of state.processedData) {
         if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
         const proj = normalizeProject(r.project);
         if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
         if (r.date && !matchesDateRangeRow(r.date)) continue;
+        
+        const key = (r.marker || '') + '|' + proj + '|' + (r.pool || '') + '|' + (r.fileName || '');
+        if (seen.has(key)) continue;
+        seen.add(key);
+
         qualities.push(r.quality);
     }
     const qualityFact = avg(qualities);
 
-    const norms = t1.map(r => parseNorm(r.normQuality)).filter(n => n !== null);
-    const qualityPlan = avg(norms);
+    // Целевое качество (уникальные значения по каждому проекту)
+    const projectNorms = {};
+    for (const r of t1) {
+        const norm = parseNorm(r.normQuality);
+        if (norm !== null && r.project) {
+            if (!projectNorms[r.project]) projectNorms[r.project] = new Set();
+            projectNorms[r.project].add(norm);
+        }
+    }
+    const allUniqueNorms = [];
+    for (const p in projectNorms) {
+        projectNorms[p].forEach(n => allUniqueNorms.push(n));
+    }
+    const qualityPlan = avg(allUniqueNorms);
 
+    // Остальные метрики
     const balls = t1.map(r => parseHtmlNumberToFloat(r.ballsPerHour)).filter(v => v !== null);
     const ballsPerHour = avg(balls);
 
@@ -620,7 +641,6 @@ function buildKPIs() {
     const prices = t1.map(r => parsePriceToFloat(r.price)).filter(v => v !== null);
     const avgPrice = avg(prices);
 
-    // Среднее время: сначала по задачам, потом среднее по задачам
     const timesByTask = {};
     for (const r of t1) {
         const priceNum = parsePriceToFloat(r.price);
@@ -643,12 +663,11 @@ function buildKPIs() {
 
     state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime, avgPrice };
 }
+// ▲▲▲
 
 export function applySupersetFilters() {
-    // Всегда обновляем кэш проектов
     state.superset._mainProjects = computeMainProjectsSet();
 
-    // Если текущий таб не существует в проектах главной — сбрасываем на «Все»
     if (state.currentTab !== 'all' && !state.superset._mainProjects.has(state.currentTab)) {
         state.currentTab = 'all';
     }
@@ -696,7 +715,7 @@ export function buildSuperset() {
 
 export function getTargetQuality(project, pool) {
     const name = normalizeProject(project);
-    if (name.endsWith('_validate')) return null;  // у _validate нет нормы качества
+    if (name.endsWith('_validate')) return null;
     const key = name + '|' + (pool || '');
     if (state.superset.norms.byProjectPool[key] != null) return state.superset.norms.byProjectPool[key];
     if (state.superset.norms.byProject[name] != null) return state.superset.norms.byProject[name];
