@@ -69,7 +69,11 @@ export async function processNewRows(results) {
             if (type === 'markers') { state.rawMarkers.push(row); addedM++; }
             else if (type === 'validation') { state.rawValidation.push(row); addedV++; }
             else if (type === 'recommendations') { state.rawRecommendations.push(row); addedR++; }
-            else if (type === 'employee_map') { state.rawEmployeeMap.push(row); addedEmp++; }
+            else if (type === 'employee_map') { 
+                // Сюда попадают файлы с ФИО, Почтой и (новым) столбцом Группа
+                state.rawEmployeeMap.push(row); 
+                addedEmp++; 
+            }
             else if (type === 'validation_flat') {
                 const rowWithMeta = Object.assign({}, row);
                 if (getVal(rowWithMeta, 'Проект') == null) {
@@ -127,9 +131,7 @@ function processFlatValidations() {
         const totalFragments = Number(getVal(first, 'меток с учетом предразметки')) || 0;
         const declaredErrors = Number(getVal(first, 'некорректных меток')) || 0;
         
-        // ▼▼▼ ИЗВЛЕКАЕМ URL ЗАДАНИЯ ▼▼▼
         const taskUrl = getVal(first, 'url задания');
-        // ▲▲▲
 
         const flag = first._hasRadio;
         let hasRadio;
@@ -173,7 +175,7 @@ function processFlatValidations() {
                 date, pool, marker, validator, project, fileName,
                 result: 'Ошибки не выявлены', errorType: null, comment: null,
                 quality: 1, interval: null, fragments: totalFragments,
-                url: taskUrl // <-- Добавлено
+                url: taskUrl
             });
             addedRows++;
         } else {
@@ -184,7 +186,7 @@ function processFlatValidations() {
                     date, pool, marker, validator, project, fileName,
                     result: 'Ошибка', errorType: mis.typ, comment: null,
                     quality, interval: null, fragments: totalFragments,
-                    url: taskUrl // <-- Добавлено
+                    url: taskUrl
                 });
                 addedRows++;
             }
