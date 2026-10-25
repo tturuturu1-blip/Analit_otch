@@ -75,27 +75,6 @@
                 </div>
             </div>
 
-            <div class="card">
-                <h3 style="margin-bottom: 15px;">Формирование фидбека</h3>
-                <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
-                    <div class="filter-group" style="margin-bottom: 0; min-width: 300px;">
-                        <label>Выберите пулы</label>
-                        <div class="multi-select" id="msFbPool">
-                            <div class="ms-header" onclick="toggleDropdown('msFbPool')">
-                                <span class="ms-label empty" id="msFbPool_label">Все пулы</span>
-                                <span class="ms-arrow">▼</span>
-                            </div>
-                            <div class="ms-dropdown" id="msFbPool_dropdown">
-                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                <label class="ms-item ms-all"><input type="checkbox" id="msFbPool_all" onchange="toggleAll('msFbPool', 'feedbackPool')"> Выбрать все</label>
-                                <div id="msFbPool_options"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <button class="success" id="btnGenerateFeedback" style="height: 38px;">Фидбек</button>
-                </div>
-            </div>
-
             <div class="log" id="logBox"></div>
         </section>
 
@@ -151,7 +130,6 @@
             <div class="kpi-row">
                 <div class="kpi-card"><div class="label">Всего размеченных фрагментов</div><div class="value" id="kpiTotalFragments">0</div></div>
                 <div class="kpi-card"><div class="label">Разметчиков</div><div class="value" id="kpiTotalMarkers">0</div></div>
-                <!-- Изменён порядок: Целевое качество идёт перед Ошибками -->
                 <div class="kpi-card"><div class="label">Целевое качество</div><div class="value" id="kpiTargetQuality">—</div></div>
                 <div class="kpi-card"><div class="label">Ошибок</div><div class="value" id="kpiErrorsPercent">0%</div></div>
                 <div class="kpi-card"><div class="label">Качество</div><div class="value" id="kpiQuality">—</div></div>
@@ -201,12 +179,61 @@
                 <button onclick="document.getElementById('errFilterDateFrom').value=''; document.getElementById('errFilterDateTo').value=''; renderErrorsTable();" style="height:38px;">Сбросить даты</button>
             </div>
             
-            <!-- Таблица заменена на контейнер для карточек -->
             <div id="errorsCardsContainer" class="errors-cards-grid"></div>
         </section>
 
         <section id="section-feedback" class="section">
             <h2 style="margin-bottom: 20px;">Обратная связь</h2>
+            
+            <!-- ▼▼▼ НОВАЯ КАРТОЧКА "СОЗДАНИЕ ФИДБЕКА" ▼▼▼ -->
+            <div class="card" style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 15px;">Создание фидбека</h3>
+                <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                    
+                    <!-- Существующий выбор пулов -->
+                    <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
+                        <label>Выберите пулы</label>
+                        <div class="multi-select" id="msFbPool">
+                            <div class="ms-header" onclick="toggleDropdown('msFbPool')">
+                                <span class="ms-label empty" id="msFbPool_label">Все пулы</span>
+                                <span class="ms-arrow">▼</span>
+                            </div>
+                            <div class="ms-dropdown" id="msFbPool_dropdown">
+                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                <label class="ms-item ms-all"><input type="checkbox" id="msFbPool_all" onchange="toggleAll('msFbPool', 'feedbackPool')"> Выбрать все</label>
+                                <div id="msFbPool_options"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- НОВЫЙ выбор групп разметчиков -->
+                    <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
+                        <label>Выберите группу разметчиков</label>
+                        <div class="multi-select" id="msFbGroup">
+                            <div class="ms-header" onclick="toggleDropdown('msFbGroup')">
+                                <span class="ms-label empty" id="msFbGroup_label">Все группы</span>
+                                <span class="ms-arrow">▼</span>
+                            </div>
+                            <div class="ms-dropdown" id="msFbGroup_dropdown">
+                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                <label class="ms-item ms-all"><input type="checkbox" id="msFbGroup_all" onchange="toggleAll('msFbGroup', 'feedbackGroup')"> Выбрать все</label>
+                                <div id="msFbGroup_options"></div>
+                                <!-- Кнопка "Применить" -->
+                                <div style="padding: 10px; border-top: 1px solid var(--border); text-align: right; background: #f9f9f9;">
+                                    <button id="btnApplyGroup" style="padding: 6px 16px; font-size: 0.8rem; height: auto;">Применить</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="success" id="btnGenerateFeedback" style="height: 38px;">Создать</button>
+                </div>
+
+                <!-- Контейнер для сгенерированных блоков с ссылками -->
+                <div id="feedbackGenerationBlocks" style="margin-top: 20px;"></div>
+            </div>
+            <!-- ▲▲▲ КОНЕЦ НОВОЙ КАРТОЧКИ ▲▲▲ -->
+
             <div class="card" style="margin-bottom: 20px;">
                 <h3 style="margin-bottom: 15px;">Добавить запись</h3>
                 <div class="form-grid">
@@ -226,6 +253,7 @@
                         <select id="fbType">
                             <option value="Общее обучение">Общее обучение</option>
                             <option value="Индивидуальное обучение">Индивидуальное обучение</option>
+                            <option value="Обучение">Обучение</option>
                             <option value="Общая ОС">Общая ОС</option>
                             <option value="Индивидуальная ОС">Индивидуальная ОС</option>
                         </select>
