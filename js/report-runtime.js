@@ -4,7 +4,7 @@
     var REPORT_DATA = JSON.parse(document.getElementById('report-data').textContent);
     var processedData = REPORT_DATA.processedData || [];
     var feedbackData = REPORT_DATA.feedbackData || [];
-    var targetQualityGlobal = REPORT_DATA.targetQuality || 98; // Получаем из report.js
+    var targetQualityGlobal = REPORT_DATA.targetQuality || null; // Получаем из report.js
 
     var ITEMS_PER_PAGE = 10;
     var currentPage = 1;
@@ -137,7 +137,40 @@
         
         var targetEl = document.getElementById('kpiTargetQuality');
         if (targetEl) {
-            targetEl.textContent = targetQualityGlobal ? targetQualityGlobal.toFixed(1) + '%' : '—';
+            targetEl.textContent = targetQualityGlobal != null ? targetQualityGlobal.toFixed(1) + '%' : '—';
+        }
+
+        // Подсветка KPI
+        var elTotalFragments = document.getElementById('kpiTotalFragments');
+        var elTotalMarkers = document.getElementById('kpiTotalMarkers');
+        var elErrorsPercent = document.getElementById('kpiErrorsPercent');
+        var elQuality = document.getElementById('kpiQuality');
+        
+        [elTotalFragments, elTotalMarkers, elErrorsPercent, elQuality, targetEl].forEach(function(el) {
+            if (el) el.classList.remove('val-brown', 'val-red', 'val-green');
+        });
+        
+        if (elTotalFragments) elTotalFragments.classList.add('val-brown');
+        if (elTotalMarkers) elTotalMarkers.classList.add('val-brown');
+        if (targetEl) targetEl.classList.add('val-brown');
+
+        if (targetQualityGlobal != null) {
+            var isRed = (errorPercent > 5) && (avgQ !== null && avgQ * 100 < targetQualityGlobal);
+            var isGreen = (errorPercent <= 5) && (avgQ !== null && avgQ * 100 >= targetQualityGlobal);
+            
+            if (isRed) {
+                if (elErrorsPercent) elErrorsPercent.classList.add('val-red');
+                if (elQuality) elQuality.classList.add('val-red');
+            } else if (isGreen) {
+                if (elErrorsPercent) elErrorsPercent.classList.add('val-green');
+                if (elQuality) elQuality.classList.add('val-green');
+            } else {
+                if (elErrorsPercent) elErrorsPercent.classList.add('val-brown');
+                if (elQuality) elQuality.classList.add('val-brown');
+            }
+        } else {
+            if (elErrorsPercent) elErrorsPercent.classList.add('val-brown');
+            if (elQuality) elQuality.classList.add('val-brown');
         }
     }
 
@@ -145,7 +178,7 @@
         if (charts[k]) { try { charts[k].destroy(); } catch (e) {} delete charts[k]; }
     }
 
-    // ===== ГРАФИКИ =====
+    // ===== ГРАФИКИ С ДЕДУПЛИКАЦИЕЙ =====
     function buildQualityChart() {
         destroyChart('quality');
         var byMarker = {};
@@ -171,21 +204,21 @@
             return (sum / arr.length) * 100;
         });
         
+        var datasets = [
+            {
+                label: 'Ср. качество, %',
+                data: values,
+                backgroundColor: values.map(function (v) { return v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'; }),
+                borderRadius: 4, order: 2
+            }
+        ];
+        if (targetQualityGlobal != null) {
+            datasets.push({ label: 'Целевое качество', data: Array(labels.length).fill(targetQualityGlobal), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 });
+        }
+
         charts.quality = new Chart(document.getElementById('chartQuality'), {
             type: 'bar',
-            data: {
-                labels: labels.map(function (l) { return l.length > 25 ? l.slice(0, 22) + '…' : l; }),
-                datasets: [
-                    {
-                        label: 'Ср. качество, %',
-                        data: values,
-                        backgroundColor: values.map(function (v) { return v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'; }),
-                        borderRadius: 4, order: 2
-                    },
-                    { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f2c94c', borderWidth: 2, pointRadius: 0, order: 1 },
-                    { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#f07171', borderWidth: 2, pointRadius: 0, order: 1 }
-                ]
-            },
+            data: { labels: labels.map(function (l) { return l.length > 25 ? l.slice(0, 22) + '…' : l; }), datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
@@ -239,21 +272,21 @@
             return (sum / arr.length) * 100;
         });
         
+        var datasets = [
+            {
+                label: 'Ср. качество, %',
+                data: values,
+                backgroundColor: values.map(function (v) { return v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'; }),
+                borderRadius: 4, order: 2
+            }
+        ];
+        if (targetQualityGlobal != null) {
+            datasets.push({ label: 'Целевое качество', data: Array(labels.length).fill(targetQualityGlobal), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 });
+        }
+
         charts.poolQuality = new Chart(document.getElementById('chartPoolQuality'), {
             type: 'bar',
-            data: {
-                labels: labels.map(function (l) { return l.length > 30 ? l.slice(0, 27) + '…' : l; }),
-                datasets: [
-                    {
-                        label: 'Ср. качество, %',
-                        data: values,
-                        backgroundColor: values.map(function (v) { return v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'; }),
-                        borderRadius: 4, order: 2
-                    },
-                    { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f2c94c', borderWidth: 2, pointRadius: 0, order: 1 },
-                    { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#f07171', borderWidth: 2, pointRadius: 0, order: 1 }
-                ]
-            },
+            data: { labels: labels.map(function (l) { return l.length > 30 ? l.slice(0, 27) + '…' : l; }), datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
@@ -292,19 +325,17 @@
             for (var k = 0; k < arr.length; k++) sum += arr[k];
             return (sum / arr.length) * 100;
         });
-        var targetLine = labels.map(function (d) {
-            var p = d.split('.');
-            return new Date(p[2], p[1] - 1, p[0]) < new Date(2026, 9, 20) ? 98 : 99;
-        });
+
+        var datasets = [
+            { label: 'Ср. качество, %', data: values, borderColor: '#85c4ae', backgroundColor: 'rgba(133, 196, 174, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 }
+        ];
+        if (targetQualityGlobal != null) {
+            datasets.push({ label: 'Целевое качество', data: labels.map(function() { return targetQualityGlobal; }), borderColor: '#f07171', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
+        }
+
         charts.dayQuality = new Chart(document.getElementById('chartDayQuality'), {
             type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    { label: 'Ср. качество, %', data: values, borderColor: '#85c4ae', backgroundColor: 'rgba(133, 196, 174, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 },
-                    { label: 'Контрольная линия', data: targetLine, borderColor: '#f07171', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: true, order: 1 }
-                ]
-            },
+            data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
