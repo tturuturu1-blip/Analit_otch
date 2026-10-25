@@ -1,4 +1,4 @@
-import { state, saveFeedbackToStorage } from './state.js';
+import { state, saveFeedbackToStorage, ITEMS_PER_PAGE } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel, getVal } from './utils.js';
 import { matchesTab } from './data.js';
 
@@ -39,9 +39,12 @@ function getMarkerGroup(markerEmail) {
     return '';
 }
 
-// ===== Рендер таблиц обратной связи =====
-function renderFeedbackRows(tbodyId, includeActions) {
+// ===== Рендер строк таблицы обратной связи с пагинацией =====
+function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeActions) {
     const tbody = document.getElementById(tbodyId);
+    const controlsContainer = document.getElementById(controlsId);
+    const infoContainer = document.getElementById(infoId);
+    
     if (!tbody) return;
 
     const validMarkers = new Set();
@@ -56,52 +59,87 @@ function renderFeedbackRows(tbodyId, includeActions) {
         const proj = f.project || deriveProjectFromPools(f.pools);
         if (proj) return proj === state.currentTab;
         return validMarkers.has(f.marker);
-    });
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    tbody.innerHTML = filteredFb
-        .slice()
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .map((f) => {
-            const statusColor = f.status === 'Проведена' ? '#85c4ae'
-                : f.status === 'Отменена' ? '#e55555'
-                : f.status === 'Перенесена' ? '#f2c94c'
-                : '#f07171';
-            const avgQText = f.avgQuality !== undefined && f.avgQuality !== null
-                ? (f.avgQuality * 100).toFixed(1) + '%'
-                : '—';
-            const displayProject = f.project || deriveProjectFromPools(f.pools) || '—';
+    // Логика пагинации
+    const totalItems = filteredFb.length;
+    let currentPage = state.pagination[tableKey] || 1;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
 
-            let displayDate = f.date || '';
-            if (displayDate.includes('-')) {
-                const parts = displayDate.split('-');
-                if (parts.length === 3) displayDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+    state.pagination[tableKey] = currentPage;
+
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+    const rows = filteredFb.slice(startIndex, endIndex);
+
+    // Рендер строк
+    tbody.innerHTML = rows.map((f) => {
+        const statusColor = f.status === 'Проведена' ? '#85c4ae'
+            : f.status === 'Отменена' ? '#e55555'
+            : f.status === 'Перенесена' ? '#f2c94c'
+            : '#f07171';
+        const avgQText = f.avgQuality !== undefined && f.avgQuality !== null
+            ? (f.avgQuality * 100).toFixed(1) + '%'
+            : '—';
+        const displayProject = f.project || deriveProjectFromPools(f.pools) || '—';
+
+        let displayDate = f.date || '';
+        if (displayDate.includes('-')) {
+            const parts = displayDate.split('-');
+            if (parts.length === 3) displayDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+
+        let actionsCell = '';
+        if (includeActions) {
+            const realIdx = state.feedbackData.indexOf(f);
+            actionsCell = `<td style="text-align:right; white-space:nowrap;">
+                <button class="icon-btn" onclick="editFeedback(${realIdx})" title="Редактировать">
+                    <svg width="18" height="18" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                </button>
+                <button class="icon-btn danger" onclick="deleteFeedback(${realIdx})" title="Удалить">
+                    <svg width="18" height="18" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </button>
+            </td>`;
+        }
+
+        return `<tr>
+            <td>${escapeHtml(displayDate)}</td>
+            <td>${escapeHtml(f.marker || '')}</td>
+            <td>${escapeHtml(f.typeVKS || '—')}</td>
+            <td>${escapeHtml(f.conductor || '—')}</td>
+            <td><span class="badge" style="background:${statusColor}20; color:${statusColor}">${escapeHtml(f.status)}</span></td>
+            <td>${escapeHtml(displayProject)}</td>
+            <td>${escapeHtml(f.pools || '')}</td>
+            <td><b>${avgQText}</b></td>
+            ${actionsCell}
+        </tr>`;
+    }).join('');
+
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color: var(--muted); padding: 20px;">Нет данных.</td></tr>';
+    }
+
+    // Рендер пагинации
+    if (controlsContainer && infoContainer) {
+        infoContainer.textContent = totalItems === 0 ? 'Показано 0 из 0' : `Показано ${startIndex + 1}-${endIndex} из ${totalItems}`;
+
+        let html = '';
+        html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage('${tableKey}', ${currentPage - 1})">&lt;</button>`;
+        
+        for (let i = 1; i <= totalPages; i++) {
+            if (totalPages > 7 && i > 2 && i < totalPages - 1 && Math.abs(i - currentPage) > 1) {
+                if (i === 3) html += `<span style="padding: 0 5px; color: var(--muted); align-self: center;">...</span>`;
+                continue;
             }
+            html += `<button class="page-btn ${currentPage === i ? 'active' : ''}" onclick="changePage('${tableKey}', ${i})">${i}</button>`;
+        }
+        
+        html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage('${tableKey}', ${currentPage + 1})">&gt;</button>`;
 
-            let actionsCell = '';
-            if (includeActions) {
-                const realIdx = state.feedbackData.indexOf(f);
-                actionsCell = `<td style="text-align:right; white-space:nowrap;">
-                    <button class="icon-btn" onclick="editFeedback(${realIdx})" title="Редактировать">
-                        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                    </button>
-                    <button class="icon-btn danger" onclick="deleteFeedback(${realIdx})" title="Удалить">
-                        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                    </button>
-                </td>`;
-            }
-
-            return `<tr>
-                <td>${escapeHtml(displayDate)}</td>
-                <td>${escapeHtml(f.marker || '')}</td>
-                <td>${escapeHtml(f.typeVKS || '—')}</td>
-                <td>${escapeHtml(f.conductor || '—')}</td>
-                <td><span class="status-badge" style="background:${statusColor}20; color:${statusColor}">${escapeHtml(f.status)}</span></td>
-                <td>${escapeHtml(displayProject)}</td>
-                <td>${escapeHtml(f.pools || '')}</td>
-                <td><b>${avgQText}</b></td>
-                ${actionsCell}
-            </tr>`;
-        }).join('');
+        controlsContainer.innerHTML = html;
+    }
 }
 
 export function renderFeedbackTable() {
@@ -138,12 +176,12 @@ export function renderFeedbackTable() {
     }
     updateLabel('msFbGroup', 'feedbackGroup');
 
-    renderFeedbackRows('fbTableBody', true);
-    renderFeedbackRows('fbTableBodyHome', false);
+    renderFeedbackRows('fbTableBody', 'pagination-fbTable-controls', 'pagination-fbTable-info', 'fbTable', true);
+    renderFeedbackRows('fbTableBodyHome', 'pagination-fbHome-controls', 'pagination-fbHome-info', 'fbHome', false);
 }
 
 export function renderFeedbackTableHome() {
-    renderFeedbackRows('fbTableBodyHome', false);
+    renderFeedbackRows('fbTableBodyHome', 'pagination-fbHome-controls', 'pagination-fbHome-info', 'fbHome', false);
 }
 
 // ===== Логика создания фидбека =====
@@ -199,13 +237,19 @@ export function applyFeedbackFilters() {
                 const linkKey = `${marker}|${file}`;
                 const savedUrl = state.feedbackGeneration.videoLinks[linkKey] || '';
                 
-                // Заменяем textarea на обычный input для ссылки
+                // Красивое поле ввода с иконкой
                 html += `
                 <div class="feedback-link-input-group">
                     <label>${escapeHtml(file)} (Ссылка на видео)</label>
-                    <input type="text" placeholder="Вставьте прямую ссылку на видео..." 
-                           value="${escapeHtml(savedUrl)}" 
-                           oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">
+                    <div class="feedback-input-wrapper">
+                        <svg class="feedback-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                        </svg>
+                        <input type="text" placeholder="Вставьте прямую ссылку на видео..." 
+                               value="${escapeHtml(savedUrl)}" 
+                               oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">
+                    </div>
                 </div>`;
             }
             html += `</div>`;
@@ -290,18 +334,14 @@ export function generateFeedbackHtml() {
                 let filesHtml = '';
                 mData.uniqueFiles.forEach(file => {
                     const videoUrl = state.feedbackGeneration.videoLinks[`${marker}|${file}`] || '';
-                    
-                    // Проверяем, что это ссылка, а не пустая строка
                     const isValidUrl = videoUrl.trim().startsWith('http');
 
-                    // ▼▼▼ Новая кнопка "Скачать видео" ▼▼▼
                     const videoContent = isValidUrl 
                         ? `<a href="${videoUrl.trim()}" download target="_blank" class="video-button">
                                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                                Скачать видео
                            </a>`
                         : '<div class="video-placeholder">Ссылка на видео не указана</div>';
-                    // ▲▲▲
 
                     const fileErrors = mData.errors.filter(e => e.fileName === file);
                     
@@ -317,6 +357,7 @@ export function generateFeedbackHtml() {
 
                         for (const type in errorsByType) {
                             const errs = errorsByType[type];
+                            // Считаем процент от ОБЩЕГО числа фрагментов у разметчика в этом пуле
                             const percent = mData.totalFragments > 0 
                                 ? ((errs.length / mData.totalFragments) * 100).toFixed(2) 
                                 : '0.00';
@@ -453,7 +494,6 @@ export function generateFeedbackHtml() {
             width: 100%; max-width: 400px;
         }
         
-        /* Стили для кнопки скачивания */
         .video-button {
             display: inline-flex;
             align-items: center;
@@ -616,3 +656,7 @@ export function initFeedbackForm() {
 
     document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedbackHtml);
 }
+
+// Экспортируем функции в window для вызова из пагинации (ui.js)
+window.renderFeedbackTableHome = renderFeedbackTableHome;
+window.renderFeedbackTable = renderFeedbackTable;
