@@ -7,7 +7,8 @@ import {
     renderSupersetFilters, renderSupersetKPIs,
     updateSupersetTaskLabel,
     onSupersetTaskChange, onSupersetDateChange,
-    resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange
+    resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
+    changePage // <-- Импорт пагинации
 } from './ui.js';
 import { 
     renderFeedbackTable, 
@@ -30,10 +31,11 @@ Object.assign(window, {
     editFeedback, deleteFeedback,
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
-    handleVideoLinkInput // <-- Добавлено для полей ввода ссылок
+    handleVideoLinkInput,
+    changePage // <-- Экспорт для кнопок пагинации
 });
 
-// ===== Делегирование кликов по табам проектов (главная) =====
+// ===== Делегирование кликов по табам проектов =====
 const projectTabsContainer = document.getElementById('projectTabs');
 if (projectTabsContainer) {
     projectTabsContainer.addEventListener('click', (e) => {
@@ -57,10 +59,15 @@ window.addEventListener('app:data-updated', () => {
     state.superset.filters.tasks.clear();
     state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
 
-    // Сброс состояния генерации фидбека при загрузке новых данных
+    // Сброс состояния генерации фидбека
     state.feedbackGeneration.appliedPools.clear();
     state.feedbackGeneration.appliedGroups.clear();
     state.feedbackGeneration.videoLinks = {};
+
+    // Сброс пагинации на первую страницу везде
+    for (const key in state.pagination) {
+        state.pagination[key] = 1;
+    }
 
     buildSuperset();
     populateAllMultiSelects();
@@ -81,7 +88,10 @@ document.addEventListener('click', (e) => {
 
 // ===== Фильтры по дате (главная) =====
 for (const id of ['filterDateFrom', 'filterDateTo']) {
-    document.getElementById(id).addEventListener('change', triggerFilterUpdate);
+    document.getElementById(id).addEventListener('change', () => {
+        state.pagination.mainData = 1; // Сброс страницы
+        triggerFilterUpdate();
+    });
 }
 
 document.getElementById('btnResetFilters').addEventListener('click', () => {
@@ -94,6 +104,9 @@ document.getElementById('btnResetFilters').addEventListener('click', () => {
     state.filterState.pool.clear();
     state.filterState.marker.clear();
     state.filterState.result.clear();
+    
+    state.pagination.mainData = 1; // Сброс страницы
+    
     import('./utils.js').then(({ updateLabel }) => {
         updateLabel('msPool', 'pool');
         updateLabel('msMarker', 'marker');
@@ -169,7 +182,6 @@ document.getElementById('btnExport').addEventListener('click', () => {
         if (state.rawFlatValidations.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
 
-        // Суперсет — только проекты главной страницы
         const { s1, s2, s3 } = getFilteredSupersetRaw();
         if (s1.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s1), "Суперсет 1 (сырые)");
@@ -260,6 +272,11 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.feedbackGeneration.videoLinks = {};
     const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
     if (fbGenContainer) fbGenContainer.innerHTML = '';
+
+    // Сброс пагинации
+    for (const key in state.pagination) {
+        state.pagination[key] = 1;
+    }
 
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
     
