@@ -1,6 +1,9 @@
 export const STORAGE_KEY = 'validation_dashboard_data_v3';
 export const FB_STORAGE_KEY = 'validation_feedback_data_v1';
 
+// Количество строк на одной странице таблицы
+export const ITEMS_PER_PAGE = 10;
+
 const DEFAULT_NORM_HISTORY = [{ date: '2000-01-01', value: 580 }];
 
 export const state = {
@@ -21,20 +24,31 @@ export const state = {
     currentMenu: 'main',
     projects: [],
     
+    // Состояние текущих страниц для пагинации всех таблиц
+    pagination: {
+        mainData: 1,
+        fbHome: 1,
+        fbTable: 1,
+        superset1: 1,
+        superset2: 1,
+        superset3: 1,
+        superset4: 1
+    },
+
     filterState: {
         pool: new Set(),
         marker: new Set(),
         result: new Set(),
         feedbackPool: new Set(),
-        feedbackGroup: new Set(), // <-- Добавлено для фильтра групп
+        feedbackGroup: new Set(), // Для фильтра групп разметчиков
         fbFormPools: new Set()
     },
 
-    // Состояние для генерации фидбека (Создание ссылок и HTML)
+    // Состояние для генерации фидбека
     feedbackGeneration: {
-        appliedPools: new Set(),  // Пулы, выбранные после нажатия "Применить"
-        appliedGroups: new Set(), // Группы, выбранные после нажатия "Применить"
-        videoLinks: {}            // Ссылки на видео: { "email|filename": "url" }
+        appliedPools: new Set(),
+        appliedGroups: new Set(),
+        videoLinks: {} // Ссылки на видео: { "marker|filename": "url" }
     },
 
     superset: {
