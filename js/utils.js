@@ -3,7 +3,7 @@ import { state } from './state.js';
 // ===== Ссылка на валидацию =====
 export function getValidationUrl(orgId, assignmentId, itemId) {
     if (!orgId || !assignmentId || !itemId) return null;
-    return `https://tag.devaices.ru/company/${orgId}/assignment/${assignmentId}/reel?size=10&page=1&item=${itemId}`;
+    return `https://tagme.sberdevices.ru/company/${orgId}/assignment/${assignmentId}/reel?size=10&page=1&item=${itemId}`;
 }
 
 // ===== Даты и данные =====
