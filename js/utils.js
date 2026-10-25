@@ -1,12 +1,12 @@
 import { state } from './state.js';
 
-// ▼▼▼ НОВАЯ ФУНКЦИЯ ДЛЯ ССЫЛКИ НА ВАЛИДАЦИЮ ▼▼▼
+// ===== Ссылка на валидацию =====
 export function getValidationUrl(orgId, assignmentId, itemId) {
     if (!orgId || !assignmentId || !itemId) return null;
-    return `https://tagme.sberdevices.ru/company/${orgId}/assignment/${assignmentId}/reel?size=10&page=1&item=${itemId}`;
+    return `https://tag.devaices.ru/company/${orgId}/assignment/${assignmentId}/reel?size=10&page=1&item=${itemId}`;
 }
-// ▲▲▲
 
+// ===== Даты и данные =====
 export function parseExcelDate(v) {
     if (!v) return null;
     if (v instanceof Date) return v;
@@ -98,10 +98,13 @@ export function detectTableType(row) {
     return 'unknown';
 }
 
+// ===== Шифрование почты =====
+// Изменено: 5 символов в начале, 7 в конце
 export function maskEmail(email) {
     if (!email || typeof email !== 'string') return email;
-    if (email.length <= 10) return email;
-    return email.substring(0, 3) + "***" + email.slice(-7);
+    // Если почта слишком короткая для маскировки (меньше 12 символов)
+    if (email.length <= 12) return email;
+    return email.substring(0, 5) + "***" + email.slice(-7);
 }
 
 export function escapeHtml(str) {
