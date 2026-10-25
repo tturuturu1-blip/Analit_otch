@@ -7,6 +7,10 @@ import {
     addNormEntry, getTable1Config, getTable2Config, getTable3Config, getTable4Config
 } from './superset.js';
 
+// Палитра для графиков (в тон макету)
+const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
+const CHART_ACCENTS = ['#1f1f1f', '#e55555', '#4CAF50', '#FFC107', '#7a7a7a'];
+
 // ===== Навигация =====
 export function switchMenu(menuId, btn) {
     state.currentMenu = menuId;
@@ -143,9 +147,9 @@ export function renderMarkersTasksStatus() {
     const withoutVal = tasks.length - withVal;
 
     let html = '<div class="markers-status-summary">'
-        + '<span class="markers-status-ok">✅ ' + withVal + '</span>'
-        + '<span class="markers-status-bad">❌ ' + withoutVal + '</span>'
-        + '<span class="markers-status-total">Всего задач: ' + tasks.length + '</span>'
+        + '<span style="color:var(--success)">✅ ' + withVal + '</span>'
+        + '<span style="color:var(--danger)">❌ ' + withoutVal + '</span>'
+        + '<span style="margin-left:auto; color:var(--muted)">Всего задач: ' + tasks.length + '</span>'
         + '</div><ul class="markers-status-items">';
     for (const t of tasks) {
         const icon = t.hasVal ? '✅' : '❌';
@@ -200,7 +204,7 @@ export function toggleAll(containerId, stateKey) {
         if (cb.checked) state.filterState[stateKey].add(cb.value);
     }
     updateLabel(containerId, stateKey);
-    if (stateKey !== 'feedbackPool' && stateKey !== 'fbFormPools') triggerFilterUpdate();
+    if (stateKey !== 'feedbackPool' && stateKey !== 'fbFormPools' && stateKey !== 'feedbackGroup') triggerFilterUpdate();
 }
 
 export function onOptionChange(containerId, stateKey, value, isChecked) {
@@ -210,7 +214,7 @@ export function onOptionChange(containerId, stateKey, value, isChecked) {
     const checkboxes = document.querySelectorAll('#' + containerId + '_options input[type="checkbox"]');
     allCheckbox.checked = Array.from(checkboxes).every(cb => cb.checked);
     updateLabel(containerId, stateKey);
-    if (stateKey !== 'feedbackPool' && stateKey !== 'fbFormPools') triggerFilterUpdate();
+    if (stateKey !== 'feedbackPool' && stateKey !== 'fbFormPools' && stateKey !== 'feedbackGroup') triggerFilterUpdate();
 }
 
 export function populateMultiSelect(containerId, stateKey, values) {
@@ -293,17 +297,14 @@ export function updateKPI() {
     elQuality.textContent = avgQ !== null ? avgQPct.toFixed(1) + '%' : '—';
     elTargetQuality.textContent = target != null ? target.toFixed(1) + '%' : '—';
 
-    // Сброс классов
     [elTotalFragments, elTotalMarkers, elErrorsPercent, elQuality, elTargetQuality].forEach(el => {
         if (el) el.classList.remove('val-brown', 'val-red', 'val-green');
     });
 
-    // Темно-коричневый для 3 карточек
     if (elTotalFragments) elTotalFragments.classList.add('val-brown');
     if (elTotalMarkers) elTotalMarkers.classList.add('val-brown');
     if (elTargetQuality) elTargetQuality.classList.add('val-brown');
 
-    // Логика для Ошибок и Качества
     const isRed = (errorPercent > 5) && (avgQPct < targetVal);
     const isGreen = (errorPercent <= 5) && (avgQPct >= targetVal);
 
@@ -322,11 +323,11 @@ export function updateKPI() {
 function targetLinesForLabels(labels) {
     const target = state.superset.norms.globalAvg;
     if (target != null) {
-        return [{ label: 'Целевое (суперсет)', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#f07171', borderWidth: 2, pointRadius: 0, order: 1 }];
+        return [{ label: 'Целевое (суперсет)', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 }];
     }
     return [
-        { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#f2c94c', borderWidth: 2, pointRadius: 0, order: 1 },
-        { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#f07171', borderWidth: 2, pointRadius: 0, order: 1 }
+        { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#FFC107', borderWidth: 2, pointRadius: 0, order: 1 },
+        { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#e55555', borderWidth: 2, pointRadius: 0, order: 1 }
     ];
 }
 
@@ -341,13 +342,13 @@ export function buildQualityChart() {
     const labels = Object.keys(byMarker).sort();
     const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
     const datasets = [
-        { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'), borderRadius: 4, order: 2 },
+        { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2 },
         ...targetLinesForLabels(labels)
     ];
     state.charts.quality = new Chart(document.getElementById('chartQuality'), {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 25 ? l.slice(0, 22) + '…' : l), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#6b4d38' } }, x: { ticks: { color: '#6b4d38' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -359,8 +360,8 @@ export function buildErrorChart() {
     }
     state.charts.errors = new Chart(document.getElementById('chartErrors'), {
         type: 'doughnut',
-        data: { labels: Object.keys(byType), datasets: [{ data: Object.values(byType), backgroundColor: ['#85c4ae', '#f07171', '#f2c94c', '#6b4d38', '#a39081', '#fce8e8'] }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } } }
+        data: { labels: Object.keys(byType), datasets: [{ data: Object.values(byType), backgroundColor: CHART_COLORS, borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } } }
     });
 }
 
@@ -375,13 +376,13 @@ export function buildPoolQualityChart() {
     const labels = Object.keys(byPool).sort();
     const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
     const datasets = [
-        { label: 'Ср. качество, %', data: values, backgroundColor: values.map(v => v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'), borderRadius: 4, order: 2 },
+        { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2 },
         ...targetLinesForLabels(labels)
     ];
     state.charts.poolQuality = new Chart(document.getElementById('chartPoolQuality'), {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#6b4d38' } }, x: { ticks: { color: '#6b4d38' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -399,27 +400,25 @@ export function buildDayQualityChart() {
     const values = labels.map(d => (byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length) * 100);
 
     const target = state.superset.norms.globalAvg;
-    let targetData, targetLabel, targetColor;
+    let targetData, targetLabel;
     if (target != null) {
         targetData = labels.map(() => target);
         targetLabel = 'Целевое качество (суперсет)';
-        targetColor = '#f07171';
     } else {
         targetData = labels.map(d => {
             const p = d.split('.');
             return new Date(p[2], p[1] - 1, p[0]) < new Date(2026, 9, 20) ? 98 : 99;
         });
         targetLabel = 'Контрольная линия';
-        targetColor = '#f07171';
     }
 
     state.charts.dayQuality = new Chart(document.getElementById('chartDayQuality'), {
         type: 'line',
         data: { labels, datasets: [
-            { label: 'Ср. качество, %', data: values, borderColor: '#85c4ae', backgroundColor: 'rgba(133, 196, 174, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 },
-            { label: targetLabel, data: targetData, borderColor: targetColor, borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: target == null, order: 1 }
+            { label: 'Ср. качество, %', data: values, borderColor: '#1f1f1f', backgroundColor: 'rgba(31, 31, 31, 0.05)', tension: .4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, order: 2 },
+            { label: targetLabel, data: targetData, borderColor: '#e55555', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: target == null, order: 1 }
         ]},
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%', color: '#6b4d38' } }, x: { ticks: { color: '#6b4d38' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -427,16 +426,18 @@ export function buildErrorsByMarkerChart() {
     destroyChart(state.charts.errorsByMarker);
     const markers = [...new Set(state.filteredData.map(r => r.marker).filter(Boolean))].sort();
     const errorTypes = [...new Set(state.filteredData.map(r => r.errorType).filter(Boolean))].sort();
-    const colors = ['#85c4ae', '#f07171', '#f2c94c', '#6b4d38', '#a39081', '#fce8e8'];
+    
     const datasets = errorTypes.map((type, idx) => ({
         label: type,
         data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
-        backgroundColor: colors[idx % colors.length]
+        backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
+        borderRadius: 4
     }));
+    
     state.charts.errorsByMarker = new Chart(document.getElementById('chartErrorsByMarker'), {
         type: 'bar',
         data: { labels: markers.map(m => m.length > 20 ? m.slice(0, 18) + '…' : m), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { x: { stacked: true, ticks: { color: '#6b4d38' } }, y: { stacked: true, beginAtZero: true, ticks: { color: '#6b4d38' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#7a7a7a' } }, y: { stacked: true, beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -455,10 +456,10 @@ export function buildTrendChart() {
     state.charts.trend = new Chart(document.getElementById('chartTrend'), {
         type: 'line',
         data: { labels, datasets: [
-            { label: 'Ошибки', data: labels.map(l => byDate[l].errors), borderColor: '#f07171', backgroundColor: 'rgba(240, 113, 113, 0.1)', tension: .3, fill: true },
-            { label: 'Рекомендации', data: labels.map(l => byDate[l].recs), borderColor: '#f2c94c', backgroundColor: 'rgba(242, 201, 76, 0.1)', tension: .3, fill: true }
+            { label: 'Ошибки', data: labels.map(l => byDate[l].errors), borderColor: '#e55555', backgroundColor: 'rgba(229, 85, 85, 0.1)', tension: .4, fill: true },
+            { label: 'Рекомендации', data: labels.map(l => byDate[l].recs), borderColor: '#FFC107', backgroundColor: 'rgba(255, 193, 7, 0.1)', tension: .4, fill: true }
         ]},
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } }, scales: { y: { beginAtZero: true, ticks: { color: '#6b4d38' } }, x: { ticks: { color: '#6b4d38' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -469,7 +470,7 @@ export function buildTable() {
         const badgeClass = r.result === 'Ошибка' ? 'badge-error' : r.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
         
         const link = r.result === 'Рекомендация'
-            ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
+            ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fde8e8;color:#e55555">нет пары</span>')
             : '—';
 
         let valLink = '—';
@@ -524,7 +525,6 @@ export function renderErrorsTable() {
     const toDate = to ? new Date(to) : null;
     if (toDate) toDate.setDate(toDate.getDate() + 1);
 
-    // 1. Фильтрация данных
     const filtered = state.processedData.filter(r => {
         if (r._type !== 'validation') return false;
         if (!matchesTab(r)) return false;
@@ -533,7 +533,6 @@ export function renderErrorsTable() {
         return true;
     });
 
-    // 2. Сбор статистики
     const markerStats = {};
     
     for (const r of filtered) {
@@ -547,7 +546,6 @@ export function renderErrorsTable() {
             };
         }
         
-        // Уникальные фрагменты
         const fileKey = r.marker + '|' + r.fileName + '|' + r.fragments;
         if (!markerStats[r.marker]._files) markerStats[r.marker]._files = new Set();
         if (!markerStats[r.marker]._files.has(fileKey)) {
@@ -555,7 +553,6 @@ export function renderErrorsTable() {
             markerStats[r.marker].totalFragments += (r.fragments || 0);
         }
 
-        // Качество по проекту (берем из валидных записей)
         if (r.project && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
             if (!markerStats[r.marker].projectQuality[r.project]) {
                 markerStats[r.marker].projectQuality[r.project] = [];
@@ -563,7 +560,6 @@ export function renderErrorsTable() {
             markerStats[r.marker].projectQuality[r.project].push(r.quality);
         }
 
-        // Ошибки
         if (r.result === 'Ошибка') {
             markerStats[r.marker].totalErrors++;
             const type = r.errorType || 'Неизвестная';
@@ -583,7 +579,6 @@ export function renderErrorsTable() {
         }
     }
 
-    // 3. Словарь ФИО
     const emailToFio = {};
     for (const emp of state.rawEmployeeMap) {
         const email = getVal(emp, 'Почта', 'Почта разметчика', 'Email', 'email');
@@ -591,7 +586,6 @@ export function renderErrorsTable() {
         if (email && fio) emailToFio[String(email).trim().toLowerCase()] = String(fio).trim();
     }
 
-    // 4. Формирование HTML
     let html = '';
     const sortedMarkers = Object.keys(markerStats).filter(m => markerStats[m].totalErrors > 0).sort();
 
@@ -605,7 +599,6 @@ export function renderErrorsTable() {
         const fio = emailToFio[markerEmail.toLowerCase()] || markerEmail;
         const errorRate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
 
-        // Блок "Качество по проекту"
         let qualityHtml = '<ul class="project-quality-list">';
         for (const proj in stats.projectQuality) {
             const arr = stats.projectQuality[proj];
@@ -617,7 +610,6 @@ export function renderErrorsTable() {
             qualityHtml = '<div style="font-size:0.85rem; color:var(--muted);">Нет данных</div>';
         }
 
-        // Блок "Типы ошибок"
         let typesHtml = '';
         const sortedTypes = Object.keys(stats.errorTypes).sort((a, b) => stats.errorTypes[b].count - stats.errorTypes[a].count);
         
@@ -824,25 +816,25 @@ export function renderSupersetKPIs() {
         normValuesHtml += '</div>';
     }
 
-    const normCard = `<div class="kpi-card">
+    const normCard = `<div class="kpi-card" style="background: var(--card-pink);">
         <button class="norm-edit-btn" onclick="editSupersetNorm()" title="Редактировать">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
         </button>
         <div class="label">Норма у.е. в час</div>
         ${normValuesHtml}
     </div>`;
 
     const otherCards = [
-        { label: 'Цена', value: k.avgPrice != null ? k.avgPrice.toFixed(2) : '—' },
-        { label: 'Качество факт', value: k.qualityFact != null ? (k.qualityFact * 100).toFixed(1) + '%' : '—' },
-        { label: 'Качество план', value: k.qualityPlan != null ? k.qualityPlan.toFixed(1) + '%' : '—' },
-        { label: 'Факт у.е. в час', value: k.ballsPerHour != null ? k.ballsPerHour.toFixed(1) : '—' },
-        { label: 'Коэффициент', value: k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—' },
-        { label: 'Среднее время разметки', value: k.avgTime != null ? k.avgTime.toFixed(1) + ' мин' : '—' }
+        { label: 'Цена', value: k.avgPrice != null ? k.avgPrice.toFixed(2) : '—', bg: 'var(--card-peach)' },
+        { label: 'Качество факт', value: k.qualityFact != null ? (k.qualityFact * 100).toFixed(1) + '%' : '—', bg: 'var(--card-purple)' },
+        { label: 'Качество план', value: k.qualityPlan != null ? k.qualityPlan.toFixed(1) + '%' : '—', bg: 'var(--card-blue)' },
+        { label: 'Факт у.е. в час', value: k.ballsPerHour != null ? k.ballsPerHour.toFixed(1) : '—', bg: 'var(--card-mint)' },
+        { label: 'Коэффициент', value: k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—', bg: '#f5f5f5' },
+        { label: 'Среднее время разметки', value: k.avgTime != null ? k.avgTime.toFixed(1) + ' мин' : '—', bg: '#f5f5f5' }
     ];
 
     container.innerHTML = normCard + otherCards.map(c => `
-        <div class="kpi-card">
+        <div class="kpi-card" style="background: ${c.bg};">
             <div class="label">${escapeHtml(c.label)}</div>
             <div class="value">${escapeHtml(c.value)}</div>
         </div>
@@ -871,7 +863,7 @@ function renderTableFilters(tableId, configs, fullRows) {
             return `<label class="ms-item ms-item-compact"><input type="checkbox" value="${safe}" onchange="onSupersetTableFilterChange('${tableId}', '${cfg.key}', this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
         }).join('');
 
-        return `<th style="padding: 4px 6px;">
+        return `<th style="padding: 8px 10px;">
             <div class="multi-select ms-compact" id="${id}">
                 <div class="ms-header ms-header-compact" onclick="toggleDropdown('${id}')">
                     <span class="ms-label ${emptyCls}" id="${id}_label">${escapeHtml(label)}</span>
@@ -925,7 +917,7 @@ function renderSupersetTable1() {
 
     const rows = state.superset.filteredTable1 || [];
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; color: var(--muted);">Нет данных.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `<tr>
@@ -956,7 +948,7 @@ function renderSupersetTable2() {
 
     const rows = state.superset.filteredTable2 || [];
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted);">Нет данных.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `<tr>
@@ -985,7 +977,7 @@ function renderSupersetTable3() {
 
     const rows = state.superset.filteredTable3 || [];
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted);">Нет данных.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `<tr>
@@ -1007,7 +999,7 @@ function renderSupersetTable4() {
 
     const rows = state.superset.filteredTable4 || [];
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted);">Нет данных.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `<tr>
