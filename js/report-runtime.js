@@ -4,8 +4,14 @@
     var REPORT_DATA = JSON.parse(document.getElementById('report-data').textContent);
     var processedData = REPORT_DATA.processedData || [];
     var feedbackData = REPORT_DATA.feedbackData || [];
+    var targetQualityGlobal = REPORT_DATA.targetQuality || 98; // Получаем из report.js
+
+    var ITEMS_PER_PAGE = 10;
+    var currentPage = 1;
+    var currentPageFb = 1;
 
     var filteredData = [];
+    var filteredFeedback = [];
     var charts = {};
     var currentTab = 'all';
     var filterState = { pool: new Set(), marker: new Set(), result: new Set() };
@@ -28,18 +34,16 @@
             .replace(/'/g, '&#39;');
     }
 
-    // ▼▼▼ ЛОГИКА ССЫЛКИ ДЛЯ ОТЧЕТА ▼▼▼
     function getValidationLink(r) {
         if (r.url) {
-            return '<a href="' + r.url + '" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>';
+            return '<a href="' + r.url + '" target="_blank" class="badge-link">Перейти</a>';
         }
         if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
-            var constructedUrl = 'https://tagme.sberdevices.ru/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
-            return '<a href="' + constructedUrl + '" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 600;">Перейти</a>';
+            var constructedUrl = 'https://tag.devaices.ru/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
+            return '<a href="' + constructedUrl + '" target="_blank" class="badge-link">Перейти</a>';
         }
         return '—';
     }
-    // ▲▲▲
 
     function matchesTab(r) {
         if (currentTab === 'all') return true;
@@ -73,8 +77,18 @@
             }
             return true;
         });
+
+        filteredFeedback = feedbackData.filter(function (f) {
+            if (currentTab === 'all') return true;
+            var validMarkers = new Set();
+            for (var i = 0; i < processedData.length; i++) {
+                if (matchesTab(processedData[i])) validMarkers.add(processedData[i].marker);
+            }
+            return validMarkers.has(f.marker);
+        }).sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
     }
 
+    // ===== KPI С УЧЕТОМ ВЕСА И ДЕДУПЛИКАЦИЕЙ =====
     function updateKPI() {
         var uniqueFiles = new Set();
         var totalFragments = 0;
@@ -90,42 +104,65 @@
         }
 
         var uniqueMarkers = new Set();
-        var errorsCount = 0;
+        var weightedErrorsCount = 0;
+        var qualityKeys = new Set();
         var qualitySum = 0, qualityCount = 0;
 
         for (var j = 0; j < filteredData.length; j++) {
             var rr = filteredData[j];
             if (rr.marker) uniqueMarkers.add(rr.marker);
-            if (rr.result === 'Ошибка') errorsCount++;
+            
+            if (rr.result === 'Ошибка') {
+                var weight = rr.errorType === 'Некритичная ошибка' ? 0.5 : 1;
+                weightedErrorsCount += weight;
+            }
+            
             if (rr.quality !== null && !isNaN(rr.quality) && rr.quality > 0) {
-                qualitySum += rr.quality;
-                qualityCount++;
+                var qKey = rr.marker + '|' + rr.fileName;
+                if (!qualityKeys.has(qKey)) {
+                    qualityKeys.add(qKey);
+                    qualitySum += rr.quality;
+                    qualityCount++;
+                }
             }
         }
 
-        var errorPercent = totalFragments > 0 ? (errorsCount / totalFragments) * 100 : 0;
+        var errorPercent = totalFragments > 0 ? (weightedErrorsCount / totalFragments) * 100 : 0;
         var avgQ = qualityCount ? qualitySum / qualityCount : null;
 
         document.getElementById('kpiTotalFragments').textContent = totalFragments;
         document.getElementById('kpiTotalMarkers').textContent = uniqueMarkers.size;
         document.getElementById('kpiErrorsPercent').textContent = errorPercent.toFixed(2) + '%';
         document.getElementById('kpiQuality').textContent = avgQ !== null ? (avgQ * 100).toFixed(1) + '%' : '—';
+        
+        var targetEl = document.getElementById('kpiTargetQuality');
+        if (targetEl) {
+            targetEl.textContent = targetQualityGlobal ? targetQualityGlobal.toFixed(1) + '%' : '—';
+        }
     }
 
     function destroyChart(k) {
         if (charts[k]) { try { charts[k].destroy(); } catch (e) {} delete charts[k]; }
     }
 
+    // ===== ГРАФИКИ =====
     function buildQualityChart() {
         destroyChart('quality');
         var byMarker = {};
+        var qualityKeys = new Set();
+        
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
             if (r.marker && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
-                if (!byMarker[r.marker]) byMarker[r.marker] = [];
-                byMarker[r.marker].push(r.quality);
+                var key = r.marker + '|' + r.fileName;
+                if (!qualityKeys.has(key)) {
+                    qualityKeys.add(key);
+                    if (!byMarker[r.marker]) byMarker[r.marker] = [];
+                    byMarker[r.marker].push(r.quality);
+                }
             }
         }
+        
         var labels = Object.keys(byMarker).sort();
         var values = labels.map(function (m) {
             var arr = byMarker[m];
@@ -133,6 +170,7 @@
             for (var k = 0; k < arr.length; k++) sum += arr[k];
             return (sum / arr.length) * 100;
         });
+        
         charts.quality = new Chart(document.getElementById('chartQuality'), {
             type: 'bar',
             data: {
@@ -179,13 +217,20 @@
     function buildPoolQualityChart() {
         destroyChart('poolQuality');
         var byPool = {};
+        var qualityKeys = new Set();
+        
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
             if (r.pool && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
-                if (!byPool[r.pool]) byPool[r.pool] = [];
-                byPool[r.pool].push(r.quality);
+                var key = r.pool + '|' + r.marker + '|' + r.fileName;
+                if (!qualityKeys.has(key)) {
+                    qualityKeys.add(key);
+                    if (!byPool[r.pool]) byPool[r.pool] = [];
+                    byPool[r.pool].push(r.quality);
+                }
             }
         }
+        
         var labels = Object.keys(byPool).sort();
         var values = labels.map(function (p) {
             var arr = byPool[p];
@@ -193,6 +238,7 @@
             for (var k = 0; k < arr.length; k++) sum += arr[k];
             return (sum / arr.length) * 100;
         });
+        
         charts.poolQuality = new Chart(document.getElementById('chartPoolQuality'), {
             type: 'bar',
             data: {
@@ -222,14 +268,21 @@
     function buildDayQualityChart() {
         destroyChart('dayQuality');
         var byDate = {};
+        var qualityKeys = new Set();
+        
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
             if (r.date && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
                 var k = formatDate(r.date);
-                if (!byDate[k]) byDate[k] = [];
-                byDate[k].push(r.quality);
+                var key = k + '|' + r.marker + '|' + r.fileName;
+                if (!qualityKeys.has(key)) {
+                    qualityKeys.add(key);
+                    if (!byDate[k]) byDate[k] = [];
+                    byDate[k].push(r.quality);
+                }
             }
         }
+        
         var labels = Object.keys(byDate).sort(function (a, b) {
             return a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-'));
         });
@@ -337,62 +390,155 @@
         });
     }
 
+    // ===== ПАГИНАЦИЯ И ТАБЛИЦА =====
+    function changePage(tableKey, page) {
+        if (tableKey === 'main') currentPage = page;
+        else if (tableKey === 'fb') currentPageFb = page;
+        buildTable();
+        renderFeedbackTableHome();
+    }
+
+    function renderPaginationControls(controlsId, infoId, totalItems, currentPage, tableKey) {
+        var container = document.getElementById(controlsId);
+        var info = document.getElementById(infoId);
+        if (!container || !info) return;
+
+        var totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        var start = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+        var end = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+        info.textContent = totalItems === 0 ? 'Показано 0 из 0' : 'Показано ' + start + '-' + end + ' из ' + totalItems;
+
+        var html = '';
+        html += '<button class="page-btn" ' + (currentPage === 1 ? 'disabled' : '') + ' onclick="changePage(\'' + tableKey + '\', ' + (currentPage - 1) + ')">&lt;</button>';
+        
+        for (var i = 1; i <= totalPages; i++) {
+            if (totalPages > 7 && i > 2 && i < totalPages - 1 && Math.abs(i - currentPage) > 1) {
+                if (i === 3) html += '<span style="padding: 0 5px; color: var(--muted); align-self: center;">...</span>';
+                continue;
+            }
+            html += '<button class="page-btn ' + (currentPage === i ? 'active' : '') + '" onclick="changePage(\'' + tableKey + '\', ' + i + ')">' + i + '</button>';
+        }
+        
+        html += '<button class="page-btn" ' + (currentPage === totalPages ? 'disabled' : '') + ' onclick="changePage(\'' + tableKey + '\', ' + (currentPage + 1) + ')">&gt;</button>';
+
+        container.innerHTML = html;
+    }
+
     function buildTable() {
         var tbody = document.getElementById('tableBody');
-        var rows = filteredData.slice(0, 300);
+        if (!tbody) return;
+
+        // 1. Группировка данных по разметчику и файлу
+        var grouped = {};
+        for (var i = 0; i < filteredData.length; i++) {
+            var r = filteredData[i];
+            var key = (r.marker || '') + '|' + (r.fileName || '');
+            if (!grouped[key]) {
+                grouped[key] = {
+                    date: r.date,
+                    project: r.project,
+                    pool: r.pool,
+                    marker: r.marker,
+                    fileName: r.fileName,
+                    quality: r.quality,
+                    fragments: r.fragments,
+                    url: r.url,
+                    orgId: r.orgId,
+                    assignmentId: r.assignmentId,
+                    itemId: r.itemId,
+                    _type: r._type,
+                    _linked: r._linked,
+                    items: []
+                };
+            }
+            if (r.result === 'Ошибка' || r.result === 'Рекомендация') {
+                grouped[key].items.push({
+                    result: r.result,
+                    errorType: r.errorType,
+                    comment: r.comment,
+                    interval: r.interval
+                });
+            } else if (r.result === 'Ошибки не выявлены' && grouped[key].items.length === 0) {
+                grouped[key].items.push({
+                    result: r.result,
+                    errorType: r.errorType,
+                    comment: r.comment,
+                    interval: r.interval
+                });
+            }
+        }
+
+        var groupedArray = Object.values(grouped);
+        var totalItems = groupedArray.length;
+        var startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+        var endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+        var rows = groupedArray.slice(startIndex, endIndex);
+
+        // 2. Рендер строк
         var html = '';
-        for (var i = 0; i < rows.length; i++) {
-            var r = rows[i];
-            var badgeClass = r.result === 'Ошибка' ? 'badge-error' : r.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
+        for (var j = 0; j < rows.length; j++) {
+            var g = rows[j];
             
-            var link = r.result === 'Рекомендация'
-                ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fce8e8;color:#e55555">нет пары</span>')
+            var valLink = getValidationLink(g);
+
+            var fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
+            var fileNameTitle = escapeHtml(g.fileName || '');
+            
+            var resBadges = g.items.map(function(item) {
+                var badgeClass = item.result === 'Ошибка' ? 'badge-error' : item.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
+                return '<span class="badge ' + badgeClass + '" style="margin-bottom: 4px; display: inline-block;">' + escapeHtml(item.result || '') + '</span>';
+            }).join('<br>');
+
+            var errTypes = g.items.map(function(item) { return escapeHtml(item.errorType || ''); }).join('<br>');
+            
+            var comments = g.items.map(function(item) {
+                var c = item.comment ? escapeHtml(item.comment.slice(0, 100)) : '';
+                return c ? '<span title="' + escapeHtml(item.comment) + '">' + c + '</span>' : '';
+            }).join('<br>');
+            
+            var intervals = g.items.map(function(item) { return escapeHtml(item.interval || ''); }).join('<br>');
+
+            var link = g._type === 'recommendations'
+                ? (g._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fde8e8;color:#e55555">нет пары</span>')
                 : '—';
 
-            var valLink = getValidationLink(r);
+            var quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(1) + '%' : '';
 
-            var fileName = r.fileName ? escapeHtml(r.fileName.slice(0, 40)) : '';
-            var fileNameTitle = escapeHtml(r.fileName || '');
-            var comment = r.comment ? escapeHtml(r.comment.slice(0, 100)) : '';
-            var commentTitle = escapeHtml(r.comment || '');
-            var quality = (r.quality !== null && !isNaN(r.quality)) ? (r.quality * 100).toFixed(1) + '%' : '';
-            
             html += '<tr>' +
-                '<td>' + (r.date ? formatDate(r.date) : '') + '</td>' +
-                '<td>' + escapeHtml((r.project || '').replace('_validate', '')) + '</td>' +
-                '<td>' + escapeHtml(r.pool || '') + '</td>' +
-                '<td>' + escapeHtml(r.marker || '') + '</td>' +
+                '<td>' + (g.date ? formatDate(g.date) : '') + '</td>' +
+                '<td>' + escapeHtml((g.project || '').replace('_validate', '')) + '</td>' +
+                '<td>' + escapeHtml(g.pool || '') + '</td>' +
+                '<td>' + escapeHtml(g.marker || '') + '</td>' +
                 '<td title="' + fileNameTitle + '">' + fileName + '</td>' +
-                '<td><span class="badge ' + badgeClass + '">' + escapeHtml(r.result || '') + '</span></td>' +
-                '<td>' + escapeHtml(r.errorType || '') + '</td>' +
-                '<td title="' + commentTitle + '">' + comment + '</td>' +
-                '<td>' + escapeHtml(r.interval || '') + '</td>' +
+                '<td style="vertical-align: top;">' + resBadges + '</td>' +
+                '<td style="vertical-align: top;">' + errTypes + '</td>' +
+                '<td style="vertical-align: top;">' + comments + '</td>' +
+                '<td style="vertical-align: top;">' + intervals + '</td>' +
                 '<td>' + quality + '</td>' +
                 '<td>' + valLink + '</td>' +
                 '<td>' + link + '</td>' +
             '</tr>';
         }
         tbody.innerHTML = html;
+
+        renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, currentPage, 'main');
     }
 
     function renderFeedbackTableHome() {
         var tbody = document.getElementById('fbTableBodyHome');
         if (!tbody) return;
 
-        var validMarkers = new Set();
-        for (var i = 0; i < processedData.length; i++) {
-            if (matchesTab(processedData[i])) validMarkers.add(processedData[i].marker);
-        }
-
-        var filtered = feedbackData.filter(function (f) {
-            return currentTab === 'all' || validMarkers.has(f.marker);
-        });
-
-        filtered.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+        var totalItems = filteredFeedback.length;
+        var startIndex = (currentPageFb - 1) * ITEMS_PER_PAGE;
+        var endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+        var rows = filteredFeedback.slice(startIndex, endIndex);
 
         var html = '';
-        for (var j = 0; j < filtered.length; j++) {
-            var f = filtered[j];
+        for (var j = 0; j < rows.length; j++) {
+            var f = rows[j];
             var statusColor = f.status === 'Проведена' ? '#85c4ae'
                 : f.status === 'Отменена' ? '#e55555'
                 : f.status === 'Перенесена' ? '#f2c94c'
@@ -411,9 +557,13 @@
             '</tr>';
         }
         tbody.innerHTML = html;
+
+        renderPaginationControls('pagination-fbHome-controls', 'pagination-fbHome-info', totalItems, currentPageFb, 'fb');
     }
 
     function triggerFilterUpdate() {
+        currentPage = 1; // Сброс страниц при обновлении фильтров
+        currentPageFb = 1;
         applyFilters();
         updateKPI();
         buildQualityChart();
@@ -542,12 +692,14 @@
         triggerFilterUpdate();
     }
 
+    // Глобальные функции для inline-вызовов
     window.switchTab = switchTab;
     window.toggleDropdown = toggleDropdown;
     window.filterMsOptions = filterMsOptions;
     window.toggleAll = toggleAll;
     window.onOptionChange = onOptionChange;
     window.resetFilters = resetFilters;
+    window.changePage = changePage;
 
     function init() {
         var poolsSet = new Set();
