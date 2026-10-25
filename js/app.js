@@ -9,24 +9,31 @@ import {
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange
 } from './ui.js';
-import { renderFeedbackTable, editFeedback, deleteFeedback, initFeedbackForm } from './feedback.js';
+import { 
+    renderFeedbackTable, 
+    editFeedback, 
+    deleteFeedback, 
+    initFeedbackForm, 
+    applyFeedbackFilters, 
+    handleVideoLinkInput 
+} from './feedback.js';
 import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw } from './superset.js';
 import {
     progressStartTimer, updateProgress, yieldToUI, log, formatDate
 } from './utils.js';
 import { generateHtmlReport } from './report.js';
 
+// ===== Экспорт функций в window (для inline-обработчиков в HTML) =====
 Object.assign(window, {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll,
     onOptionChange, toggleRow, renderErrorsTable,
     editFeedback, deleteFeedback,
-    onSupersetTaskChange,
-    onSupersetDateChange,
-    resetSupersetFilters,
-    editSupersetNorm,
-    onSupersetTableFilterChange
+    onSupersetTaskChange, onSupersetDateChange,
+    resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
+    handleVideoLinkInput // <-- Добавлено для полей ввода ссылок
 });
 
+// ===== Делегирование кликов по табам проектов (главная) =====
 const projectTabsContainer = document.getElementById('projectTabs');
 if (projectTabsContainer) {
     projectTabsContainer.addEventListener('click', (e) => {
@@ -36,31 +43,43 @@ if (projectTabsContainer) {
     });
 }
 
+// ===== Изменение дат на странице Суперсет =====
 const supersetDateFrom = document.getElementById('supersetDateFrom');
 const supersetDateTo = document.getElementById('supersetDateTo');
 if (supersetDateFrom) supersetDateFrom.addEventListener('change', onSupersetDateChange);
 if (supersetDateTo) supersetDateTo.addEventListener('change', onSupersetDateChange);
 
+// ===== Обновление UI после пересчёта данных =====
 window.addEventListener('app:data-updated', () => {
+    // Сброс фильтров суперсета
     state.superset.filters.dateFrom = '';
     state.superset.filters.dateTo = '';
     state.superset.filters.tasks.clear();
     state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
+
+    // Сброс состояния генерации фидбека при загрузке новых данных
+    state.feedbackGeneration.appliedPools.clear();
+    state.feedbackGeneration.appliedGroups.clear();
+    state.feedbackGeneration.videoLinks = {};
 
     buildSuperset();
     populateAllMultiSelects();
     buildProjectTabs();
     renderMarkersTasksStatus();
     triggerFilterUpdate();
+    
     if (state.currentMenu === 'superset') renderSupersetPage();
+    if (state.currentMenu === 'feedback') renderFeedbackTable();
 });
 
+// ===== Закрытие dropdown при клике вне =====
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.multi-select')) {
         document.querySelectorAll('.ms-dropdown').forEach(d => d.classList.remove('open'));
     }
 });
 
+// ===== Фильтры по дате (главная) =====
 for (const id of ['filterDateFrom', 'filterDateTo']) {
     document.getElementById(id).addEventListener('change', triggerFilterUpdate);
 }
@@ -83,6 +102,7 @@ document.getElementById('btnResetFilters').addEventListener('click', () => {
     triggerFilterUpdate();
 });
 
+// ===== Загрузка Excel =====
 document.getElementById('fileInput').addEventListener('change', async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -94,7 +114,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
     e.target.value = '';
 });
 
-// ===== Экспорт в Excel — Суперсет фильтруется по проектам главной страницы =====
+// ===== Экспорт в Excel =====
 document.getElementById('btnExport').addEventListener('click', () => {
     if (!state.processedData.length && !state.feedbackData.length) {
         alert('Нет данных для экспорта');
@@ -149,7 +169,7 @@ document.getElementById('btnExport').addEventListener('click', () => {
         if (state.rawFlatValidations.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
 
-        // ▼▼▼ Суперсет — только проекты главной страницы ▼▼▼
+        // Суперсет — только проекты главной страницы
         const { s1, s2, s3 } = getFilteredSupersetRaw();
         if (s1.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s1), "Суперсет 1 (сырые)");
@@ -157,7 +177,6 @@ document.getElementById('btnExport').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s2), "Суперсет 2 (сырые)");
         if (s3.length > 0)
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s3), "Суперсет 3 (сырые)");
-        // ▲▲▲
 
         XLSX.writeFile(wb, `full_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
         log('Полный экспорт выполнен', false);
@@ -166,6 +185,7 @@ document.getElementById('btnExport').addEventListener('click', () => {
     }
 });
 
+// ===== Импорт =====
 document.getElementById('importInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -205,6 +225,7 @@ document.getElementById('importInput').addEventListener('change', (e) => {
     e.target.value = '';
 });
 
+// ===== Очистка =====
 document.getElementById('btnClear').addEventListener('click', () => {
     if (!confirm('Удалить все данные?')) return;
     state.rawMarkers = [];
@@ -216,6 +237,8 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.rawSuperset3 = [];
     state.rawEmployeeMap = [];
     state.processedData = [];
+    
+    // Очистка суперсета
     state.superset.table1 = [];
     state.superset.table2 = [];
     state.superset.table3 = [];
@@ -230,18 +253,30 @@ document.getElementById('btnClear').addEventListener('click', () => {
     state.superset._mainProjects = null;
     state.superset.filters = { dateFrom: '', dateTo: '', tasks: new Set() };
     state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
+
+    // Очистка генерации фидбека
+    state.feedbackGeneration.appliedPools.clear();
+    state.feedbackGeneration.appliedGroups.clear();
+    state.feedbackGeneration.videoLinks = {};
+    const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
+    if (fbGenContainer) fbGenContainer.innerHTML = '';
+
     try { localStorage.removeItem('validation_dashboard_data_v3'); } catch (e) { /* ignore */ }
+    
     buildProjectTabs();
     renderMarkersTasksStatus();
     triggerFilterUpdate();
     if (state.currentMenu === 'superset') renderSupersetPage();
+    if (state.currentMenu === 'feedback') renderFeedbackTable();
     updateProgress(0, '', 'Готово');
 });
 
+// ===== Пересчёт =====
 document.getElementById('btnRelink').addEventListener('click', () => {
     recomputeDashboard();
 });
 
+// ===== Скачать HTML-отчёт (главная) =====
 document.getElementById('btnGenerateReport').addEventListener('click', async () => {
     try {
         log('Формирование HTML-отчёта...', false);
@@ -253,6 +288,7 @@ document.getElementById('btnGenerateReport').addEventListener('click', async () 
     }
 });
 
+// ===== Инициализация =====
 initFeedbackForm();
 loadFromStorage();
 loadFeedbackFromStorage();
