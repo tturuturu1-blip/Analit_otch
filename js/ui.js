@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state, ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
 import { formatDate, updateLabel, escapeHtml, destroyChart, getVal, getValidationUrl } from './utils.js';
 import { renderFeedbackTable, renderFeedbackTableHome } from './feedback.js';
@@ -9,7 +9,6 @@ import {
 
 // Палитра для графиков (в тон макету)
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
-const CHART_ACCENTS = ['#1f1f1f', '#e55555', '#4CAF50', '#FFC107', '#7a7a7a'];
 
 // ===== Навигация =====
 export function switchMenu(menuId, btn) {
@@ -26,7 +25,10 @@ export function switchMenu(menuId, btn) {
 
     if (menuId === 'main') triggerFilterUpdate();
     if (menuId === 'errors') renderErrorsTable();
-    if (menuId === 'feedback') renderFeedbackTable();
+    if (menuId === 'feedback') {
+        renderFeedbackTable();
+        state.pagination.fbTable = 1;
+    }
     if (menuId === 'superset') {
         applySupersetFilters();
         renderSupersetPage();
@@ -37,6 +39,15 @@ export function switchTab(tabId, btn) {
     state.currentTab = tabId;
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     if (btn) btn.classList.add('active');
+
+    // Сброс пагинации при смене вкладки
+    state.pagination.mainData = 1;
+    state.pagination.fbHome = 1;
+    state.pagination.fbTable = 1;
+    state.pagination.superset1 = 1;
+    state.pagination.superset2 = 1;
+    state.pagination.superset3 = 1;
+    state.pagination.superset4 = 1;
 
     if (state.currentMenu === 'main') triggerFilterUpdate();
     if (state.currentMenu === 'errors') renderErrorsTable();
@@ -239,6 +250,52 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
 }
 
+// ===== ПАГИНАЦИЯ =====
+export function changePage(tableKey, page) {
+    state.pagination[tableKey] = page;
+    if (tableKey === 'mainData') buildTable();
+    else if (tableKey === 'superset1') renderSupersetTable1();
+    else if (tableKey === 'superset2') renderSupersetTable2();
+    else if (tableKey === 'superset3') renderSupersetTable3();
+    else if (tableKey === 'superset4') renderSupersetTable4();
+    else if (tableKey === 'fbHome' || tableKey === 'fbTable') {
+        if (window.renderFeedbackTableHome) window.renderFeedbackTableHome();
+        if (window.renderFeedbackTable) window.renderFeedbackTable();
+    }
+}
+
+function renderPaginationControls(controlsId, infoId, totalItems, tableKey) {
+    const container = document.getElementById(controlsId);
+    const info = document.getElementById(infoId);
+    if (!container || !info) return;
+
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+    let currentPage = state.pagination[tableKey] || 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+    state.pagination[tableKey] = currentPage;
+
+    const start = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+    const end = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+    info.textContent = totalItems === 0 ? 'Показано 0 из 0' : `Показано ${start}-${end} из ${totalItems}`;
+
+    let html = '';
+    html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage('${tableKey}', ${currentPage - 1})">&lt;</button>`;
+    
+    for (let i = 1; i <= totalPages; i++) {
+        if (totalPages > 7 && i > 2 && i < totalPages - 1 && Math.abs(i - currentPage) > 1) {
+            if (i === 3) html += `<span style="padding: 0 5px; color: var(--muted); align-self: center;">...</span>`;
+            continue;
+        }
+        html += `<button class="page-btn ${currentPage === i ? 'active' : ''}" onclick="changePage('${tableKey}', ${i})">${i}</button>`;
+    }
+    
+    html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage('${tableKey}', ${currentPage + 1})">&gt;</button>`;
+
+    container.innerHTML = html;
+}
+
+// ===== ОБНОВЛЕНИЕ ДАННЫХ И KPI =====
 export function triggerFilterUpdate() {
     if (state.currentMenu !== 'main') return;
     applyFilters();
@@ -253,7 +310,6 @@ export function triggerFilterUpdate() {
     renderFeedbackTableHome();
 }
 
-// ===== KPI Логика с цветами =====
 export function updateKPI() {
     const uniqueFiles = new Set();
     let totalFragments = 0;
@@ -267,18 +323,31 @@ export function updateKPI() {
     }
 
     const uniqueMarkers = new Set();
-    let errorsCount = 0;
+    let weightedErrorsCount = 0;
+    const qualityKeys = new Set();
     let qualitySum = 0, qualityCount = 0;
+
     for (const r of state.filteredData) {
         if (r.marker) uniqueMarkers.add(r.marker);
-        if (r.result === 'Ошибка') errorsCount++;
+        
+        // Учет веса ошибок
+        if (r.result === 'Ошибка') {
+            const weight = r.errorType === 'Некритичная ошибка' ? 0.5 : 1;
+            weightedErrorsCount += weight;
+        }
+        
+        // Дедупликация качества по заданиям
         if (r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
-            qualitySum += r.quality;
-            qualityCount++;
+            const key = r.marker + '|' + r.fileName;
+            if (!qualityKeys.has(key)) {
+                qualityKeys.add(key);
+                qualitySum += r.quality;
+                qualityCount++;
+            }
         }
     }
 
-    const errorPercent = totalFragments > 0 ? (errorsCount / totalFragments) * 100 : 0;
+    const errorPercent = totalFragments > 0 ? (weightedErrorsCount / totalFragments) * 100 : 0;
     const avgQ = qualityCount ? qualitySum / qualityCount : null;
     const avgQPct = avgQ !== null ? avgQ * 100 : 0;
     
@@ -334,9 +403,14 @@ function targetLinesForLabels(labels) {
 export function buildQualityChart() {
     destroyChart(state.charts.quality);
     const byMarker = {};
+    const qualityKeys = new Set();
     for (const r of state.filteredData) {
         if (r.marker && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
-            (byMarker[r.marker] = byMarker[r.marker] || []).push(r.quality);
+            const key = r.marker + '|' + r.fileName;
+            if (!qualityKeys.has(key)) {
+                qualityKeys.add(key);
+                (byMarker[r.marker] = byMarker[r.marker] || []).push(r.quality);
+            }
         }
     }
     const labels = Object.keys(byMarker).sort();
@@ -368,9 +442,14 @@ export function buildErrorChart() {
 export function buildPoolQualityChart() {
     destroyChart(state.charts.poolQuality);
     const byPool = {};
+    const qualityKeys = new Set();
     for (const r of state.filteredData) {
         if (r.pool && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
-            (byPool[r.pool] = byPool[r.pool] || []).push(r.quality);
+            const key = r.pool + '|' + r.marker + '|' + r.fileName;
+            if (!qualityKeys.has(key)) {
+                qualityKeys.add(key);
+                (byPool[r.pool] = byPool[r.pool] || []).push(r.quality);
+            }
         }
     }
     const labels = Object.keys(byPool).sort();
@@ -389,10 +468,15 @@ export function buildPoolQualityChart() {
 export function buildDayQualityChart() {
     destroyChart(state.charts.dayQuality);
     const byDate = {};
+    const qualityKeys = new Set();
     for (const r of state.filteredData) {
         if (r.date && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
             const k = formatDate(r.date);
-            (byDate[k] = byDate[k] || []).push(r.quality);
+            const key = k + '|' + r.marker + '|' + r.fileName;
+            if (!qualityKeys.has(key)) {
+                qualityKeys.add(key);
+                (byDate[k] = byDate[k] || []).push(r.quality);
+            }
         }
     }
     const labels = Object.keys(byDate).sort((a, b) =>
@@ -463,25 +547,68 @@ export function buildTrendChart() {
     });
 }
 
+// ===== ГЛАВНАЯ ТАБЛИЦА С ПАГИНАЦИЕЙ И ГРУППИРОВКОЙ =====
 export function buildTable() {
     const tbody = document.getElementById('tableBody');
-    const rows = state.filteredData.slice(0, 300);
-    tbody.innerHTML = rows.map(r => {
-        const badgeClass = r.result === 'Ошибка' ? 'badge-error' : r.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
-        
-        const link = r.result === 'Рекомендация'
-            ? (r._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fde8e8;color:#e55555">нет пары</span>')
-            : '—';
+    if (!tbody) return;
 
+    // 1. Группировка данных по разметчику и файлу
+    const grouped = {};
+    for (const r of state.filteredData) {
+        const key = (r.marker || '') + '|' + (r.fileName || '');
+        if (!grouped[key]) {
+            grouped[key] = {
+                date: r.date,
+                project: r.project,
+                pool: r.pool,
+                marker: r.marker,
+                fileName: r.fileName,
+                quality: r.quality,
+                fragments: r.fragments,
+                url: r.url,
+                orgId: r.orgId,
+                assignmentId: r.assignmentId,
+                itemId: r.itemId,
+                _type: r._type,
+                _linked: r._linked,
+                items: []
+            };
+        }
+        if (r.result === 'Ошибка' || r.result === 'Рекомендация') {
+            grouped[key].items.push({
+                result: r.result,
+                errorType: r.errorType,
+                comment: r.comment,
+                interval: r.interval
+            });
+        } else if (r.result === 'Ошибки не выявлены' && grouped[key].items.length === 0) {
+            grouped[key].items.push({
+                result: r.result,
+                errorType: r.errorType,
+                comment: r.comment,
+                interval: r.interval
+            });
+        }
+    }
+
+    const groupedArray = Object.values(grouped);
+    const totalItems = groupedArray.length;
+    const currentPage = state.pagination.mainData;
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+    const rows = groupedArray.slice(startIndex, endIndex);
+
+    // 2. Рендер строк
+    tbody.innerHTML = rows.map(g => {
         let valLink = '—';
         let hasLink = false;
         let linkUrl = '';
 
-        if (r.url) {
-            linkUrl = r.url;
+        if (g.url) {
+            linkUrl = g.url;
             hasLink = true;
-        } else if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
-            linkUrl = getValidationUrl(r.orgId, r.assignmentId, r.itemId);
+        } else if (g._type === 'validation' && g.orgId && g.assignmentId && g.itemId) {
+            linkUrl = getValidationUrl(g.orgId, g.assignmentId, g.itemId);
             if (linkUrl) hasLink = true;
         }
 
@@ -489,26 +616,43 @@ export function buildTable() {
             valLink = `<a href="${linkUrl}" target="_blank" class="badge-link">Перейти</a>`;
         }
 
-        const fileName = r.fileName ? escapeHtml(r.fileName.slice(0, 40)) : '';
-        const fileNameTitle = escapeHtml(r.fileName || '');
-        const comment = r.comment ? escapeHtml(r.comment.slice(0, 100)) : ''; 
-        const commentTitle = escapeHtml(r.comment || '');
+        const fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
+        const fileNameTitle = escapeHtml(g.fileName || '');
         
+        // Формируем списки ошибок в одной ячейке
+        const resBadges = g.items.map(item => {
+            const badgeClass = item.result === 'Ошибка' ? 'badge-error' : item.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
+            return `<span class="badge ${badgeClass}" style="margin-bottom: 4px; display: inline-block;">${escapeHtml(item.result || '')}</span>`;
+        }).join('<br>');
+
+        const errTypes = g.items.map(item => escapeHtml(item.errorType || '')).join('<br>');
+        const comments = g.items.map(item => {
+            const c = item.comment ? escapeHtml(item.comment.slice(0, 100)) : '';
+            return c ? `<span title="${escapeHtml(item.comment)}">${c}</span>` : '';
+        }).join('<br>');
+        const intervals = g.items.map(item => escapeHtml(item.interval || '')).join('<br>');
+
+        const link = g._type === 'recommendations'
+            ? (g._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fde8e8;color:#e55555">нет пары</span>')
+            : '—';
+
         return `<tr>
-            <td>${r.date ? formatDate(r.date) : ''}</td>
-            <td>${escapeHtml(r.project || '')}</td>
-            <td>${escapeHtml(r.pool || '')}</td>
-            <td>${escapeHtml(r.marker || '')}</td>
+            <td>${g.date ? formatDate(g.date) : ''}</td>
+            <td>${escapeHtml(g.project || '')}</td>
+            <td>${escapeHtml(g.pool || '')}</td>
+            <td>${escapeHtml(g.marker || '')}</td>
             <td title="${fileNameTitle}">${fileName}</td>
-            <td><span class="badge ${badgeClass}">${escapeHtml(r.result || '')}</span></td>
-            <td>${escapeHtml(r.errorType || '')}</td>
-            <td title="${commentTitle}">${comment}</td>
-            <td>${escapeHtml(r.interval || '')}</td>
-            <td>${r.quality !== null && !isNaN(r.quality) ? (r.quality * 100).toFixed(1) + '%' : ''}</td>
+            <td style="vertical-align: top;">${resBadges}</td>
+            <td style="vertical-align: top;">${errTypes}</td>
+            <td style="vertical-align: top;">${comments}</td>
+            <td style="vertical-align: top;">${intervals}</td>
+            <td>${g.quality !== null && !isNaN(g.quality) ? (g.quality * 100).toFixed(1) + '%' : ''}</td>
             <td>${valLink}</td>
             <td>${link}</td>
         </tr>`;
     }).join('');
+
+    renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, 'mainData');
 }
 
 // ============================================================
@@ -555,24 +699,26 @@ export function renderErrorsTable() {
 
         if (r.project && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
             if (!markerStats[r.marker].projectQuality[r.project]) {
-                markerStats[r.marker].projectQuality[r.project] = [];
+                markerStats[r.marker].projectQuality[r.project] = new Set();
             }
-            markerStats[r.marker].projectQuality[r.project].push(r.quality);
+            markerStats[r.marker].projectQuality[r.project].add(r.fileName);
         }
 
         if (r.result === 'Ошибка') {
-            markerStats[r.marker].totalErrors++;
+            const weight = r.errorType === 'Некритичная ошибка' ? 0.5 : 1;
+            markerStats[r.marker].totalErrors += weight;
+            
             const type = r.errorType || 'Неизвестная';
             if (!markerStats[r.marker].errorTypes[type]) {
                 markerStats[r.marker].errorTypes[type] = { count: 0, pools: {} };
             }
-            markerStats[r.marker].errorTypes[type].count++;
+            markerStats[r.marker].errorTypes[type].count += weight;
             
             const pool = r.pool || 'Неизвестный пул';
             if (!markerStats[r.marker].errorTypes[type].pools[pool]) {
                 markerStats[r.marker].errorTypes[type].pools[pool] = { count: 0, comments: [] };
             }
-            markerStats[r.marker].errorTypes[type].pools[pool].count++;
+            markerStats[r.marker].errorTypes[type].pools[pool].count += weight;
             if (r.comment && !markerStats[r.marker].errorTypes[type].pools[pool].comments.includes(r.comment)) {
                 markerStats[r.marker].errorTypes[type].pools[pool].comments.push(r.comment);
             }
@@ -599,11 +745,27 @@ export function renderErrorsTable() {
         const fio = emailToFio[markerEmail.toLowerCase()] || markerEmail;
         const errorRate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
 
+        // Считаем уникальные файлы для расчета среднего качества
+        const uniqueFileQuality = {};
+        for (const r of filtered) {
+            if (r.marker === markerEmail && r.project && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+                uniqueFileQuality[r.fileName] = r.quality;
+            }
+        }
+
         let qualityHtml = '<ul class="project-quality-list">';
         for (const proj in stats.projectQuality) {
-            const arr = stats.projectQuality[proj];
-            const avg = (arr.reduce((a, b) => a + b, 0) / arr.length) * 100;
-            qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${avg.toFixed(1)}%</strong></li>`;
+            const fileNames = stats.projectQuality[proj];
+            let sumQ = 0, cntQ = 0;
+            for (const fn of fileNames) {
+                if (uniqueFileQuality[fn] !== undefined) {
+                    sumQ += uniqueFileQuality[fn];
+                    cntQ++;
+                }
+            }
+            if (cntQ > 0) {
+                qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${((sumQ/cntQ)*100).toFixed(1)}%</strong></li>`;
+            }
         }
         qualityHtml += '</ul>';
         if (Object.keys(stats.projectQuality).length === 0) {
@@ -667,7 +829,7 @@ export function renderErrorsTable() {
                     <div class="inner-card">
                         <div class="inner-card-title">Процент ошибок</div>
                         <div class="inner-card-value" style="color: var(--danger);">${errorRate.toFixed(2)}%</div>
-                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 4px;">${stats.totalErrors} из ${stats.totalFragments} фрагментов</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 4px;">${stats.totalErrors.toFixed(1)} из ${stats.totalFragments} фрагментов</div>
                     </div>
 
                     <div class="inner-card">
@@ -750,6 +912,12 @@ export function onSupersetTaskChange(value, isChecked) {
     if (isChecked) state.superset.filters.tasks.add(value);
     else state.superset.filters.tasks.delete(value);
     updateSupersetTaskLabel();
+    
+    state.pagination.superset1 = 1;
+    state.pagination.superset2 = 1;
+    state.pagination.superset3 = 1;
+    state.pagination.superset4 = 1;
+
     applySupersetFilters();
     renderSupersetPage();
 }
@@ -757,6 +925,12 @@ export function onSupersetTaskChange(value, isChecked) {
 export function onSupersetDateChange() {
     state.superset.filters.dateFrom = document.getElementById('supersetDateFrom').value;
     state.superset.filters.dateTo = document.getElementById('supersetDateTo').value;
+    
+    state.pagination.superset1 = 1;
+    state.pagination.superset2 = 1;
+    state.pagination.superset3 = 1;
+    state.pagination.superset4 = 1;
+
     applySupersetFilters();
     renderSupersetPage();
 }
@@ -773,6 +947,11 @@ export function resetSupersetFilters() {
     if (dt) dt.value = '';
     document.querySelectorAll('#msSupersetTask_options input').forEach(cb => { cb.checked = false; });
     updateSupersetTaskLabel();
+
+    state.pagination.superset1 = 1;
+    state.pagination.superset2 = 1;
+    state.pagination.superset3 = 1;
+    state.pagination.superset4 = 1;
 
     applySupersetFilters();
     renderSupersetPage();
@@ -901,6 +1080,11 @@ export function onSupersetTableFilterChange(tableId, colKey, value, isChecked) {
         }
     }
 
+    state.pagination.superset1 = 1;
+    state.pagination.superset2 = 1;
+    state.pagination.superset3 = 1;
+    state.pagination.superset4 = 1;
+
     applySupersetFilters();
     renderSupersetPage();
 }
@@ -915,25 +1099,33 @@ function renderSupersetTable1() {
         filtersRow.innerHTML = renderTableFilters('t1', configs, state.superset.table1 || []);
     }
 
-    const rows = state.superset.filteredTable1 || [];
+    const allRows = state.superset.filteredTable1 || [];
+    const totalItems = allRows.length;
+    const currentPage = state.pagination.superset1;
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+    const rows = allRows.slice(startIndex, endIndex);
+
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
-        return;
+    } else {
+        tbody.innerHTML = rows.map(r => `<tr>
+            <td>${escapeHtml(r.project)}</td>
+            <td>${escapeHtml(r.task)}</td>
+            <td>${escapeHtml(String(r.fragments))}</td>
+            <td>${escapeHtml(String(r.normQuality))}</td>
+            <td>${escapeHtml(String(r.quality))}</td>
+            <td>${escapeHtml(String(r.comment))}</td>
+            <td>${escapeHtml(String(r.withoutQuality))}</td>
+            <td>${escapeHtml(String(r.ballsPerHour))}</td>
+            <td>${escapeHtml(String(r.prodPerHour))}</td>
+            <td>${escapeHtml(String(r.price))}</td>
+            <td>${escapeHtml(String(r.taskType))}</td>
+            <td>${escapeHtml(formatPeriod(r.dateStart, r.dateEnd))}</td>
+        </tr>`).join('');
     }
-    tbody.innerHTML = rows.map(r => `<tr>
-        <td>${escapeHtml(r.project)}</td>
-        <td>${escapeHtml(r.task)}</td>
-        <td>${escapeHtml(String(r.fragments))}</td>
-        <td>${escapeHtml(String(r.normQuality))}</td>
-        <td>${escapeHtml(String(r.quality))}</td>
-        <td>${escapeHtml(String(r.comment))}</td>
-        <td>${escapeHtml(String(r.withoutQuality))}</td>
-        <td>${escapeHtml(String(r.ballsPerHour))}</td>
-        <td>${escapeHtml(String(r.prodPerHour))}</td>
-        <td>${escapeHtml(String(r.price))}</td>
-        <td>${escapeHtml(String(r.taskType))}</td>
-        <td>${escapeHtml(formatPeriod(r.dateStart, r.dateEnd))}</td>
-    </tr>`).join('');
+
+    renderPaginationControls('pagination-superset1-controls', 'pagination-superset1-info', totalItems, 'superset1');
 }
 
 function renderSupersetTable2() {
@@ -946,23 +1138,31 @@ function renderSupersetTable2() {
         filtersRow.innerHTML = renderTableFilters('t2', configs, state.superset.table2 || []);
     }
 
-    const rows = state.superset.filteredTable2 || [];
+    const allRows = state.superset.filteredTable2 || [];
+    const totalItems = allRows.length;
+    const currentPage = state.pagination.superset2;
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+    const rows = allRows.slice(startIndex, endIndex);
+
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
-        return;
+    } else {
+        tbody.innerHTML = rows.map(r => `<tr>
+            <td>${r.date ? formatDate(r.date) : ''}</td>
+            <td>${escapeHtml(r.fio)}</td>
+            <td>${escapeHtml(r.project)}</td>
+            <td>${escapeHtml(r.task)}</td>
+            <td>${escapeHtml(String(r.fragments))}</td>
+            <td>${escapeHtml(String(r.balls))}</td>
+            <td>${escapeHtml(String(r.qualitySuperset))}</td>
+            <td>${r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '—'}</td>
+            <td>${escapeHtml(String(r.norm))}</td>
+            <td>${escapeHtml(String(r.withoutQuality))}</td>
+        </tr>`).join('');
     }
-    tbody.innerHTML = rows.map(r => `<tr>
-        <td>${r.date ? formatDate(r.date) : ''}</td>
-        <td>${escapeHtml(r.fio)}</td>
-        <td>${escapeHtml(r.project)}</td>
-        <td>${escapeHtml(r.task)}</td>
-        <td>${escapeHtml(String(r.fragments))}</td>
-        <td>${escapeHtml(String(r.balls))}</td>
-        <td>${escapeHtml(String(r.qualitySuperset))}</td>
-        <td>${r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '—'}</td>
-        <td>${escapeHtml(String(r.norm))}</td>
-        <td>${escapeHtml(String(r.withoutQuality))}</td>
-    </tr>`).join('');
+
+    renderPaginationControls('pagination-superset2-controls', 'pagination-superset2-info', totalItems, 'superset2');
 }
 
 function renderSupersetTable3() {
@@ -975,16 +1175,24 @@ function renderSupersetTable3() {
         filtersRow.innerHTML = renderTableFilters('t3', configs, state.superset.table3 || []);
     }
 
-    const rows = state.superset.filteredTable3 || [];
+    const allRows = state.superset.filteredTable3 || [];
+    const totalItems = allRows.length;
+    const currentPage = state.pagination.superset3;
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+    const rows = allRows.slice(startIndex, endIndex);
+
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
-        return;
+    } else {
+        tbody.innerHTML = rows.map(r => `<tr>
+            <td>${r.date ? formatDate(r.date) : ''}</td>
+            <td>${escapeHtml(r.project)}</td>
+            <td>${escapeHtml(String(r.price))}</td>
+        </tr>`).join('');
     }
-    tbody.innerHTML = rows.map(r => `<tr>
-        <td>${r.date ? formatDate(r.date) : ''}</td>
-        <td>${escapeHtml(r.project)}</td>
-        <td>${escapeHtml(String(r.price))}</td>
-    </tr>`).join('');
+
+    renderPaginationControls('pagination-superset3-controls', 'pagination-superset3-info', totalItems, 'superset3');
 }
 
 function renderSupersetTable4() {
@@ -997,14 +1205,22 @@ function renderSupersetTable4() {
         filtersRow.innerHTML = renderTableFilters('t4', configs, state.superset.table4 || []);
     }
 
-    const rows = state.superset.filteredTable4 || [];
+    const allRows = state.superset.filteredTable4 || [];
+    const totalItems = allRows.length;
+    const currentPage = state.pagination.superset4;
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+    const rows = allRows.slice(startIndex, endIndex);
+
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
-        return;
+    } else {
+        tbody.innerHTML = rows.map(r => `<tr>
+            <td>${escapeHtml(r.fio)}</td>
+            <td>${r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '—'}</td>
+            <td>${r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '—'}</td>
+        </tr>`).join('');
     }
-    tbody.innerHTML = rows.map(r => `<tr>
-        <td>${escapeHtml(r.fio)}</td>
-        <td>${r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '—'}</td>
-        <td>${r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '—'}</td>
-    </tr>`).join('');
+
+    renderPaginationControls('pagination-superset4-controls', 'pagination-superset4-info', totalItems, 'superset4');
 }
