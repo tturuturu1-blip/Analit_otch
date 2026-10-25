@@ -20,13 +20,23 @@ export const state = {
     currentTab: 'all',
     currentMenu: 'main',
     projects: [],
+    
     filterState: {
         pool: new Set(),
         marker: new Set(),
         result: new Set(),
         feedbackPool: new Set(),
+        feedbackGroup: new Set(), // <-- Добавлено для фильтра групп
         fbFormPools: new Set()
     },
+
+    // Состояние для генерации фидбека (Создание ссылок и HTML)
+    feedbackGeneration: {
+        appliedPools: new Set(),  // Пулы, выбранные после нажатия "Применить"
+        appliedGroups: new Set(), // Группы, выбранные после нажатия "Применить"
+        videoLinks: {}            // Ссылки на видео: { "email|filename": "url" }
+    },
+
     superset: {
         table1: [],
         table2: [],
@@ -50,7 +60,6 @@ export const state = {
             globalAvg: null
         },
         filters: {
-            // projects: больше не используется — фильтрация идёт через state.currentTab
             dateFrom: '',
             dateTo: '',
             tasks: new Set()
@@ -63,7 +72,7 @@ export const state = {
         },
         normHistory: DEFAULT_NORM_HISTORY.slice(),
         employeeMap: { fioToEmail: {}, emailToFio: {} },
-        _mainProjects: null   // Set<string> — кэш проектов главной страницы
+        _mainProjects: null
     }
 };
 
