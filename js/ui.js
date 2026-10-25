@@ -351,8 +351,7 @@ export function updateKPI() {
     const avgQ = qualityCount ? qualitySum / qualityCount : null;
     const avgQPct = avgQ !== null ? avgQ * 100 : 0;
     
-    const target = state.superset.norms.globalAvg;
-    const targetVal = target != null ? target : 98;
+    const target = state.superset.norms.globalAvg; // Берем только из суперсета
 
     const elTotalFragments = document.getElementById('kpiTotalFragments');
     const elTotalMarkers = document.getElementById('kpiTotalMarkers');
@@ -374,8 +373,9 @@ export function updateKPI() {
     if (elTotalMarkers) elTotalMarkers.classList.add('val-brown');
     if (elTargetQuality) elTargetQuality.classList.add('val-brown');
 
-    const isRed = (errorPercent > 5) && (avgQPct < targetVal);
-    const isGreen = (errorPercent <= 5) && (avgQPct >= targetVal);
+    // Логика цветов работает только если есть норматив
+    const isRed = (target != null) && (errorPercent > 5) && (avgQPct < target);
+    const isGreen = (target != null) && (errorPercent <= 5) && (avgQPct >= target);
 
     if (isRed) {
         if (elErrorsPercent) elErrorsPercent.classList.add('val-red');
@@ -394,10 +394,7 @@ function targetLinesForLabels(labels) {
     if (target != null) {
         return [{ label: 'Целевое (суперсет)', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 }];
     }
-    return [
-        { label: 'Норма 98%', data: Array(labels.length).fill(98), type: 'line', borderDash: [5, 5], borderColor: '#FFC107', borderWidth: 2, pointRadius: 0, order: 1 },
-        { label: 'Норма 99%', data: Array(labels.length).fill(99), type: 'line', borderDash: [5, 5], borderColor: '#e55555', borderWidth: 2, pointRadius: 0, order: 1 }
-    ];
+    return []; // Без хардкода 98/99
 }
 
 export function buildQualityChart() {
@@ -484,24 +481,16 @@ export function buildDayQualityChart() {
     const values = labels.map(d => (byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length) * 100);
 
     const target = state.superset.norms.globalAvg;
-    let targetData, targetLabel;
+    const datasets = [
+        { label: 'Ср. качество, %', data: values, borderColor: '#1f1f1f', backgroundColor: 'rgba(31, 31, 31, 0.05)', tension: .4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, order: 2 }
+    ];
     if (target != null) {
-        targetData = labels.map(() => target);
-        targetLabel = 'Целевое качество (суперсет)';
-    } else {
-        targetData = labels.map(d => {
-            const p = d.split('.');
-            return new Date(p[2], p[1] - 1, p[0]) < new Date(2026, 9, 20) ? 98 : 99;
-        });
-        targetLabel = 'Контрольная линия';
+        datasets.push({ label: 'Целевое качество (суперсет)', data: labels.map(() => target), borderColor: '#e55555', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
     }
 
     state.charts.dayQuality = new Chart(document.getElementById('chartDayQuality'), {
         type: 'line',
-        data: { labels, datasets: [
-            { label: 'Ср. качество, %', data: values, borderColor: '#1f1f1f', backgroundColor: 'rgba(31, 31, 31, 0.05)', tension: .4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, order: 2 },
-            { label: targetLabel, data: targetData, borderColor: '#e55555', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, stepped: target == null, order: 1 }
-        ]},
+        data: { labels, datasets },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
