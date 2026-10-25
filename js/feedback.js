@@ -39,7 +39,7 @@ function getMarkerGroup(markerEmail) {
     return '';
 }
 
-// ===== Рендер таблиц обратной связи (Существующая логика) =====
+// ===== Рендер таблиц обратной связи =====
 function renderFeedbackRows(tbodyId, includeActions) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
@@ -121,7 +121,6 @@ export function renderFeedbackTable() {
             .join('');
     }
 
-    // Заполняем фильтр групп
     const groupOptions = document.getElementById('msFbGroup_options');
     if (groupOptions) {
         const groups = getGroups();
@@ -147,7 +146,7 @@ export function renderFeedbackTableHome() {
     renderFeedbackRows('fbTableBodyHome', false);
 }
 
-// ===== Новая логика создания фидбека =====
+// ===== Логика создания фидбека =====
 
 export function applyFeedbackFilters() {
     const container = document.getElementById('feedbackGenerationBlocks');
@@ -201,8 +200,8 @@ export function applyFeedbackFilters() {
                 const savedCode = state.feedbackGeneration.videoLinks[linkKey] || '';
                 html += `
                 <div class="feedback-link-input-group">
-                    <label>${escapeHtml(file)} (HTML-код видео)</label>
-                    <textarea rows="3" placeholder="Вставьте сюда HTML-код (iframe) с Kinescope..." 
+                    <label>${escapeHtml(file)} (HTML-код видео или ссылка)</label>
+                    <textarea rows="2" placeholder="Вставьте сюда код <iframe> или ссылку на видео..." 
                            oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">${escapeHtml(savedCode)}</textarea>
                 </div>`;
             }
@@ -239,7 +238,6 @@ export function generateFeedbackHtml() {
         return;
     }
 
-    // Структурируем данные для отчета
     const reportData = {};
     for (const r of filtered) {
         const proj = r.project ? r.project.replace(/_validate$/, '') : 'Неизвестный проект';
@@ -270,7 +268,7 @@ export function generateFeedbackHtml() {
                 type: r.errorType || 'Неизвестная',
                 interval: r.interval || '',
                 comment: r.comment || '',
-                fileName: fileKey // Сохраняем имя файла для каждой ошибки
+                fileName: fileKey
             });
         }
     }
@@ -286,10 +284,27 @@ export function generateFeedbackHtml() {
             for (const marker in reportData[proj][pool]) {
                 const mData = reportData[proj][pool][marker];
                 
-                // Формируем блоки для каждого уникального файла
                 let filesHtml = '';
                 mData.uniqueFiles.forEach(file => {
                     const embedCode = state.feedbackGeneration.videoLinks[`${marker}|${file}`] || '';
+                    
+                    // ▼▼▼ Извлекаем URL видео для безопасного открытия в новой вкладке ▼▼▼
+                    let videoUrl = '';
+                    if (embedCode.includes('<iframe')) {
+                        const match = embedCode.match(/src=["']([^"']+)["']/);
+                        if (match) videoUrl = match[1];
+                    } else if (embedCode.trim().startsWith('http')) {
+                        videoUrl = embedCode.trim();
+                    }
+
+                    const videoContent = videoUrl 
+                        ? `<a href="${videoUrl}" target="_blank" class="video-button">
+                               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                               Смотреть видео
+                           </a>`
+                        : '<div class="video-placeholder">Код видео не указан или неверен</div>';
+                    // ▲▲▲
+
                     const fileErrors = mData.errors.filter(e => e.fileName === file);
                     
                     let errorsHtml = '';
@@ -302,11 +317,8 @@ export function generateFeedbackHtml() {
                             errorsByType[err.type].push(err);
                         }
 
-                        const totalErrCount = fileErrors.length;
-                        
                         for (const type in errorsByType) {
                             const errs = errorsByType[type];
-                            // Считаем процент от ОБЩЕГО числа фрагментов у разметчика в этом пуле
                             const percent = mData.totalFragments > 0 
                                 ? ((errs.length / mData.totalFragments) * 100).toFixed(2) 
                                 : '0.00';
@@ -329,11 +341,6 @@ export function generateFeedbackHtml() {
                             </div>`;
                         }
                     }
-
-                    // Если embedCode пустой, показываем заглушку
-                    const videoContent = embedCode.trim() 
-                        ? embedCode 
-                        : '<div class="video-placeholder">Код видео не указан</div>';
 
                     filesHtml += `
                     <div class="file-block">
@@ -373,7 +380,7 @@ export function generateFeedbackHtml() {
         }
     }
 
-    // Шаблон документа с исправленной версткой (левое выравнивание, полная ширина)
+    // Шаблон документа с исправленной версткой
     const htmlContent = `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -445,14 +452,33 @@ export function generateFeedbackHtml() {
         }
         
         .video-wrapper { 
-            border-radius: 12px; overflow: hidden; border: 1px solid var(--border); 
-            background: #000; width: 100%; max-width: 800px;
+            width: 100%; max-width: 400px;
         }
-        .video-wrapper iframe { width: 100%; aspect-ratio: 16/9; border: none; display: block; }
         
+        /* Стили для новой кнопки видео */
+        .video-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--text);
+            color: #fff;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: opacity 0.2s;
+        }
+        .video-button:hover { opacity: 0.8; }
+        .video-button svg { width: 20px; height: 20px; }
+
         .video-placeholder { 
-            aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; 
-            color: #fff; font-size: 0.9rem; background: #222; 
+            padding: 15px 20px; 
+            color: var(--muted); 
+            background: rgba(0,0,0,0.03);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-style: italic;
         }
         
         .errors-section { 
