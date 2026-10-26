@@ -1,3 +1,7 @@
+// js/data.js — ИТЕРАЦИЯ 1, файл 1/5
+// Изменено: 2 места (формула quality в processFlatValidations и recomputeDashboard)
+// Остальное — без изменений
+
 import { state, saveToStorage } from './state.js';
 import {
     parseExcelDate, getVal, stripJson, formatInterval,
@@ -98,6 +102,25 @@ export async function processNewRows(results) {
     await recomputeDashboard();
 }
 
+// ★ НОВАЯ ФУНКЦИЯ (Итерация 1): расчёт качества с защитой от крайних значений
+function computeQuality(sumWeights, totalFragments, mistakesCount) {
+    // Нет ошибок — 100% (даже если фрагментов 0 — данных нет, не ошибка)
+    if (mistakesCount === 0) return 1;
+
+    // Есть ошибки, но нет фрагментов — аномалия, считаем 0%
+    if (totalFragments === 0) return 0;
+
+    // Обычный расчёт
+    let q = 1 - (sumWeights / totalFragments);
+
+    // Защита от крайних значений
+    if (!isFinite(q) || isNaN(q)) return 0;  // Infinity / NaN → 0
+    if (q < 0) return 0;                     // отрицательное → 0
+    if (q > 1) return 1;                     // больше 100% → 100%
+
+    return q;
+}
+
 function processFlatValidations() {
     if (!state.rawFlatValidations || state.rawFlatValidations.length === 0) return;
 
@@ -151,7 +174,6 @@ function processFlatValidations() {
                 if (radio == null) continue;
                 const s = String(radio).trim();
                 if (s === '' || s === '-') continue;
-                // Учет веса для некритичных ошибок
                 const weight = s === 'Некритичная ошибка' ? 0.5 : 1;
                 mistakes.push({ typ: s, weight });
             }
@@ -163,10 +185,8 @@ function processFlatValidations() {
         }
 
         const sumWeights = mistakes.reduce((a, b) => a + b.weight, 0);
-        // Итоговое качество по заданию (1 - взвешенные ошибки / фрагменты)
-        const quality = (totalFragments === 0 || mistakes.length === 0)
-            ? 1
-            : 1 - (sumWeights / totalFragments);
+        // ★ ИЗМЕНЕНО (Итерация 1): новая формула с защитой
+        const quality = computeQuality(sumWeights, totalFragments, mistakes.length);
 
         if (mistakes.length === 0) {
             state.processedData.push({
@@ -271,7 +291,6 @@ export async function recomputeDashboard() {
                     mistakes = segments.filter(d => d.entityId === 'mistake').map(m => {
                         const typ = m.fields?.radio?.value || 'Неизвестная ошибка';
                         const comm = m.fields?.comment?.value || '';
-                        // Учет веса для некритичных ошибок
                         const weight = typ === 'Некритичная ошибка' ? 0.5 : 1;
                         return { typ, comm, weight, interval: formatInterval(m.position?.start, m.position?.finish) };
                     });
@@ -280,7 +299,8 @@ export async function recomputeDashboard() {
         }
 
         const sumWeights = mistakes.reduce((a, b) => a + b.weight, 0);
-        const quality = (totalFragments === 0 || mistakes.length === 0) ? 1 : 1 - (sumWeights / totalFragments);
+        // ★ ИЗМЕНЕНО (Итерация 1): новая формула с защитой
+        const quality = computeQuality(sumWeights, totalFragments, mistakes.length);
 
         if (mistakes.length === 0) {
             state.processedData.push({
