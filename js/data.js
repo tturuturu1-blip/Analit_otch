@@ -1,8 +1,8 @@
-// js/data.js — ИТЕРАЦИЯ 1, файл 4/5 (ИСПРАВЛЕННЫЙ)
-// Изменено:
-//   1. computeQuality — защита от NaN, Infinity, <0, >1 (из прошлой версии)
-//   2. processFlatValidations — ключ группировки теперь email|file_name (БЫЛО url|email|file_name|дата)
-// Остальное — без изменений
+// js/data.js — ИТЕРАЦИЯ 1, файл 1/5 (ОБНОВЛЁННЫЙ)
+// Изменено по сравнению с предыдущей версией:
+//   - ключ группировки в processFlatValidations: email|file_name|project|pool
+//     (было email|file_name — склеивало файлы из разных проектов в одно задание)
+// Остальное — без изменений.
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -104,22 +104,14 @@ export async function processNewRows(results) {
     await recomputeDashboard();
 }
 
-// ★ НОВАЯ ФУНКЦИЯ (Итерация 1): расчёт качества с защитой от крайних значений
+// ★ Расчёт качества с защитой от крайних значений
 function computeQuality(sumWeights, totalFragments, mistakesCount) {
-    // Нет ошибок — 100% (даже если фрагментов 0 — данных нет, не ошибка)
     if (mistakesCount === 0) return 1;
-
-    // Есть ошибки, но нет фрагментов — аномалия, считаем 0%
     if (totalFragments === 0) return 0;
-
-    // Обычный расчёт
     let q = 1 - (sumWeights / totalFragments);
-
-    // Защита от крайних значений
-    if (!isFinite(q) || isNaN(q)) return 0;  // Infinity / NaN → 0
-    if (q < 0) return 0;                     // отрицательное → 0
-    if (q > 1) return 1;                     // больше 100% → 100%
-
+    if (!isFinite(q) || isNaN(q)) return 0;
+    if (q < 0) return 0;
+    if (q > 1) return 1;
     return q;
 }
 
@@ -129,12 +121,13 @@ function processFlatValidations() {
     const groups = {};
     for (const r of state.rawFlatValidations) {
         if (!r) continue;
-        // ★ ИЗМЕНЕНО (Итерация 1): ключ теперь email|file_name
-        // Было: url|email|file_name|дата — это разбивало одно задание на несколько,
-        // если у разных строк одного задания отличались url или дата.
+        // ★ ИЗМЕНЕНО: ключ включает project и pool
+        // Это позволяет различить одно и то же задание в разных проектах/пулах
         const email = getVal(r, 'email') || '';
         const fileNameRaw = getVal(r, 'file_name') || '';
-        const key = [email, fileNameRaw].join('|');
+        const projectKey = getVal(r, 'Проект') || '';
+        const poolKey = getVal(r, 'Пул') || '';
+        const key = [email, fileNameRaw, projectKey, poolKey].join('|');
         if (!groups[key]) groups[key] = [];
         groups[key].push(r);
     }
@@ -188,7 +181,6 @@ function processFlatValidations() {
         }
 
         const sumWeights = mistakes.reduce((a, b) => a + b.weight, 0);
-        // ★ ИЗМЕНЕНО (Итерация 1): новая формула с защитой
         const quality = computeQuality(sumWeights, totalFragments, mistakes.length);
 
         if (mistakes.length === 0) {
@@ -302,7 +294,6 @@ export async function recomputeDashboard() {
         }
 
         const sumWeights = mistakes.reduce((a, b) => a + b.weight, 0);
-        // ★ ИЗМЕНЕНО (Итерация 1): новая формула с защитой
         const quality = computeQuality(sumWeights, totalFragments, mistakes.length);
 
         if (mistakes.length === 0) {
