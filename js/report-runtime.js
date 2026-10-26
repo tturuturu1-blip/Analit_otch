@@ -1,10 +1,18 @@
+// js/report-runtime.js — ИТЕРАЦИЯ 1, файл 5/5 (ОБНОВЛЁННЫЙ)
+// Изменено:
+//   1. Фильтр quality: было `> 0`, стало `!= null && isFinite` (4 места)
+//   2. Ключи дедупликации содержат project и pool (6 мест)
+//   3. Домен tag.devaices.ru → tagme.sberdevices.ru + escapeHtml(url)
+//   4. .replace('_validate', '') → .replace(/_validate$/, '')
+// Остальное — без изменений
+
 (function () {
     'use strict';
 
     var REPORT_DATA = JSON.parse(document.getElementById('report-data').textContent);
     var processedData = REPORT_DATA.processedData || [];
     var feedbackData = REPORT_DATA.feedbackData || [];
-    var targetQualityGlobal = REPORT_DATA.targetQuality || null; // Получаем из report.js
+    var targetQualityGlobal = REPORT_DATA.targetQuality || null;
 
     var ITEMS_PER_PAGE = 10;
     var currentPage = 1;
@@ -34,13 +42,14 @@
             .replace(/'/g, '&#39;');
     }
 
+    // ★ ИЗМЕНЕНО: правильный домен + escapeHtml для URL
     function getValidationLink(r) {
         if (r.url) {
-            return '<a href="' + r.url + '" target="_blank" class="badge-link">Перейти</a>';
+            return '<a href="' + escapeHtml(r.url) + '" target="_blank" class="badge-link">Перейти</a>';
         }
         if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
-            var constructedUrl = 'https://tag.devaices.ru/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
-            return '<a href="' + constructedUrl + '" target="_blank" class="badge-link">Перейти</a>';
+            var constructedUrl = 'https://tagme.sberdevices.ru/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
+            return '<a href="' + escapeHtml(constructedUrl) + '" target="_blank" class="badge-link">Перейти</a>';
         }
         return '—';
     }
@@ -78,12 +87,16 @@
             return true;
         });
 
-        filteredFeedback = feedbackData.filter(function (f) {
-            if (currentTab === 'all') return true;
-            var validMarkers = new Set();
+        // Кэш validMarkers вне цикла (оптимизация)
+        var validMarkers = new Set();
+        if (currentTab !== 'all') {
             for (var i = 0; i < processedData.length; i++) {
                 if (matchesTab(processedData[i])) validMarkers.add(processedData[i].marker);
             }
+        }
+
+        filteredFeedback = feedbackData.filter(function (f) {
+            if (currentTab === 'all') return true;
             return validMarkers.has(f.marker);
         }).sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
     }
@@ -96,7 +109,8 @@
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
             if (r._type !== 'validation') continue;
-            var fileKey = r.marker + '|' + r.fileName + '|' + r.fragments;
+            // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+            var fileKey = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '') + '|' + r.fragments;
             if (!uniqueFiles.has(fileKey)) {
                 uniqueFiles.add(fileKey);
                 totalFragments += (r.fragments || 0);
@@ -117,8 +131,10 @@
                 weightedErrorsCount += weight;
             }
             
-            if (rr.quality !== null && !isNaN(rr.quality) && rr.quality > 0) {
-                var qKey = rr.marker + '|' + rr.fileName;
+            // ★ ИЗМЕНЕНО: было `quality > 0` — теперь `!= null && isFinite`
+            if (rr.quality != null && isFinite(rr.quality)) {
+                // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+                var qKey = (rr.marker || '') + '|' + (rr.project || '') + '|' + (rr.pool || '') + '|' + (rr.fileName || '');
                 if (!qualityKeys.has(qKey)) {
                     qualityKeys.add(qKey);
                     qualitySum += rr.quality;
@@ -140,7 +156,6 @@
             targetEl.textContent = targetQualityGlobal != null ? targetQualityGlobal.toFixed(1) + '%' : '—';
         }
 
-        // Подсветка KPI
         var elTotalFragments = document.getElementById('kpiTotalFragments');
         var elTotalMarkers = document.getElementById('kpiTotalMarkers');
         var elErrorsPercent = document.getElementById('kpiErrorsPercent');
@@ -186,8 +201,10 @@
         
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
-            if (r.marker && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
-                var key = r.marker + '|' + r.fileName;
+            // ★ ИЗМЕНЕНО: было `quality > 0` — теперь `!= null && isFinite`
+            if (r.marker && r.quality != null && isFinite(r.quality)) {
+                // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+                var key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
                 if (!qualityKeys.has(key)) {
                     qualityKeys.add(key);
                     if (!byMarker[r.marker]) byMarker[r.marker] = [];
@@ -254,8 +271,10 @@
         
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
-            if (r.pool && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
-                var key = r.pool + '|' + r.marker + '|' + r.fileName;
+            // ★ ИЗМЕНЕНО: было `quality > 0` — теперь `!= null && isFinite`
+            if (r.pool && r.quality != null && isFinite(r.quality)) {
+                // ★ ИЗМЕНЕНО: добавлен project в ключ
+                var key = (r.pool || '') + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.fileName || '');
                 if (!qualityKeys.has(key)) {
                     qualityKeys.add(key);
                     if (!byPool[r.pool]) byPool[r.pool] = [];
@@ -305,9 +324,11 @@
         
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
-            if (r.date && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+            // ★ ИЗМЕНЕНО: было `quality > 0` — теперь `!= null && isFinite`
+            if (r.date && r.quality != null && isFinite(r.quality)) {
                 var k = formatDate(r.date);
-                var key = k + '|' + r.marker + '|' + r.fileName;
+                // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+                var key = k + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
                 if (!qualityKeys.has(key)) {
                     qualityKeys.add(key);
                     if (!byDate[k]) byDate[k] = [];
@@ -462,11 +483,12 @@
         var tbody = document.getElementById('tableBody');
         if (!tbody) return;
 
-        // 1. Группировка данных по разметчику и файлу
+        // 1. Группировка данных — с project и pool
         var grouped = {};
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
-            var key = (r.marker || '') + '|' + (r.fileName || '');
+            // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+            var key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!grouped[key]) {
                 grouped[key] = {
                     date: r.date,
@@ -538,9 +560,10 @@
 
             var quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(1) + '%' : '';
 
+            // ★ ИЗМЕНЕНО: .replace(/_validate$/, '') с якорем
             html += '<tr>' +
                 '<td>' + (g.date ? formatDate(g.date) : '') + '</td>' +
-                '<td>' + escapeHtml((g.project || '').replace('_validate', '')) + '</td>' +
+                '<td>' + escapeHtml((g.project || '').replace(/_validate$/, '')) + '</td>' +
                 '<td>' + escapeHtml(g.pool || '') + '</td>' +
                 '<td>' + escapeHtml(g.marker || '') + '</td>' +
                 '<td title="' + fileNameTitle + '">' + fileName + '</td>' +
@@ -593,7 +616,7 @@
     }
 
     function triggerFilterUpdate() {
-        currentPage = 1; // Сброс страниц при обновлении фильтров
+        currentPage = 1;
         currentPageFb = 1;
         applyFilters();
         updateKPI();
@@ -723,7 +746,6 @@
         triggerFilterUpdate();
     }
 
-    // Глобальные функции для inline-вызовов
     window.switchTab = switchTab;
     window.toggleDropdown = toggleDropdown;
     window.filterMsOptions = filterMsOptions;
