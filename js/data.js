@@ -1,5 +1,7 @@
-// js/data.js — ИТЕРАЦИЯ 1, файл 1/5
-// Изменено: 2 места (формула quality в processFlatValidations и recomputeDashboard)
+// js/data.js — ИТЕРАЦИЯ 1, файл 4/5 (ИСПРАВЛЕННЫЙ)
+// Изменено:
+//   1. computeQuality — защита от NaN, Infinity, <0, >1 (из прошлой версии)
+//   2. processFlatValidations — ключ группировки теперь email|file_name (БЫЛО url|email|file_name|дата)
 // Остальное — без изменений
 
 import { state, saveToStorage } from './state.js';
@@ -127,11 +129,12 @@ function processFlatValidations() {
     const groups = {};
     for (const r of state.rawFlatValidations) {
         if (!r) continue;
-        const url = getVal(r, 'url задания') || '';
+        // ★ ИЗМЕНЕНО (Итерация 1): ключ теперь email|file_name
+        // Было: url|email|file_name|дата — это разбивало одно задание на несколько,
+        // если у разных строк одного задания отличались url или дата.
         const email = getVal(r, 'email') || '';
         const fileNameRaw = getVal(r, 'file_name') || '';
-        const dateRaw = getVal(r, 'дата разметки') || '';
-        const key = [url, email, fileNameRaw, String(dateRaw)].join('|');
+        const key = [email, fileNameRaw].join('|');
         if (!groups[key]) groups[key] = [];
         groups[key].push(r);
     }
