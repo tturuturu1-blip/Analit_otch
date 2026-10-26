@@ -1,10 +1,8 @@
-// js/ui.js — ИТЕРАЦИЯ 1, файл 3/5
-// Изменено: 5 мест (фильтр quality > 0 → quality != null + isFinite)
-//   - updateKPI
-//   - buildQualityChart
-//   - buildPoolQualityChart
-//   - buildDayQualityChart
-//   - renderErrorsTable (2 места)
+// js/ui.js — ИТЕРАЦИЯ 1, файл 3/5 (ОБНОВЛЁННЫЙ)
+// Изменено:
+//   1. Фильтр quality: было `> 0`, стало `!= null && isFinite` (5 мест — из прошлой версии)
+//   2. Ключи дедупликации теперь содержат project (+ pool), чтобы файл в двух проектах
+//      не склеивался в одну запись (7 мест)
 // Остальное — без изменений
 
 import { state, ITEMS_PER_PAGE } from './state.js';
@@ -49,7 +47,6 @@ export function switchTab(tabId, btn) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     if (btn) btn.classList.add('active');
 
-    // Сброс пагинации при смене вкладки
     state.pagination.mainData = 1;
     state.pagination.fbHome = 1;
     state.pagination.fbTable = 1;
@@ -324,7 +321,8 @@ export function updateKPI() {
     let totalFragments = 0;
     for (const r of state.filteredData) {
         if (r._type !== 'validation') continue;
-        const fileKey = r.marker + '|' + r.fileName + '|' + r.fragments;
+        // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+        const fileKey = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '') + '|' + r.fragments;
         if (!uniqueFiles.has(fileKey)) {
             uniqueFiles.add(fileKey);
             totalFragments += (r.fragments || 0);
@@ -339,15 +337,14 @@ export function updateKPI() {
     for (const r of state.filteredData) {
         if (r.marker) uniqueMarkers.add(r.marker);
         
-        // Учет веса ошибок
         if (r.result === 'Ошибка') {
             const weight = r.errorType === 'Некритичная ошибка' ? 0.5 : 1;
             weightedErrorsCount += weight;
         }
         
-        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
         if (r.quality != null && isFinite(r.quality)) {
-            const key = r.marker + '|' + r.fileName;
+            // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+            const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
                 qualitySum += r.quality;
@@ -360,7 +357,7 @@ export function updateKPI() {
     const avgQ = qualityCount ? qualitySum / qualityCount : null;
     const avgQPct = avgQ !== null ? avgQ * 100 : 0;
     
-    const target = state.superset.norms.globalAvg; // Берем только из суперсета
+    const target = state.superset.norms.globalAvg;
 
     const elTotalFragments = document.getElementById('kpiTotalFragments');
     const elTotalMarkers = document.getElementById('kpiTotalMarkers');
@@ -382,7 +379,6 @@ export function updateKPI() {
     if (elTotalMarkers) elTotalMarkers.classList.add('val-brown');
     if (elTargetQuality) elTargetQuality.classList.add('val-brown');
 
-    // Логика цветов работает только если есть норматив
     const isRed = (target != null) && (errorPercent > 5) && (avgQPct < target);
     const isGreen = (target != null) && (errorPercent <= 5) && (avgQPct >= target);
 
@@ -403,7 +399,7 @@ function targetLinesForLabels(labels) {
     if (target != null) {
         return [{ label: 'Целевое (суперсет)', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 }];
     }
-    return []; // Без хардкода 98/99
+    return [];
 }
 
 export function buildQualityChart() {
@@ -411,9 +407,9 @@ export function buildQualityChart() {
     const byMarker = {};
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
-        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
         if (r.marker && r.quality != null && isFinite(r.quality)) {
-            const key = r.marker + '|' + r.fileName;
+            // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+            const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
                 (byMarker[r.marker] = byMarker[r.marker] || []).push(r.quality);
@@ -451,9 +447,9 @@ export function buildPoolQualityChart() {
     const byPool = {};
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
-        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
         if (r.pool && r.quality != null && isFinite(r.quality)) {
-            const key = r.pool + '|' + r.marker + '|' + r.fileName;
+            // ★ ИЗМЕНЕНО: добавлен project в ключ
+            const key = (r.pool || '') + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
                 (byPool[r.pool] = byPool[r.pool] || []).push(r.quality);
@@ -478,10 +474,10 @@ export function buildDayQualityChart() {
     const byDate = {};
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
-        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
         if (r.date && r.quality != null && isFinite(r.quality)) {
             const k = formatDate(r.date);
-            const key = k + '|' + r.marker + '|' + r.fileName;
+            // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+            const key = k + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
                 (byDate[k] = byDate[k] || []).push(r.quality);
@@ -553,10 +549,11 @@ export function buildTable() {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
 
-    // 1. Группировка данных по разметчику и файлу
+    // 1. Группировка данных: теперь с project и pool
     const grouped = {};
     for (const r of state.filteredData) {
-        const key = (r.marker || '') + '|' + (r.fileName || '');
+        // ★ ИЗМЕНЕНО: добавлены project и pool в ключ — файл в двух проектах даст две строки
+        const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
         if (!grouped[key]) {
             grouped[key] = {
                 date: r.date,
@@ -620,7 +617,6 @@ export function buildTable() {
         const fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
         const fileNameTitle = escapeHtml(g.fileName || '');
         
-        // Формируем списки ошибок в одной ячейке
         const resBadges = g.items.map(item => {
             const badgeClass = item.result === 'Ошибка' ? 'badge-error' : item.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
             return `<span class="badge ${badgeClass}" style="margin-bottom: 4px; display: inline-block;">${escapeHtml(item.result || '')}</span>`;
@@ -691,14 +687,14 @@ export function renderErrorsTable() {
             };
         }
         
-        const fileKey = r.marker + '|' + r.fileName + '|' + r.fragments;
+        // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+        const fileKey = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '') + '|' + r.fragments;
         if (!markerStats[r.marker]._files) markerStats[r.marker]._files = new Set();
         if (!markerStats[r.marker]._files.has(fileKey)) {
             markerStats[r.marker]._files.add(fileKey);
             markerStats[r.marker].totalFragments += (r.fragments || 0);
         }
 
-        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
         if (r.project && r.quality != null && isFinite(r.quality)) {
             if (!markerStats[r.marker].projectQuality[r.project]) {
                 markerStats[r.marker].projectQuality[r.project] = new Set();
@@ -747,12 +743,11 @@ export function renderErrorsTable() {
         const fio = emailToFio[markerEmail.toLowerCase()] || markerEmail;
         const errorRate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
 
-        // Считаем уникальные файлы для расчета среднего качества
+        // ★ ИЗМЕНЕНО: ключ project|fileName вместо просто fileName
         const uniqueFileQuality = {};
         for (const r of filtered) {
-            // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
             if (r.marker === markerEmail && r.project && r.quality != null && isFinite(r.quality)) {
-                uniqueFileQuality[r.fileName] = r.quality;
+                uniqueFileQuality[(r.project || '') + '|' + (r.fileName || '')] = r.quality;
             }
         }
 
@@ -761,8 +756,9 @@ export function renderErrorsTable() {
             const fileNames = stats.projectQuality[proj];
             let sumQ = 0, cntQ = 0;
             for (const fn of fileNames) {
-                if (uniqueFileQuality[fn] !== undefined) {
-                    sumQ += uniqueFileQuality[fn];
+                // ★ ИЗМЕНЕНО: ищем по project|fileName
+                if (uniqueFileQuality[proj + '|' + fn] !== undefined) {
+                    sumQ += uniqueFileQuality[proj + '|' + fn];
                     cntQ++;
                 }
             }
