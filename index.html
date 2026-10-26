@@ -55,6 +55,50 @@
                 <div id="markersStatusList" class="markers-status-list" style="display:none;"></div>
             </div>
 
+            <!-- ДОБАВЛЕНО: ДОБАВИТЬ РЕКОМЕНДАЦИЮ -->
+            <div class="card">
+                <h3 style="margin-bottom: 15px;">Добавить рекомендацию</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Дата валидации</label>
+                        <input type="date" id="recDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Проект</label>
+                        <input type="text" id="recProject" list="recProjectsList" placeholder="Выберите или введите">
+                        <datalist id="recProjectsList"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Пул</label>
+                        <input type="text" id="recPool" list="recPoolsList" placeholder="Выберите или введите">
+                        <datalist id="recPoolsList"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>Почта разметчика</label>
+                        <input type="text" id="recMarker" list="recMarkersList" placeholder="Выберите или введите">
+                        <datalist id="recMarkersList"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>ID задания (assignment)</label>
+                        <input type="text" id="recAssignmentId" placeholder="Введите ID задания">
+                    </div>
+                    <div class="form-group">
+                        <label>Интервал</label>
+                        <input type="text" id="recInterval" placeholder="Например: 1:23.456-2:34.567">
+                    </div>
+                    <div class="form-group">
+                        <label>Комментарий</label>
+                        <input type="text" id="recComment" placeholder="Текст комментария">
+                    </div>
+                    <div class="form-group">
+                        <label>Почта валидатора</label>
+                        <input type="text" id="recValidator" list="recValidatorsList" placeholder="Выберите или введите">
+                        <datalist id="recValidatorsList"></datalist>
+                    </div>
+                </div>
+                <button class="success" id="btnAddRecommendation" style="margin-top: 20px;">Добавить рекомендацию</button>
+            </div>
+
             <div class="card">
                 <h3 style="margin-bottom: 15px;">Управление данными</h3>
                 <div class="toolbar">
