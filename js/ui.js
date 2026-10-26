@@ -1,9 +1,8 @@
-// js/ui.js — ИТЕРАЦИЯ 1, файл 3/5 (ОБНОВЛЁННЫЙ)
+// js/ui.js — ИТЕРАЦИЯ 1 + ИТЕРАЦИЯ 2
 // Изменено:
-//   1. Фильтр quality: было `> 0`, стало `!= null && isFinite` (5 мест — из прошлой версии)
-//   2. Ключи дедупликации теперь содержат project (+ pool), чтобы файл в двух проектах
-//      не склеивался в одну запись (7 мест)
-// Остальное — без изменений
+//   - Все ключи дедупликации содержат project и pool (из Итерации 1)
+//   - Фильтр quality: `!= null && isFinite` (из Итерации 1)
+//   - ДОБАВЛЕНО: функция populateRecDatalists() для формы рекомендаций (Итерация 2)
 
 import { state, ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -71,7 +70,7 @@ export function buildProjectTabs() {
     const projectSet = new Set();
     for (const r of state.processedData) {
         if (!r.project) continue;
-        const name = String(r.project).trim();
+        const name = String(r.project).replace(/_validate$/, '').trim();
         if (name) projectSet.add(name);
     }
 
@@ -256,6 +255,35 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
 }
 
+// ★ НОВОЕ (Итерация 2): Заполнение datalists для формы рекомендаций
+export function populateRecDatalists() {
+    const projects = new Set();
+    const pools = new Set();
+    const markers = new Set();
+    const validators = new Set();
+
+    for (const r of state.processedData) {
+        if (r.project) {
+            const p = r.project.replace(/_validate$/, '').trim();
+            if (p) projects.add(p);
+        }
+        if (r.pool) pools.add(r.pool);
+        if (r.marker) markers.add(r.marker);
+        if (r.validator) validators.add(r.validator);
+    }
+
+    const fill = (id, set) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = Array.from(set).sort().map(v => `<option value="${escapeHtml(v)}">`).join('');
+    };
+
+    fill('recProjectsList', projects);
+    fill('recPoolsList', pools);
+    fill('recMarkersList', markers);
+    fill('recValidatorsList', validators);
+}
+
 // ===== ПАГИНАЦИЯ =====
 export function changePage(tableKey, page) {
     state.pagination[tableKey] = page;
@@ -321,7 +349,7 @@ export function updateKPI() {
     let totalFragments = 0;
     for (const r of state.filteredData) {
         if (r._type !== 'validation') continue;
-        // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
+        // ★ ИЗМЕНЕНО (Итерация 1): добавлены project и pool
         const fileKey = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '') + '|' + r.fragments;
         if (!uniqueFiles.has(fileKey)) {
             uniqueFiles.add(fileKey);
@@ -342,8 +370,8 @@ export function updateKPI() {
             weightedErrorsCount += weight;
         }
         
+        // ★ ИЗМЕНЕНО (Итерация 1): quality != null + isFinite, ключ с project/pool
         if (r.quality != null && isFinite(r.quality)) {
-            // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
             const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
@@ -408,7 +436,6 @@ export function buildQualityChart() {
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
         if (r.marker && r.quality != null && isFinite(r.quality)) {
-            // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
             const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
@@ -448,7 +475,6 @@ export function buildPoolQualityChart() {
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
         if (r.pool && r.quality != null && isFinite(r.quality)) {
-            // ★ ИЗМЕНЕНО: добавлен project в ключ
             const key = (r.pool || '') + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
@@ -476,7 +502,6 @@ export function buildDayQualityChart() {
     for (const r of state.filteredData) {
         if (r.date && r.quality != null && isFinite(r.quality)) {
             const k = formatDate(r.date);
-            // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
             const key = k + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
@@ -549,10 +574,9 @@ export function buildTable() {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
 
-    // 1. Группировка данных: теперь с project и pool
     const grouped = {};
     for (const r of state.filteredData) {
-        // ★ ИЗМЕНЕНО: добавлены project и pool в ключ — файл в двух проектах даст две строки
+        // ★ ИЗМЕНЕНО (Итерация 1): добавлены project и pool
         const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
         if (!grouped[key]) {
             grouped[key] = {
@@ -596,7 +620,6 @@ export function buildTable() {
     const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
     const rows = groupedArray.slice(startIndex, endIndex);
 
-    // 2. Рендер строк
     tbody.innerHTML = rows.map(g => {
         let valLink = '—';
         let hasLink = false;
@@ -687,7 +710,6 @@ export function renderErrorsTable() {
             };
         }
         
-        // ★ ИЗМЕНЕНО: добавлены project и pool в ключ
         const fileKey = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '') + '|' + r.fragments;
         if (!markerStats[r.marker]._files) markerStats[r.marker]._files = new Set();
         if (!markerStats[r.marker]._files.has(fileKey)) {
@@ -743,7 +765,6 @@ export function renderErrorsTable() {
         const fio = emailToFio[markerEmail.toLowerCase()] || markerEmail;
         const errorRate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
 
-        // ★ ИЗМЕНЕНО: ключ project|fileName вместо просто fileName
         const uniqueFileQuality = {};
         for (const r of filtered) {
             if (r.marker === markerEmail && r.project && r.quality != null && isFinite(r.quality)) {
@@ -756,7 +777,6 @@ export function renderErrorsTable() {
             const fileNames = stats.projectQuality[proj];
             let sumQ = 0, cntQ = 0;
             for (const fn of fileNames) {
-                // ★ ИЗМЕНЕНО: ищем по project|fileName
                 if (uniqueFileQuality[proj + '|' + fn] !== undefined) {
                     sumQ += uniqueFileQuality[proj + '|' + fn];
                     cntQ++;
