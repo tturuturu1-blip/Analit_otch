@@ -1,8 +1,4 @@
-// js/data.js — ИТЕРАЦИЯ 1, файл 1/5 (ОБНОВЛЁННЫЙ)
-// Изменено по сравнению с предыдущей версией:
-//   - ключ группировки в processFlatValidations: email|file_name|project|pool
-//     (было email|file_name — склеивало файлы из разных проектов в одно задание)
-// Остальное — без изменений.
+// js/data.js — ИТЕРАЦИЯ 2 (универсальный парсинг Markers + новые рекомендации)
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -104,7 +100,6 @@ export async function processNewRows(results) {
     await recomputeDashboard();
 }
 
-// ★ Расчёт качества с защитой от крайних значений
 function computeQuality(sumWeights, totalFragments, mistakesCount) {
     if (mistakesCount === 0) return 1;
     if (totalFragments === 0) return 0;
@@ -121,8 +116,6 @@ function processFlatValidations() {
     const groups = {};
     for (const r of state.rawFlatValidations) {
         if (!r) continue;
-        // ★ ИЗМЕНЕНО: ключ включает project и pool
-        // Это позволяет различить одно и то же задание в разных проектах/пулах
         const email = getVal(r, 'email') || '';
         const fileNameRaw = getVal(r, 'file_name') || '';
         const projectKey = getVal(r, 'Проект') || '';
@@ -220,17 +213,27 @@ export async function recomputeDashboard() {
         if (!m || typeof m !== 'object') continue;
         const taskStr = getVal(m, 'Задача');
         let pool = null, marker = null;
+        
         if (taskStr) {
-            const parts = taskStr.split('Гимнастки август_');
-            if (parts.length > 1) {
-                const subParts = parts[1].split('_validate_');
-                pool = subParts[0] || null;
-                marker = subParts[1] || null;
+            const idx = taskStr.lastIndexOf('_validate_');
+            if (idx !== -1) {
+                marker = taskStr.substring(idx + '_validate_'.length).trim();
+                const beforeValidate = taskStr.substring(0, idx).trim();
+                const projectStr = (getVal(m, 'Проект') || '').replace(/_validate$/, '').trim();
+                
+                if (projectStr && beforeValidate.startsWith(projectStr + '_')) {
+                    pool = beforeValidate.substring(projectStr.length + 1).trim();
+                } else {
+                    const firstUnderscore = beforeValidate.indexOf('_');
+                    pool = firstUnderscore >= 0 ? beforeValidate.substring(firstUnderscore + 1).trim() : beforeValidate;
+                }
             }
         }
+        
         const taskId = getVal(m, 'ID задачи');
         const markerId = getVal(m, 'ID разметчика');
         const project = (getVal(m, 'Проект') || '').replace(/_validate$/, '').trim() || null;
+        
         if (taskId && markerId) {
             markerDict[`${taskId}|${markerId}`] = {
                 pool, marker, validator: getVal(m, 'Email'), project
@@ -274,7 +277,7 @@ export async function recomputeDashboard() {
 
         const mInfo = markerDict[`${taskId}|${markerId}`] || { pool: null, marker: null, validator: null, project: null };
 
-        const jsonStr = getVal(v, 'OUTPUT:marks');
+        const jsonStr = getVal(v, 'OUTPUT:marks', 'output_marks');
         let totalFragments = 0, mistakes = [];
 
         if (jsonStr) {
@@ -332,34 +335,53 @@ export async function recomputeDashboard() {
             _id: 'r_' + Math.random().toString(36).slice(2, 9),
             _type: 'recommendations', _linked: null,
             date: parseExcelDate(getVal(r, 'Дата валидации')),
-            pool: getVal(r, 'Пул'),
-            marker: getVal(r, 'Почта разметчика'),
-            validator: getVal(r, 'Почта валидатора'),
-            fileName: stripJson(getVal(r, 'Наименование файла')),
+            pool: getVal(r, 'Пул') || null,
+            marker: getVal(r, 'Почта разметчика') || null,
+            validator: getVal(r, 'Почта валидатора') || null,
+            project: getVal(r, 'Проект') || null,
+            fileName: stripJson(getVal(r, 'Наименование файла')) || null,
             result: 'Рекомендация', errorType: null,
             comment: getVal(r, 'Комментарий'),
             quality: null,
-            interval: getVal(r, 'Временной интервал фрагмента'),
-            fragments: 0
+            interval: getVal(r, 'Временной интервал фрагмента', 'Интервал') || null,
+            fragments: 0,
+            assignmentId: getVal(r, 'ID задания') || null
         });
     }
 
     updateProgress(90, 'Связывание...', 'Пересчет');
     await yieldToUI();
 
-    const valIndex = {};
+    const valIndexByFile = {};
+    const valIndexByAssignment = {};
+    
     for (const v of state.processedData) {
         if (v._type === 'validation') {
             const key = `${v.pool || ''}|${v.marker || ''}|${v.validator || ''}|${v.fileName || ''}`;
-            if (!valIndex[key]) valIndex[key] = v;
+            if (!valIndexByFile[key]) valIndexByFile[key] = v;
+            
+            if (v.assignmentId) {
+                if (!valIndexByAssignment[v.assignmentId]) valIndexByAssignment[v.assignmentId] = v;
+            }
         }
     }
+    
     for (const r of state.processedData) {
         if (r._type === 'recommendations') {
-            const key = `${r.pool || ''}|${r.marker || ''}|${r.validator || ''}|${r.fileName || ''}`;
-            if (valIndex[key]) {
-                r._linked = valIndex[key]._id;
-                r.quality = valIndex[key].quality;
+            let linkedVal = null;
+            
+            if (r.assignmentId && valIndexByAssignment[r.assignmentId]) {
+                linkedVal = valIndexByAssignment[r.assignmentId];
+            } else {
+                const key = `${r.pool || ''}|${r.marker || ''}|${r.validator || ''}|${r.fileName || ''}`;
+                if (valIndexByFile[key]) linkedVal = valIndexByFile[key];
+            }
+
+            if (linkedVal) {
+                r._linked = linkedVal._id;
+                r.quality = linkedVal.quality;
+                if (!r.project) r.project = linkedVal.project;
+                if (!r.fileName) r.fileName = linkedVal.fileName;
             }
         }
     }
