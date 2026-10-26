@@ -1,5 +1,8 @@
+// js/report.js — генерация автономного HTML-отчёта
+// Изменено: имя файла формируется по проектам + дате (было: Валидатор_PRO_Отчет_YYYY-MM-DD.html)
+
 import { state } from './state.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml, formatDate } from './utils.js';
 
 // Генерирует автономный HTML-файл с дашбордом "Главная".
 export async function generateHtmlReport() {
@@ -57,14 +60,14 @@ export async function generateHtmlReport() {
 
     const safeChartJs = chartJsText.replace(/<\/script>/gi, '<\\/script>');
     const safeRuntime = runtimeText.replace(/<\/script>/gi, '<\\/script>');
+    const safeCss = cssText.replace(/<\/style>/gi, '<\\/style>');
 
-    // Передаем целевое качество (глобальное среднее из Суперсета)
     const targetQuality = state.superset.norms.globalAvg;
 
     const reportData = {
         processedData: state.processedData,
         feedbackData: state.feedbackData,
-        targetQuality: targetQuality // <-- Передаем норматив
+        targetQuality: targetQuality
     };
     const reportDataJson = JSON.stringify(reportData).replace(/</g, '\\u003c');
 
@@ -75,7 +78,7 @@ export async function generateHtmlReport() {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Валидатор PRO — Отчёт по валидации</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
-<style>${cssText}</style>
+<style>${safeCss}</style>
 </head>
 <body>
 
@@ -204,11 +207,39 @@ export async function generateHtmlReport() {
 </body>
 </html>`;
 
+    // === Формируем имя файла по проектам ===
+    const projectNames = [];
+    const seen = new Set();
+    for (const r of state.processedData) {
+        const p = (r.project || '').replace(/_validate$/, '').trim();
+        if (p && !seen.has(p)) {
+            seen.add(p);
+            projectNames.push(p);
+        }
+    }
+
+    const dateStr = formatDate(new Date());
+
+    function sanitizeForFilename(str) {
+        return String(str).replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_').slice(0, 50);
+    }
+
+    let fileBase;
+    if (projectNames.length === 0) {
+        fileBase = `Отчёт_обн_${dateStr}`;
+    } else if (projectNames.length === 1) {
+        fileBase = `Отчёт_по_проекту_${sanitizeForFilename(projectNames[0])}_обн_${dateStr}`;
+    } else {
+        const shown = projectNames.slice(0, 3);
+        const suffix = projectNames.length > 3 ? '_и_др' : '';
+        fileBase = `Отчёт_по_проектам_${shown.map(sanitizeForFilename).join('_')}${suffix}_обн_${dateStr}`;
+    }
+
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Валидатор_PRO_Отчет_${new Date().toISOString().slice(0, 10)}.html`;
+    a.download = `${fileBase}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
