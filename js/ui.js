@@ -1,3 +1,12 @@
+// js/ui.js — ИТЕРАЦИЯ 1, файл 3/5
+// Изменено: 5 мест (фильтр quality > 0 → quality != null + isFinite)
+//   - updateKPI
+//   - buildQualityChart
+//   - buildPoolQualityChart
+//   - buildDayQualityChart
+//   - renderErrorsTable (2 места)
+// Остальное — без изменений
+
 import { state, ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
 import { formatDate, updateLabel, escapeHtml, destroyChart, getVal, getValidationUrl } from './utils.js';
@@ -336,8 +345,8 @@ export function updateKPI() {
             weightedErrorsCount += weight;
         }
         
-        // Дедупликация качества по заданиям
-        if (r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
+        if (r.quality != null && isFinite(r.quality)) {
             const key = r.marker + '|' + r.fileName;
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
@@ -402,7 +411,8 @@ export function buildQualityChart() {
     const byMarker = {};
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
-        if (r.marker && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
+        if (r.marker && r.quality != null && isFinite(r.quality)) {
             const key = r.marker + '|' + r.fileName;
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
@@ -441,7 +451,8 @@ export function buildPoolQualityChart() {
     const byPool = {};
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
-        if (r.pool && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
+        if (r.pool && r.quality != null && isFinite(r.quality)) {
             const key = r.pool + '|' + r.marker + '|' + r.fileName;
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
@@ -467,7 +478,8 @@ export function buildDayQualityChart() {
     const byDate = {};
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
-        if (r.date && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
+        if (r.date && r.quality != null && isFinite(r.quality)) {
             const k = formatDate(r.date);
             const key = k + '|' + r.marker + '|' + r.fileName;
             if (!qualityKeys.has(key)) {
@@ -686,7 +698,8 @@ export function renderErrorsTable() {
             markerStats[r.marker].totalFragments += (r.fragments || 0);
         }
 
-        if (r.project && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
+        if (r.project && r.quality != null && isFinite(r.quality)) {
             if (!markerStats[r.marker].projectQuality[r.project]) {
                 markerStats[r.marker].projectQuality[r.project] = new Set();
             }
@@ -737,7 +750,8 @@ export function renderErrorsTable() {
         // Считаем уникальные файлы для расчета среднего качества
         const uniqueFileQuality = {};
         for (const r of filtered) {
-            if (r.marker === markerEmail && r.project && r.quality !== null && !isNaN(r.quality) && r.quality > 0) {
+            // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `isFinite`
+            if (r.marker === markerEmail && r.project && r.quality != null && isFinite(r.quality)) {
                 uniqueFileQuality[r.fileName] = r.quality;
             }
         }
