@@ -1,3 +1,10 @@
+// js/superset.js — ИТЕРАЦИЯ 1, файл 2/5
+// Изменено:
+//   1. buildNorms — новый расчёт globalAvg (вариант B: уникальные нормы по проектам)
+//   2. computeEmployeeQualityIndex — фильтр quality: было `<= 0`, стало `!= null` + `!isFinite`
+//   3. buildKPIs — тот же фильтр
+// calcFactQuality — НЕ ТРОГАЮ (мёртвый код, отдельная итерация)
+
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
 
@@ -179,9 +186,10 @@ export function addNormEntry(dateISO, value) {
 }
 
 // ===== Нормативы качества =====
+// ★ ИЗМЕНЕНО (Итерация 1): вариант B — уникальные нормы по проектам
 function buildNorms() {
     const byProjectPool = {};
-    const byProject = {};
+    const byProjectSets = {};   // project -> Set<number> уникальных норм
     const mainSet = getMainProjects();
 
     for (const r of state.rawSuperset2) {
@@ -193,8 +201,8 @@ function buildNorms() {
         const norm = parseNorm(getVal(r, 'Норма качества'));
         if (norm === null) continue;
         if (task) byProjectPool[project + '|' + task] = norm;
-        if (!byProject[project]) byProject[project] = [];
-        byProject[project].push(norm);
+        if (!byProjectSets[project]) byProjectSets[project] = new Set();
+        byProjectSets[project].add(norm);
     }
     for (const r of state.rawSuperset3) {
         const project = normalizeProject(getVal(r, 'Проект'));
@@ -207,25 +215,27 @@ function buildNorms() {
         if (task && byProjectPool[project + '|' + task] == null) {
             byProjectPool[project + '|' + task] = norm;
         }
-        if (!byProject[project]) byProject[project] = [];
-        byProject[project].push(norm);
+        if (!byProjectSets[project]) byProjectSets[project] = new Set();
+        byProjectSets[project].add(norm);
     }
 
-    const avgByProject = {};
-    for (const p in byProject) {
-        const a = avg(byProject[p]);
-        if (a !== null) avgByProject[p] = a;
+    // byProject: среднее уникальных норм каждого проекта (для getTargetQuality)
+    const byProject = {};
+    for (const p in byProjectSets) {
+        const a = avg(Array.from(byProjectSets[p]));
+        if (a !== null) byProject[p] = a;
     }
 
-    const all = [];
-    for (const p in byProject) {
-        for (const n of byProject[p]) all.push(n);
+    // globalAvg: среднее всех уникальных норм по проектам (вариант B)
+    const allUniqueNorms = [];
+    for (const p in byProjectSets) {
+        byProjectSets[p].forEach(n => allUniqueNorms.push(n));
     }
-    const globalAvg = avg(all);
+    const globalAvg = avg(allUniqueNorms);
 
     state.superset.norms = {
         byProjectPool,
-        byProject: avgByProject,
+        byProject,
         globalAvg
     };
 }
@@ -257,7 +267,8 @@ function computeEmployeeQualityIndex() {
     const seen = new Set();
 
     for (const r of state.processedData) {
-        if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
+        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `!isFinite`
+        if (r.quality == null || !isFinite(r.quality)) continue;
         const em = (r.marker || '').trim().toLowerCase();
         if (!em) continue;
 
@@ -595,7 +606,6 @@ function rebuildTable4() {
     state.superset.table4 = rows;
 }
 
-// ▼▼▼ ОБНОВЛЕННАЯ ФУНКЦИЯ buildKPIs ▼▼▼
 function buildKPIs() {
     const t1 = state.superset.filteredTable1;
     const qualities = [];
@@ -603,7 +613,8 @@ function buildKPIs() {
 
     // Фактическое качество (с дедупликацией по файлам)
     for (const r of state.processedData) {
-        if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
+        // ★ ИЗМЕНЕНО (Итерация 1): было `r.quality <= 0` — теперь `!= null` + `!isFinite`
+        if (r.quality == null || !isFinite(r.quality)) continue;
         const proj = normalizeProject(r.project);
         if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
         if (r.date && !matchesDateRangeRow(r.date)) continue;
@@ -616,7 +627,7 @@ function buildKPIs() {
     }
     const qualityFact = avg(qualities);
 
-    // Целевое качество (уникальные значения по каждому проекту)
+    // Целевое качество (уникальные значения по каждому проекту) — вариант B
     const projectNorms = {};
     for (const r of t1) {
         const norm = parseNorm(r.normQuality);
@@ -663,7 +674,6 @@ function buildKPIs() {
 
     state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime, avgPrice };
 }
-// ▲▲▲
 
 export function applySupersetFilters() {
     state.superset._mainProjects = computeMainProjectsSet();
