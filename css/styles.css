@@ -300,25 +300,25 @@ textarea.rec-comment { padding: 8px; width: 100%; min-width: 250px; border: 1px 
 .charts-grid.full-width { grid-template-columns: 1fr; } 
 @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
 
+/* Карточка графика: убран display: flex, который ломал Chart.js */
 .chart-card { 
     padding: 25px; 
     background: var(--card-white); 
     border-radius: var(--radius-lg); 
     box-shadow: var(--shadow-soft); 
-    display: flex; 
-    flex-direction: column; 
 }
-/* Высота графика задается здесь, как и было раньше */
+.chart-card h3 { font-size: 1.2rem; margin-bottom: 20px; color: var(--text); }
+
+/* Высота задается напрямую через canvas */
 .chart-card canvas { 
     max-height: 280px; 
     width: 100% !important; 
 }
+
 /* Для широкого графика делаем больше высоту */
 .charts-grid.full-width .chart-card canvas {
     max-height: 400px;
 }
-
-.chart-card h3 { font-size: 1.2rem; margin-bottom: 20px; color: var(--text); }
 
 /* ============ Детали и Комментарии ============ */
 .expandable-row { cursor: pointer; }
