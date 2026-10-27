@@ -1,5 +1,9 @@
-// js/ui.js — ЧИСТКА КОДА
-// Удалено: toggleRow (не используется)
+// js/ui.js — ИЗМЕНЕНИЯ ДЛЯ ФОРМЫ РЕКОМЕНДАЦИЙ И МУЛЬТИВЫБОРА РАЗМЕТЧИКОВ В ОС
+// Изменено:
+//   1. populateAllMultiSelects: добавлен msFbRecordMarkers
+//   2. toggleAll / onOptionChange: fbRecordMarkers в исключениях
+//   3. Добавлена addRecRow() для динамических строк таблицы рекомендаций
+// Остальное — как в предыдущей версии.
 
 import { state, ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -12,7 +16,6 @@ import {
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
-// ===== Навигация =====
 export function switchMenu(menuId, btn) {
     state.currentMenu = menuId;
     document.querySelectorAll('.nav-icon').forEach(b => b.classList.remove('active'));
@@ -216,7 +219,8 @@ export function toggleAll(containerId, stateKey) {
         if (cb.checked) state.filterState[stateKey].add(cb.value);
     }
     updateLabel(containerId, stateKey);
-    if (stateKey !== 'feedbackPool' && stateKey !== 'fbFormPools' && stateKey !== 'feedbackGroup') triggerFilterUpdate();
+    const excl = ['feedbackPool', 'fbFormPools', 'feedbackGroup', 'fbRecordMarkers'];
+    if (!excl.includes(stateKey)) triggerFilterUpdate();
 }
 
 export function onOptionChange(containerId, stateKey, value, isChecked) {
@@ -226,7 +230,8 @@ export function onOptionChange(containerId, stateKey, value, isChecked) {
     const checkboxes = document.querySelectorAll('#' + containerId + '_options input[type="checkbox"]');
     allCheckbox.checked = Array.from(checkboxes).every(cb => cb.checked);
     updateLabel(containerId, stateKey);
-    if (stateKey !== 'feedbackPool' && stateKey !== 'fbFormPools' && stateKey !== 'feedbackGroup') triggerFilterUpdate();
+    const excl = ['feedbackPool', 'fbFormPools', 'feedbackGroup', 'fbRecordMarkers'];
+    if (!excl.includes(stateKey)) triggerFilterUpdate();
 }
 
 export function populateMultiSelect(containerId, stateKey, values) {
@@ -249,6 +254,8 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msResult', 'result', ['Ошибка', 'Рекомендация', 'Ошибки не выявлены']);
     populateMultiSelect('msFbPool', 'feedbackPool', pools);
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
+    // ★ НОВОЕ: мультиселект разметчиков для формы ОС
+    populateMultiSelect('msFbRecordMarkers', 'fbRecordMarkers', markers);
 }
 
 export function populateRecDatalists() {
@@ -277,6 +284,25 @@ export function populateRecDatalists() {
     fill('recPoolsList', pools);
     fill('recMarkersList', markers);
     fill('recValidatorsList', validators);
+}
+
+// ★ НОВОЕ: добавляет одну строку в таблицу рекомендаций
+export function addRecRow() {
+    const tbody = document.getElementById('recTableBody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="date" class="rec-date" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td><input type="text" class="rec-project" list="recProjectsList" placeholder="Проект" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td><input type="text" class="rec-pool" list="recPoolsList" placeholder="Пул" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td><input type="text" class="rec-marker" list="recMarkersList" placeholder="Почта" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td><input type="text" class="rec-item" placeholder="item_id" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td><input type="text" class="rec-interval" placeholder="0:00-1:00" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td><input type="text" class="rec-comment" placeholder="Текст" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td><input type="text" class="rec-validator" list="recValidatorsList" placeholder="Почта" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td style="text-align:center; vertical-align:middle;"><button class="icon-btn danger" onclick="this.closest('tr').remove()" title="Удалить"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button></td>
+    `;
+    tbody.appendChild(tr);
 }
 
 // ===== ПАГИНАЦИЯ =====
@@ -665,10 +691,6 @@ export function buildTable() {
     renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, 'mainData');
 }
 
-// ============================================================
-// ============ СТРАНИЦА "ТОП ОШИБОК" (КАРТОЧКИ) ==============
-// ============================================================
-
 export function renderErrorsTable() {
     const container = document.getElementById('errorsCardsContainer');
     if (!container) return;
@@ -852,10 +874,6 @@ export function renderErrorsTable() {
 
     container.innerHTML = html;
 }
-
-// ============================================================
-// ============ СТРАНИЦА СУПЕРСЕТ ==============================
-// ============================================================
 
 export function renderSupersetPage() {
     renderSupersetFilters();
