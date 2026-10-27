@@ -1,5 +1,4 @@
-// js/app.js — ИСПРАВЛЕНИЕ БАГА: восстановление ОС при импорте Excel
-// Остальной код без изменений (из предыдущей версии с чисткой кода)
+// js/app.js — ЛОГИКА ДЛЯ ТАБЛИЦЫ РЕКОМЕНДАЦИЙ
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
@@ -7,7 +6,7 @@ import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
     populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable,
     buildProjectTabs, renderMarkersTasksStatus, renderSupersetPage,
-    populateRecDatalists,
+    populateRecDatalists, addRecRow,
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
     changePage
@@ -135,49 +134,60 @@ if (fileInput) {
     });
 }
 
-// ===== Добавление рекомендации =====
-const btnAddRecommendation = document.getElementById('btnAddRecommendation');
-if (btnAddRecommendation) {
-    btnAddRecommendation.addEventListener('click', async () => {
-        const dateVal = document.getElementById('recDate').value;
-        const project = document.getElementById('recProject').value.trim();
-        const pool = document.getElementById('recPool').value.trim();
-        const marker = document.getElementById('recMarker').value.trim();
-        const assignmentId = document.getElementById('recAssignmentId').value.trim();
-        const interval = document.getElementById('recInterval').value.trim();
-        const comment = document.getElementById('recComment').value.trim();
-        const validator = document.getElementById('recValidator').value.trim();
-
-        if (!dateVal || !marker) {
-            alert('Выберите хотя бы дату и почту разметчика');
-            return;
-        }
-
-        const newRec = {
-            'Дата валидации': dateVal,
-            'Проект': project,
-            'Пул': pool,
+// ===== ТАБЛИЦА РЕКОМЕНДАЦИЙ =====
+function getRecRowsData() {
+    const rows = [];
+    document.querySelectorAll('#recTableBody tr').forEach(tr => {
+        const date = tr.querySelector('.rec-date').value;
+        const marker = tr.querySelector('.rec-marker').value.trim();
+        // Пропускаем полностью пустые строки
+        if (!date && !marker && !tr.querySelector('.rec-comment').value.trim() && !tr.querySelector('.rec-item').value.trim()) return;
+        rows.push({
+            'Дата валидации': date,
+            'Проект': tr.querySelector('.rec-project').value.trim(),
+            'Пул': tr.querySelector('.rec-pool').value.trim(),
             'Почта разметчика': marker,
-            'ID задания': assignmentId,
-            'Интервал': interval,
-            'Комментарий': comment,
-            'Почта валидатора': validator
-        };
+            'item_id': tr.querySelector('.rec-item').value.trim(),
+            'Интервал': tr.querySelector('.rec-interval').value.trim(),
+            'Комментарий': tr.querySelector('.rec-comment').value.trim(),
+            'Почта валидатора': tr.querySelector('.rec-validator').value.trim()
+        });
+    });
+    return rows;
+}
 
-        state.rawRecommendations.push(newRec);
+const btnAddRecRow = document.getElementById('btnAddRecRow');
+if (btnAddRecRow) {
+    btnAddRecRow.addEventListener('click', addRecRow);
+}
+
+const btnSaveRecommendations = document.getElementById('btnSaveRecommendations');
+if (btnSaveRecommendations) {
+    btnSaveRecommendations.addEventListener('click', async () => {
+        const rows = getRecRowsData();
+        if (rows.length === 0) { alert('Заполните хотя бы одну строку (Дата и Почта разметчика обязательны)'); return; }
+        state.rawRecommendations.push(...rows);
         saveToStorage();
         await recomputeDashboard();
+        document.getElementById('recTableBody').innerHTML = '';
+        addRecRow();
+        log(`Добавлено рекомендаций: ${rows.length}`, false);
+    });
+}
 
-        document.getElementById('recDate').value = '';
-        document.getElementById('recProject').value = '';
-        document.getElementById('recPool').value = '';
-        document.getElementById('recMarker').value = '';
-        document.getElementById('recAssignmentId').value = '';
-        document.getElementById('recInterval').value = '';
-        document.getElementById('recComment').value = '';
-        document.getElementById('recValidator').value = '';
-
-        log('Рекомендация добавлена', false);
+const btnExportRecommendations = document.getElementById('btnExportRecommendations');
+if (btnExportRecommendations) {
+    btnExportRecommendations.addEventListener('click', () => {
+        const rows = getRecRowsData();
+        if (rows.length === 0) { alert('Заполните хотя бы одну строку'); return; }
+        try {
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Рекомендации");
+            XLSX.writeFile(wb, `Рекомендации_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            log('Excel с рекомендациями скачан', false);
+        } catch (err) {
+            log('Ошибка экспорта рекомендаций: ' + err.message, true);
+        }
     });
 }
 
@@ -254,7 +264,7 @@ if (btnExport) {
     });
 }
 
-// ===== Импорт (ИСПРАВЛЕНО: теперь читает ОС) =====
+// ===== Импорт (с восстановлением ОС) =====
 const importInput = document.getElementById('importInput');
 if (importInput) {
     importInput.addEventListener('change', (e) => {
@@ -271,7 +281,6 @@ if (importInput) {
                     const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
                     const lower = name.toLowerCase();
                     
-                    // Свод валидации — это производная от processedData, не перезаписываем сырые данные
                     if (lower.includes('свод')) continue;
                     
                     if (lower.includes('обратн') || lower.includes('feedback')) parsedFb = json;
@@ -294,14 +303,13 @@ if (importInput) {
                 state.rawSuperset3 = parsedS3;
                 state.rawEmployeeMap = parsedEmp;
                 
-                // Восстановление ОС
                 if (parsedFb.length > 0) {
                     state.feedbackData = parsedFb.map(row => {
                         let dateStr = row['Дата'];
                         if (dateStr) {
                             const d = parseExcelDate(dateStr);
                             if (d && !isNaN(d.getTime())) {
-                                dateStr = d.toISOString().slice(0, 10); // ISO YYYY-MM-DD
+                                dateStr = d.toISOString().slice(0, 10);
                             }
                         }
                         
@@ -381,16 +389,8 @@ if (btnClear) {
             localStorage.removeItem('validation_feedback_data_v1');
         } catch (e) { /* ignore */ }
         
-        if (document.getElementById('recDate')) {
-            document.getElementById('recDate').value = '';
-            document.getElementById('recProject').value = '';
-            document.getElementById('recPool').value = '';
-            document.getElementById('recMarker').value = '';
-            document.getElementById('recAssignmentId').value = '';
-            document.getElementById('recInterval').value = '';
-            document.getElementById('recComment').value = '';
-            document.getElementById('recValidator').value = '';
-        }
+        const recBody = document.getElementById('recTableBody');
+        if (recBody) { recBody.innerHTML = ''; addRecRow(); }
         
         buildProjectTabs();
         renderMarkersTasksStatus();
@@ -428,6 +428,9 @@ if (btnGenerateReport) {
 initFeedbackForm();
 loadFromStorage();
 loadFeedbackFromStorage();
+
+// Первая строка в таблице рекомендаций
+addRecRow();
 
 if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length ||
     state.rawFlatValidations.length || state.rawSuperset1.length || state.rawSuperset2.length ||
