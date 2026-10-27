@@ -1,4 +1,4 @@
-// js/ui.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД (9 KPI, 8 строк, навигация графиков, подписи)
+// js/ui.js — ИСПРАВЛЕНИЕ ШКАЛЫ ГРАФИКОВ И ПУСТЫХ ДИАГРАММ
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -11,7 +11,7 @@ import {
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
-// --- Кастомный плагин для подписей значений на графиках (чтобы не подключать внешние библиотеки) ---
+// --- Кастомный плагин для подписей значений на графиках ---
 const dataLabelsPlugin = {
     id: 'dataLabels',
     afterDatasetsDraw(chart) {
@@ -19,7 +19,8 @@ const dataLabelsPlugin = {
         ctx.save();
         chart.data.datasets.forEach((dataset, i) => {
             const meta = chart.getDatasetMeta(i);
-            if (!meta.hidden && dataset.showLabels !== false && meta.type !== 'line') {
+            // Рисуем подписи только для столбчатых диаграмм (bar), чтобы не ломать линии и круги
+            if (!meta.hidden && dataset.showLabels !== false && meta.type === 'bar') {
                 meta.data.forEach((element, index) => {
                     const val = dataset.data[index];
                     if (val != null && val !== 0 && typeof val === 'number') {
@@ -415,7 +416,6 @@ export function triggerFilterUpdate() {
     buildPoolQualityChart();
     buildDayQualityChart();
     buildErrorsByMarkerChart();
-    // buildTrendChart(); // ★ УДАЛЕНО
     buildTable();
     renderFeedbackTableHome();
 }
@@ -561,7 +561,10 @@ export function buildQualityChart() {
         }
     }
     const labels = Object.keys(byMarker).sort();
-    const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
+    const values = labels.map(m => {
+        const avg = byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length;
+        return Math.round(avg * 1000) / 10; // Округляем до 1 знака после запятой
+    });
     const datasets = [
         { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true },
         ...targetLinesForLabels(labels)
@@ -571,20 +574,34 @@ export function buildQualityChart() {
     state.charts.quality = new Chart(canvas, {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 25 ? l.slice(0, 22) + '…' : l), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
+            scales: { 
+                y: { 
+                    beginAtZero: true, 
+                    min: 0, 
+                    max: 100, 
+                    grid: { color: '#f0f0f0' }, 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
+                }, 
+                x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
+            } 
+        }
     });
 }
 
 export function buildErrorChart() {
     destroyChart(state.charts.errors);
-    errChartProjects = [...new Set(state.filteredData.map(r => r.project).filter(Boolean))].sort();
+    errChartProjects = ['Все проекты', ...new Set(state.filteredData.map(r => r.project).filter(Boolean))].sort();
     if (errChartIndex >= errChartProjects.length) errChartIndex = 0;
-    const curProj = errChartProjects.length > 0 ? errChartProjects[errChartIndex] : null;
+    const curProj = errChartProjects[errChartIndex];
 
     const byType = {};
     for (const r of state.filteredData) {
         if (!r.errorType) continue;
-        if (curProj && r.project !== curProj) continue;
+        if (curProj !== 'Все проекты' && r.project !== curProj) continue;
         byType[r.errorType] = (byType[r.errorType] || 0) + 1;
     }
     
@@ -592,7 +609,7 @@ export function buildErrorChart() {
     if (!canvas) return;
     
     const labels = Object.keys(byType);
-    const title = curProj ? `Распределение типов ошибок (${curProj})` : 'Распределение типов ошибок';
+    const title = curProj === 'Все проекты' ? 'Распределение типов ошибок' : `Распределение типов ошибок (${curProj})`;
     const h3 = canvas.closest('.chart-card').querySelector('h3');
     if (h3) h3.textContent = title;
 
@@ -617,7 +634,10 @@ export function buildPoolQualityChart() {
         }
     }
     const labels = Object.keys(byPool).sort();
-    const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
+    const values = labels.map(p => {
+        const avg = byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length;
+        return Math.round(avg * 1000) / 10;
+    });
     const datasets = [
         { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2, showLabels: true },
         ...targetLinesForLabels(labels)
@@ -627,7 +647,21 @@ export function buildPoolQualityChart() {
     state.charts.poolQuality = new Chart(canvas, {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
+            scales: { 
+                y: { 
+                    beginAtZero: true, 
+                    min: 0, 
+                    max: 100, 
+                    grid: { color: '#f0f0f0' }, 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
+                }, 
+                x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
+            } 
+        }
     });
 }
 
@@ -647,7 +681,10 @@ export function buildDayQualityChart() {
     }
     const labels = Object.keys(byDate).sort((a, b) =>
         a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-')));
-    const values = labels.map(d => (byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length) * 100);
+    const values = labels.map(d => {
+        const avg = byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length;
+        return Math.round(avg * 1000) / 10;
+    });
 
     const target = state.superset.norms.globalAvg;
     const datasets = [
@@ -662,17 +699,31 @@ export function buildDayQualityChart() {
     state.charts.dayQuality = new Chart(canvas, {
         type: 'line',
         data: { labels, datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
+            scales: { 
+                y: { 
+                    beginAtZero: true, 
+                    min: 0, 
+                    max: 100, 
+                    grid: { color: '#f0f0f0' }, 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
+                }, 
+                x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
+            } 
+        }
     });
 }
 
 export function buildErrorsByMarkerChart() {
     destroyChart(state.charts.errorsByMarker);
-    markerChartProjects = [...new Set(state.filteredData.map(r => r.project).filter(Boolean))].sort();
+    markerChartProjects = ['Все проекты', ...new Set(state.filteredData.map(r => r.project).filter(Boolean))].sort();
     if (markerChartIndex >= markerChartProjects.length) markerChartIndex = 0;
-    const curProj = markerChartProjects.length > 0 ? markerChartProjects[markerChartIndex] : null;
+    const curProj = markerChartProjects[markerChartIndex];
 
-    const filtered = state.filteredData.filter(r => !curProj || r.project === curProj);
+    const filtered = state.filteredData.filter(r => curProj === 'Все проекты' || r.project === curProj);
 
     const markers = [...new Set(filtered.map(r => r.marker).filter(Boolean))].sort();
     const errorTypes = [...new Set(filtered.map(r => r.errorType).filter(Boolean))].sort();
@@ -687,14 +738,22 @@ export function buildErrorsByMarkerChart() {
     const canvas = document.getElementById('chartErrorsByMarker');
     if (!canvas) return;
 
-    const title = curProj ? `Типы ошибок по разметчикам (${curProj})` : 'Типы ошибок по разметчикам';
+    const title = curProj === 'Все проекты' ? 'Типы ошибок по разметчикам' : `Типы ошибок по разметчикам (${curProj})`;
     const h3 = canvas.closest('.chart-card').querySelector('h3');
     if (h3) h3.textContent = title;
 
     state.charts.errorsByMarker = new Chart(canvas, {
         type: 'bar',
         data: { labels: markers.map(m => m.length > 20 ? m.slice(0, 18) + '…' : m), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#7a7a7a' } }, y: { stacked: true, beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { color: '#7a7a7a' } } } }
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
+            scales: { 
+                x: { stacked: true, grid: { display: false }, ticks: { color: '#7a7a7a' } }, 
+                y: { stacked: true, beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { color: '#7a7a7a' } } 
+            } 
+        }
     });
 }
 
