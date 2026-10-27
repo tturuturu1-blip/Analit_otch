@@ -1,9 +1,10 @@
-// js/ui.js — ВЫРАВНИВАНИЕ ОШИБОК И TEXTAREA ДЛЯ КОММЕНТАРИЕВ
+// js/ui.js — ИСПРАВЛЕНИЕ ОТОБРАЖЕНИЯ ПОЛЕЙ В "СОЗДАНИИ ФИДБЕКА"
 
 import { state, ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
 import { formatDate, updateLabel, escapeHtml, destroyChart, getVal, getValidationUrl } from './utils.js';
-import { renderFeedbackTable, renderFeedbackTableHome } from './feedback.js';
+// ★ ИЗМЕНЕНО: добавлен импорт applyFeedbackFilters
+import { renderFeedbackTable, renderFeedbackTableHome, applyFeedbackFilters } from './feedback.js';
 import {
     applySupersetFilters, formatPeriod, getNormForDate, getNormsForPeriod,
     addNormEntry, getTable1Config, getTable2Config, getTable3Config, getTable4Config
@@ -214,8 +215,14 @@ export function toggleAll(containerId, stateKey) {
         if (cb.checked) state.filterState[stateKey].add(cb.value);
     }
     updateLabel(containerId, stateKey);
-    const excl = ['feedbackPool', 'fbFormPools', 'feedbackGroup', 'fbRecordMarkers'];
-    if (!excl.includes(stateKey)) triggerFilterUpdate();
+    
+    // ★ ИЗМЕНЕНО: обрабатываем feedbackPool отдельно
+    if (stateKey === 'feedbackPool') {
+        applyFeedbackFilters();
+    } else {
+        const excl = ['fbFormPools', 'feedbackGroup', 'fbRecordMarkers'];
+        if (!excl.includes(stateKey)) triggerFilterUpdate();
+    }
 }
 
 export function onOptionChange(containerId, stateKey, value, isChecked) {
@@ -225,8 +232,14 @@ export function onOptionChange(containerId, stateKey, value, isChecked) {
     const checkboxes = document.querySelectorAll('#' + containerId + '_options input[type="checkbox"]');
     allCheckbox.checked = Array.from(checkboxes).every(cb => cb.checked);
     updateLabel(containerId, stateKey);
-    const excl = ['feedbackPool', 'fbFormPools', 'feedbackGroup', 'fbRecordMarkers'];
-    if (!excl.includes(stateKey)) triggerFilterUpdate();
+
+    // ★ ИЗМЕНЕНО: обрабатываем feedbackPool отдельно
+    if (stateKey === 'feedbackPool') {
+        applyFeedbackFilters();
+    } else {
+        const excl = ['fbFormPools', 'feedbackGroup', 'fbRecordMarkers'];
+        if (!excl.includes(stateKey)) triggerFilterUpdate();
+    }
 }
 
 export function populateMultiSelect(containerId, stateKey, values) {
@@ -280,7 +293,6 @@ export function populateRecDatalists() {
     fill('recValidatorsList', validators);
 }
 
-// ★ ОБНОВЛЕНО: textarea вместо input для комментария
 export function addRecRow() {
     const tbody = document.getElementById('recTableBody');
     if (!tbody) return;
@@ -299,7 +311,6 @@ export function addRecRow() {
     tbody.appendChild(tr);
 }
 
-// ===== ПАГИНАЦИЯ =====
 export function changePage(tableKey, page) {
     state.pagination[tableKey] = page;
     if (tableKey === 'mainData') buildTable();
@@ -581,7 +592,6 @@ export function buildTrendChart() {
     });
 }
 
-// ★ ОБНОВЛЕНО: группировка с учетом _linked и grid-выравнивание
 export function buildTable() {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
@@ -589,7 +599,6 @@ export function buildTable() {
     const groups = new Map();
     const groupByKey = new Map();
 
-    // 1. Сначала валидации
     for (const r of state.filteredData) {
         if (r._type !== 'validation') continue;
         const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
@@ -623,7 +632,6 @@ export function buildTable() {
         });
     }
 
-    // 2. Затем рекомендации
     for (const r of state.filteredData) {
         if (r._type !== 'recommendations') continue;
         let group = null;
@@ -665,7 +673,6 @@ export function buildTable() {
     }
 
     const groupedArray = Array.from(groups.values());
-    // Сортировка по дате (новые сверху)
     groupedArray.sort((a, b) => {
         if (!a.date && !b.date) return 0;
         if (!a.date) return 1;
