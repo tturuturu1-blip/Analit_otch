@@ -1,7 +1,6 @@
-// js/superset.js — ИТЕРАЦИЯ 1, файл 2/5 (с fallback для globalAvg)
-// Изменено по сравнению с прошлой версией:
-//   - buildNorms: если mainSet пуст — не фильтруем по mainSet
-// Остальное — без изменений
+// js/superset.js — ЧИСТКА КОДА
+// Удалено: calcFactQuality (не используется)
+// Остальное без изменений (с fallback для globalAvg и фильтрами качества)
 
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
@@ -60,23 +59,6 @@ export function getFilteredSupersetRaw() {
 }
 
 // ===== Остальные утилиты =====
-function calcFactQuality() {
-    const byProjectPool = {};
-    const byProject = {};
-    for (const r of state.processedData) {
-        if (r.quality === null || isNaN(r.quality) || r.quality <= 0) continue;
-        const project = normalizeProject(r.project);
-        if (!project) continue;
-        const pool = r.pool || '';
-        const key = project + '|' + pool;
-        if (!byProjectPool[key]) byProjectPool[key] = [];
-        byProjectPool[key].push(r.quality);
-        if (!byProject[project]) byProject[project] = [];
-        byProject[project].push(r.quality);
-    }
-    return { byProjectPool, byProject };
-}
-
 function avg(arr) {
     if (!arr || arr.length === 0) return null;
     return arr.reduce((a, b) => a + b, 0) / arr.length;
@@ -184,13 +166,11 @@ export function addNormEntry(dateISO, value) {
 }
 
 // ===== Нормативы качества =====
-// ★ ИЗМЕНЕНО: fallback, если mainSet пуст — берём все проекты суперсета
 function buildNorms() {
     const byProjectPool = {};
     const byProjectSets = {};
     const mainSet = getMainProjects();
 
-    // Если mainSet пуст (нет данных с главной) — не фильтруем
     const useMainSet = mainSet.size > 0;
     const shouldInclude = (project) => {
         if (!useMainSet) return true;
@@ -224,14 +204,12 @@ function buildNorms() {
         byProjectSets[project].add(norm);
     }
 
-    // byProject: среднее уникальных норм каждого проекта (для getTargetQuality)
     const byProject = {};
     for (const p in byProjectSets) {
         const a = avg(Array.from(byProjectSets[p]));
         if (a !== null) byProject[p] = a;
     }
 
-    // globalAvg: среднее всех уникальных норм по проектам (вариант B)
     const allUniqueNorms = [];
     for (const p in byProjectSets) {
         byProjectSets[p].forEach(n => allUniqueNorms.push(n));
