@@ -1,4 +1,4 @@
-// js/app.js — ЛОГИКА ДЛЯ ТАБЛИЦЫ РЕКОМЕНДАЦИЙ
+// js/app.js — ЛОГИКА БОКОВОЙ ПАНЕЛИ И МОДАЛЬНОГО ОКНА
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
@@ -35,6 +35,51 @@ Object.assign(window, {
     handleVideoLinkInput,
     changePage
 });
+
+// ===== Логика боковой панели =====
+const sidebar = document.getElementById('sidebar');
+const btnSidebarToggle = document.getElementById('btnSidebarToggle');
+if (btnSidebarToggle) {
+    btnSidebarToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('expanded');
+    });
+}
+
+// ===== Модальное окно загрузки =====
+const uploadModal = document.getElementById('uploadModal');
+const btnSidebarAdd = document.getElementById('btnSidebarAdd');
+const btnCloseModal = document.getElementById('btnCloseModal');
+const btnUploadDB = document.getElementById('btnUploadDB');
+const btnUploadSource = document.getElementById('btnUploadSource');
+
+if (btnSidebarAdd) {
+    btnSidebarAdd.addEventListener('click', () => {
+        uploadModal.classList.add('active');
+    });
+}
+
+const closeModal = () => uploadModal.classList.remove('active');
+
+if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);
+if (uploadModal) {
+    uploadModal.addEventListener('click', (e) => {
+        if (e.target === uploadModal) closeModal();
+    });
+}
+
+if (btnUploadDB) {
+    btnUploadDB.addEventListener('click', () => {
+        closeModal();
+        document.getElementById('importInput').click();
+    });
+}
+
+if (btnUploadSource) {
+    btnUploadSource.addEventListener('click', () => {
+        closeModal();
+        document.getElementById('fileInput').click();
+    });
+}
 
 // ===== Делегирование кликов по табам =====
 const projectTabsContainer = document.getElementById('projectTabs');
@@ -140,7 +185,6 @@ function getRecRowsData() {
     document.querySelectorAll('#recTableBody tr').forEach(tr => {
         const date = tr.querySelector('.rec-date').value;
         const marker = tr.querySelector('.rec-marker').value.trim();
-        // Пропускаем полностью пустые строки
         if (!date && !marker && !tr.querySelector('.rec-comment').value.trim() && !tr.querySelector('.rec-item').value.trim()) return;
         rows.push({
             'Дата валидации': date,
@@ -157,9 +201,7 @@ function getRecRowsData() {
 }
 
 const btnAddRecRow = document.getElementById('btnAddRecRow');
-if (btnAddRecRow) {
-    btnAddRecRow.addEventListener('click', addRecRow);
-}
+if (btnAddRecRow) btnAddRecRow.addEventListener('click', addRecRow);
 
 const btnSaveRecommendations = document.getElementById('btnSaveRecommendations');
 if (btnSaveRecommendations) {
@@ -201,7 +243,6 @@ if (btnExport) {
         }
         try {
             const wb = XLSX.utils.book_new();
-
             if (state.processedData.length > 0) {
                 const cleanProcessed = state.processedData.map(r => ({
                     "Дата валидации": r.date ? formatDate(r.date) : "",
@@ -219,7 +260,6 @@ if (btnExport) {
                 }));
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
             }
-
             if (state.feedbackData.length > 0) {
                 const cleanFeedback = state.feedbackData.map(f => {
                     let formattedDate = f.date;
@@ -236,25 +276,16 @@ if (btnExport) {
                 });
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanFeedback), "Обратная связь");
             }
-
-            if (state.rawEmployeeMap.length > 0)
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawEmployeeMap), "Сотрудники");
-            if (state.rawMarkers.length > 0)
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawMarkers), "Markers (сырые)");
-            if (state.rawValidation.length > 0)
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawValidation), "Валидация (сырые)");
-            if (state.rawRecommendations.length > 0)
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawRecommendations), "Рекомендации (сырые)");
-            if (state.rawFlatValidations.length > 0)
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
+            if (state.rawEmployeeMap.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawEmployeeMap), "Сотрудники");
+            if (state.rawMarkers.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawMarkers), "Markers (сырые)");
+            if (state.rawValidation.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawValidation), "Валидация (сырые)");
+            if (state.rawRecommendations.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawRecommendations), "Рекомендации (сырые)");
+            if (state.rawFlatValidations.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
 
             const { s1, s2, s3 } = getFilteredSupersetRaw();
-            if (s1.length > 0)
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s1), "Суперсет 1 (сырые)");
-            if (s2.length > 0)
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s2), "Суперсет 2 (сырые)");
-            if (s3.length > 0)
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s3), "Суперсет 3 (сырые)");
+            if (s1.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s1), "Суперсет 1 (сырые)");
+            if (s2.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s2), "Суперсет 2 (сырые)");
+            if (s3.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s3), "Суперсет 3 (сырые)");
 
             XLSX.writeFile(wb, `full_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
             log('Полный экспорт выполнен', false);
@@ -264,7 +295,7 @@ if (btnExport) {
     });
 }
 
-// ===== Импорт (с восстановлением ОС) =====
+// ===== Импорт =====
 const importInput = document.getElementById('importInput');
 if (importInput) {
     importInput.addEventListener('change', (e) => {
@@ -280,9 +311,7 @@ if (importInput) {
                 for (const name of wb.SheetNames) {
                     const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
                     const lower = name.toLowerCase();
-                    
                     if (lower.includes('свод')) continue;
-                    
                     if (lower.includes('обратн') || lower.includes('feedback')) parsedFb = json;
                     else if (lower.includes('сотрудник') || lower.includes('employee')) parsedEmp = json;
                     else if (lower.includes('суперсет 1') || lower.includes('superset 1')) parsedS1 = json;
@@ -293,7 +322,6 @@ if (importInput) {
                     else if (lower.includes('валидац') || lower.includes('valid')) parsedV = json;
                     else if (lower.includes('рекоменд') || lower.includes('recommend')) parsedR = json;
                 }
-                
                 state.rawMarkers = parsedM;
                 state.rawValidation = parsedV;
                 state.rawRecommendations = parsedR;
@@ -308,29 +336,19 @@ if (importInput) {
                         let dateStr = row['Дата'];
                         if (dateStr) {
                             const d = parseExcelDate(dateStr);
-                            if (d && !isNaN(d.getTime())) {
-                                dateStr = d.toISOString().slice(0, 10);
-                            }
+                            if (d && !isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
                         }
-                        
                         let avgQ = row['Ср. качество за период'];
                         if (avgQ === '' || avgQ === undefined) avgQ = null;
                         else if (typeof avgQ === 'string') avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
-
                         return {
-                            date: dateStr || '',
-                            marker: row['Разметчик'] || '',
-                            status: row['Статус'] || '',
-                            typeVKS: row['Тип ВКС'] || '',
-                            conductor: row['Провел'] || '',
-                            project: row['Проект'] || '',
-                            pools: row['Пулы с ошибками'] || '',
-                            avgQuality: avgQ
+                            date: dateStr || '', marker: row['Разметчик'] || '', status: row['Статус'] || '',
+                            typeVKS: row['Тип ВКС'] || '', conductor: row['Провел'] || '',
+                            project: row['Проект'] || '', pools: row['Пулы с ошибками'] || '', avgQuality: avgQ
                         };
                     });
                     saveFeedbackToStorage();
                 }
-                
                 saveToStorage();
                 await recomputeDashboard();
                 log('Импорт завершён', false);
@@ -348,42 +366,22 @@ const btnClear = document.getElementById('btnClear');
 if (btnClear) {
     btnClear.addEventListener('click', () => {
         if (!confirm('Удалить все данные?')) return;
-        state.rawMarkers = [];
-        state.rawValidation = [];
-        state.rawRecommendations = [];
-        state.rawFlatValidations = [];
-        state.rawSuperset1 = [];
-        state.rawSuperset2 = [];
-        state.rawSuperset3 = [];
-        state.rawEmployeeMap = [];
-        state.processedData = [];
+        state.rawMarkers = []; state.rawValidation = []; state.rawRecommendations = [];
+        state.rawFlatValidations = []; state.rawSuperset1 = []; state.rawSuperset2 = [];
+        state.rawSuperset3 = []; state.rawEmployeeMap = []; state.processedData = [];
         state.feedbackData = [];
-        
-        state.superset.table1 = [];
-        state.superset.table2 = [];
-        state.superset.table3 = [];
-        state.superset.table4 = [];
-        state.superset.filteredTable1 = [];
-        state.superset.filteredTable2 = [];
-        state.superset.filteredTable3 = [];
-        state.superset.filteredTable4 = [];
+        state.superset.table1 = []; state.superset.table2 = []; state.superset.table3 = []; state.superset.table4 = [];
+        state.superset.filteredTable1 = []; state.superset.filteredTable2 = []; state.superset.filteredTable3 = []; state.superset.filteredTable4 = [];
         state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null, avgPrice: null };
         state.superset.norms = { byProjectPool: {}, byProject: {}, globalAvg: null };
         state.superset.employeeMap = { fioToEmail: {}, emailToFio: {} };
         state.superset._mainProjects = null;
         state.superset.filters = { dateFrom: '', dateTo: '', tasks: new Set() };
         state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
-
-        state.feedbackGeneration.appliedPools.clear();
-        state.feedbackGeneration.appliedGroups.clear();
-        state.feedbackGeneration.videoLinks = {};
+        state.feedbackGeneration.appliedPools.clear(); state.feedbackGeneration.appliedGroups.clear(); state.feedbackGeneration.videoLinks = {};
         const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
         if (fbGenContainer) fbGenContainer.innerHTML = '';
-
-        for (const key in state.pagination) {
-            state.pagination[key] = 1;
-        }
-
+        for (const key in state.pagination) state.pagination[key] = 1;
         try { 
             localStorage.removeItem('validation_dashboard_data_v3'); 
             localStorage.removeItem('validation_feedback_data_v1');
@@ -392,24 +390,17 @@ if (btnClear) {
         const recBody = document.getElementById('recTableBody');
         if (recBody) { recBody.innerHTML = ''; addRecRow(); }
         
-        buildProjectTabs();
-        renderMarkersTasksStatus();
-        triggerFilterUpdate();
+        buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
         if (state.currentMenu === 'superset') renderSupersetPage();
         if (state.currentMenu === 'feedback') renderFeedbackTable();
         updateProgress(0, '', 'Готово');
     });
 }
 
-// ===== Пересчёт =====
+// ===== Пересчёт и Отчёт =====
 const btnRelink = document.getElementById('btnRelink');
-if (btnRelink) {
-    btnRelink.addEventListener('click', () => {
-        recomputeDashboard();
-    });
-}
+if (btnRelink) btnRelink.addEventListener('click', () => recomputeDashboard());
 
-// ===== Скачать HTML-отчёт =====
 const btnGenerateReport = document.getElementById('btnGenerateReport');
 if (btnGenerateReport) {
     btnGenerateReport.addEventListener('click', async () => {
@@ -428,8 +419,6 @@ if (btnGenerateReport) {
 initFeedbackForm();
 loadFromStorage();
 loadFeedbackFromStorage();
-
-// Первая строка в таблице рекомендаций
 addRecRow();
 
 if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommendations.length ||
@@ -437,14 +426,9 @@ if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommenda
     state.rawSuperset3.length || state.rawEmployeeMap.length) {
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
-        buildSuperset();
-        buildProjectTabs();
-        renderMarkersTasksStatus();
-        try { triggerFilterUpdate(); } catch (e2) { /* ignore */ }
+        buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus();
+        try { triggerFilterUpdate(); } catch (e2) { }
     });
 } else {
-    buildSuperset();
-    buildProjectTabs();
-    renderMarkersTasksStatus();
-    triggerFilterUpdate();
+    buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
 }
