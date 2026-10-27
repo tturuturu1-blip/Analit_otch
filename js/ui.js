@@ -1,4 +1,4 @@
-// js/ui.js — ИСПРАВЛЕНИЕ ШКАЛЫ ГРАФИКОВ И ПУСТЫХ ДИАГРАММ
+// js/ui.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД (ГРАФИКИ, 9 KPI, 8 СТРОК)
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -17,8 +17,10 @@ const dataLabelsPlugin = {
     afterDatasetsDraw(chart) {
         const { ctx } = chart;
         ctx.save();
+        
         chart.data.datasets.forEach((dataset, i) => {
             const meta = chart.getDatasetMeta(i);
+            // Рисуем подписи только для столбчатых диаграмм
             if (!meta.hidden && dataset.showLabels !== false && meta.type === 'bar') {
                 meta.data.forEach((element, index) => {
                     const val = dataset.data[index];
@@ -29,9 +31,9 @@ const dataLabelsPlugin = {
                         ctx.textBaseline = 'bottom';
                         
                         let displayVal = Number(val).toFixed(1);
-                        if (chart.options.scales && chart.options.scales.y && chart.options.scales.y.ticks.callback && chart.options.scales.y.ticks.callback(1).includes('%')) {
-                            displayVal += '%';
-                        }
+                        // Проверяем, есть ли знак % в настройках оси Y, чтобы добавить его к подписи
+                        const isPercent = chart.options.scales?.y?.ticks?.callback?.('test')?.includes('%');
+                        if (isPercent) displayVal += '%';
                         
                         ctx.fillText(displayVal, element.x, element.y - 5);
                     }
@@ -539,6 +541,7 @@ export function buildQualityChart() {
         }
     }
     const labels = Object.keys(byMarker).sort();
+    // Умножаем на 100 до передачи в Chart.js, чтобы шкала работала в процентах
     const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
     
     const datasets = [
@@ -558,7 +561,7 @@ export function buildQualityChart() {
             scales: { 
                 y: { 
                     beginAtZero: true, 
-                    max: 100, 
+                    max: 100, // Только max, без min и stepSize
                     grid: { color: '#f0f0f0' }, 
                     ticks: { callback: v => v + '%', color: '#7a7a7a' } 
                 }, 
@@ -570,16 +573,13 @@ export function buildQualityChart() {
 
 export function buildErrorChart() {
     destroyChart(state.charts.errors);
-    
     const byType = {};
     for (const r of state.filteredData) {
         if (!r.errorType) continue;
         byType[r.errorType] = (byType[r.errorType] || 0) + 1;
     }
-    
     const canvas = document.getElementById('chartErrors');
     if (!canvas) return;
-    
     const labels = Object.keys(byType);
 
     state.charts.errors = new Chart(canvas, {
@@ -611,6 +611,7 @@ export function buildPoolQualityChart() {
     ];
     const canvas = document.getElementById('chartPoolQuality');
     if (!canvas) return;
+    
     state.charts.poolQuality = new Chart(canvas, {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets },
