@@ -1,10 +1,8 @@
-// js/report-runtime.js — ИСПРАВЛЕНИЕ TZ-СДВИГА ДАТ
+// js/report-runtime.js — ИСПРАВЛЕНИЕ: единый цвет баров + колонка «Проект» в ОС
 // Изменено:
-//   - formatDate понимает dd.mm.yyyy (строку) и Date
-//   - добавлена parseDate(str) для парсинга dd.mm.yyyy и YYYY-MM-DD
-//   - applyFilters использует parseDate
-//   - renderFeedbackTableHome форматирует дату через formatDate
-// Остальное — без изменений.
+//   1. buildQualityChart / buildPoolQualityChart: единый цвет баров (было хардкод 98/99)
+//   2. renderFeedbackTableHome: добавлена колонка «Проект», colspan=8
+// Остальное — как в предыдущей версии (TZ-фикс, домен, ключи с project/pool).
 
 (function () {
     'use strict';
@@ -24,7 +22,6 @@
     var currentTab = 'all';
     var filterState = { pool: new Set(), marker: new Set(), result: new Set() };
 
-    // ★ ИЗМЕНЕНО: понимает dd.mm.yyyy (строку) и Date
     function formatDate(d) {
         if (!d) return '';
         if (typeof d === 'string' && /^\d{2}\.\d{2}\.\d{4}$/.test(d)) {
@@ -36,7 +33,6 @@
                String(dt.getMonth() + 1).padStart(2, '0') + '.' + dt.getFullYear();
     }
 
-    // ★ НОВОЕ: парсер для сравнения дат в фильтрах
     function parseDate(str) {
         if (!str) return null;
         if (str instanceof Date) return str;
@@ -92,7 +88,6 @@
             if (!poolEmpty && !filterState.pool.has(r.pool || '')) return false;
             if (!markerEmpty && !filterState.marker.has(r.marker || '')) return false;
             if (!resultEmpty && !filterState.result.has(r.result || '')) return false;
-            // ★ ИЗМЕНЕНО: используем parseDate для корректного парсинга dd.mm.yyyy
             if (fromDate && r.date) {
                 var rDateFrom = parseDate(r.date);
                 if (rDateFrom && rDateFrom < fromDate) return false;
@@ -237,12 +232,13 @@
             return (sum / arr.length) * 100;
         });
         
+        // ★ ИЗМЕНЕНО: единый цвет, как в ui.js (было: хардкод 98/99)
         var datasets = [
             {
                 label: 'Ср. качество, %',
                 data: values,
-                backgroundColor: values.map(function (v) { return v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'; }),
-                borderRadius: 4, order: 2
+                backgroundColor: '#d4ebd9',
+                borderRadius: 8, order: 2
             }
         ];
         if (targetQualityGlobal != null) {
@@ -305,12 +301,13 @@
             return (sum / arr.length) * 100;
         });
         
+        // ★ ИЗМЕНЕНО: единый цвет, как в ui.js (было: хардкод 98/99)
         var datasets = [
             {
                 label: 'Ср. качество, %',
                 data: values,
-                backgroundColor: values.map(function (v) { return v < 98 ? '#f07171' : v < 99 ? '#f2c94c' : '#85c4ae'; }),
-                borderRadius: 4, order: 2
+                backgroundColor: '#d3e9fb',
+                borderRadius: 8, order: 2
             }
         ];
         if (targetQualityGlobal != null) {
@@ -603,22 +600,29 @@
             var statusColor = f.status === 'Проведена' ? '#85c4ae'
                 : f.status === 'Отменена' ? '#e55555'
                 : f.status === 'Перенесена' ? '#f2c94c'
-                : '#7a95b8'; // "Запланирована" — нейтральный синий
+                : '#7a95b8';
             var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null)
                 ? (f.avgQuality * 100).toFixed(1) + '%'
                 : '—';
-            // ★ ИЗМЕНЕНО: formatDate для консистентности dd.mm.yyyy
+            // ★ ИЗМЕНЕНО: добавлена колонка «Проект» (между Статус и Пулы)
+            var displayProject = f.project || '—';
             html += '<tr>' +
                 '<td>' + escapeHtml(formatDate(f.date)) + '</td>' +
                 '<td>' + escapeHtml(f.marker || '') + '</td>' +
                 '<td>' + escapeHtml(f.typeVKS || '—') + '</td>' +
                 '<td>' + escapeHtml(f.conductor || '—') + '</td>' +
                 '<td><span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '">' + escapeHtml(f.status) + '</span></td>' +
+                '<td>' + escapeHtml(displayProject) + '</td>' +
                 '<td>' + escapeHtml(f.pools || '') + '</td>' +
                 '<td><b>' + avgQText + '</b></td>' +
             '</tr>';
         }
         tbody.innerHTML = html;
+
+        if (rows.length === 0) {
+            // ★ ИЗМЕНЕНО: colspan=8 (было 9) — по фактическому количеству колонок
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--muted); padding: 20px;">Нет данных.</td></tr>';
+        }
 
         renderPaginationControls('pagination-fbHome-controls', 'pagination-fbHome-info', totalItems, currentPageFb, 'fb');
     }
@@ -763,7 +767,6 @@
     window.changePage = changePage;
 
     function init() {
-        // === Формируем заголовок отчёта ===
         var projectNames = [];
         var seenProjects = {};
         for (var pi = 0; pi < processedData.length; pi++) {
@@ -804,7 +807,6 @@
             brandEl.innerHTML = '<span class="brand-accent">' + escapeHtml(accentText) + '</span> <span class="brand-pro">' + escapeHtml(proText) + '</span>';
         }
 
-        // === Остальная инициализация ===
         var poolsSet = new Set();
         var markersSet = new Set();
         for (var i = 0; i < processedData.length; i++) {
