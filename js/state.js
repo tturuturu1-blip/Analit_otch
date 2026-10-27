@@ -1,9 +1,11 @@
-// js/state.js — ДОБАВЛЕНО: fbRecordMarkers в filterState
+// js/state.js — ДОБАВЛЕНА КОНСТАНТА MAIN_ITEMS_PER_PAGE = 8
 
 export const STORAGE_KEY = 'validation_dashboard_data_v3';
 export const FB_STORAGE_KEY = 'validation_feedback_data_v1';
 
+// Количество строк на одной странице таблицы
 export const ITEMS_PER_PAGE = 10;
+export const MAIN_ITEMS_PER_PAGE = 8; // ★ НОВОЕ: для главной таблицы результатов
 
 const DEFAULT_NORM_HISTORY = [{ date: '2000-01-01', value: 580 }];
 
@@ -25,7 +27,6 @@ export const state = {
     currentMenu: 'main',
     projects: [],
     
-    // Состояние текущих страниц для пагинации всех таблиц
     pagination: {
         mainData: 1,
         fbHome: 1,
@@ -43,10 +44,9 @@ export const state = {
         feedbackPool: new Set(),
         feedbackGroup: new Set(),
         fbFormPools: new Set(),
-        fbRecordMarkers: new Set()   // ★ НОВОЕ: для мультивыбора разметчиков в ОС
+        fbRecordMarkers: new Set()
     },
 
-    // Состояние для генерации фидбека
     feedbackGeneration: {
         appliedPools: new Set(),
         appliedGroups: new Set(),
