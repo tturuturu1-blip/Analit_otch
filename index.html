@@ -181,7 +181,7 @@
                     <button id="btnResetFilters" style="height:40px;">Сбросить</button>
                 </div>
 
-                <!-- Контейнер для новых 9 карточек KPI -->
+                <!-- Контейнер для 9 карточек KPI -->
                 <div class="kpi-row" id="mainKpisContainer"></div>
 
                 <!-- Таблица 1: Результаты валидации -->
@@ -212,13 +212,49 @@
                     </div>
                 </div>
 
+                <!-- ГРАФИКИ -->
                 <div class="charts-grid">
-                    <div class="chart-card"><h3>Среднее качество по разметчикам</h3><canvas id="chartQuality"></canvas></div>
-                    <div class="chart-card"><h3>Распределение типов ошибок</h3><canvas id="chartErrors"></canvas></div>
-                    <div class="chart-card"><h3>Качество по пулам</h3><canvas id="chartPoolQuality"></canvas></div>
-                    <div class="chart-card"><h3>Качество по дням</h3><canvas id="chartDayQuality"></canvas></div>
-                    <div class="chart-card"><h3>Типы ошибок по разметчикам</h3><canvas id="chartErrorsByMarker"></canvas></div>
-                    <div class="chart-card"><h3>Динамика по датам</h3><canvas id="chartTrend"></canvas></div>
+                    <div class="chart-card">
+                        <h3>Качество по разметчикам</h3>
+                        <canvas id="chartQuality"></canvas>
+                    </div>
+                    
+                    <div class="chart-card">
+                        <div class="chart-header-with-nav">
+                            <h3>Распределение типов ошибок</h3>
+                            <div class="chart-nav">
+                                <button onclick="changeChartProject('errors', -1)">&lt;</button>
+                                <button onclick="changeChartProject('errors', 1)">&gt;</button>
+                            </div>
+                        </div>
+                        <canvas id="chartErrors"></canvas>
+                    </div>
+                </div>
+
+                <!-- Качество по пулам на всю ширину -->
+                <div class="charts-grid full-width">
+                    <div class="chart-card" style="height: 500px;">
+                        <h3>Качество по пулам</h3>
+                        <canvas id="chartPoolQuality"></canvas>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Качество по дням</h3>
+                        <canvas id="chartDayQuality"></canvas>
+                    </div>
+                    
+                    <div class="chart-card">
+                        <div class="chart-header-with-nav">
+                            <h3>Типы ошибок по разметчикам</h3>
+                            <div class="chart-nav">
+                                <button onclick="changeChartProject('errorsByMarker', -1)">&lt;</button>
+                                <button onclick="changeChartProject('errorsByMarker', 1)">&gt;</button>
+                            </div>
+                        </div>
+                        <canvas id="chartErrorsByMarker"></canvas>
+                    </div>
                 </div>
 
                 <!-- Таблица 2: Обратные связи -->
@@ -397,8 +433,6 @@
                     </div>
                 </div>
                 
-                <!-- KPI карточки удалены, они переехали на главную -->
-
                 <h3 style="margin-bottom: 15px;">Сводная таблица (проект + задача)</h3>
                 <div class="table-card">
                     <table id="supersetTable1">
@@ -501,6 +535,18 @@
             </button>
         </div>
         <button class="modal-close-btn" id="btnCloseModal">Отмена</button>
+    </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ НОРМЫ -->
+<div class="modal-overlay" id="normModal">
+    <div class="modal-content" style="max-width: 400px;">
+        <h3 class="modal-title" style="font-size: 1.5rem; margin-bottom: 20px;">Изменить норму</h3>
+        <input type="number" id="normInput" style="width: 100%; padding: 12px 16px; border: 1px solid #ddd; border-radius: var(--radius-pill); font-size: 1.2rem; margin-bottom: 20px; outline: none; font-family: 'Source Sans 3', sans-serif;">
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button class="secondary" id="btnCancelNorm" style="padding: 8px 16px;">Отмена</button>
+            <button class="success" id="btnSaveNorm" style="padding: 8px 16px;">Сохранить</button>
+        </div>
     </div>
 </div>
 
