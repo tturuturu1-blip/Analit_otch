@@ -1,4 +1,4 @@
-// js/ui.js — ИСПРАВЛЕНИЕ ШКАЛЫ ГРАФИКОВ И УДАЛЕНИЕ СТРЕЛОК
+// js/ui.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД (ФИНАЛ)
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -28,7 +28,7 @@ const dataLabelsPlugin = {
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'bottom';
                         
-                        let displayVal = Math.round(val * 10) / 10;
+                        let displayVal = Number(val).toFixed(1);
                         if (chart.options.scales && chart.options.scales.y && chart.options.scales.y.ticks.callback && chart.options.scales.y.ticks.callback(1).includes('%')) {
                             displayVal += '%';
                         }
@@ -541,14 +541,18 @@ export function buildQualityChart() {
     const labels = Object.keys(byMarker).sort();
     const values = labels.map(m => {
         const avg = byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length;
-        return Math.round(avg * 1000) / 10;
+        return Number((avg * 100).toFixed(1));
     });
+    
+    if (labels.length === 0) return; // Защита от пустого графика
+
     const datasets = [
         { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true },
         ...targetLinesForLabels(labels)
     ];
     const canvas = document.getElementById('chartQuality');
     if (!canvas) return;
+    
     state.charts.quality = new Chart(canvas, {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 25 ? l.slice(0, 22) + '…' : l), datasets },
@@ -583,7 +587,8 @@ export function buildErrorChart() {
     if (!canvas) return;
     
     const labels = Object.keys(byType);
-    
+    if (labels.length === 0) return;
+
     state.charts.errors = new Chart(canvas, {
         type: 'doughnut',
         data: { labels: labels, datasets: [{ data: Object.values(byType), backgroundColor: CHART_COLORS, borderWidth: 0 }] },
@@ -607,8 +612,11 @@ export function buildPoolQualityChart() {
     const labels = Object.keys(byPool).sort();
     const values = labels.map(p => {
         const avg = byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length;
-        return Math.round(avg * 1000) / 10;
+        return Number((avg * 100).toFixed(1));
     });
+    
+    if (labels.length === 0) return;
+
     const datasets = [
         { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2, showLabels: true },
         ...targetLinesForLabels(labels)
@@ -654,8 +662,10 @@ export function buildDayQualityChart() {
         a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-')));
     const values = labels.map(d => {
         const avg = byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length;
-        return Math.round(avg * 1000) / 10;
+        return Number((avg * 100).toFixed(1));
     });
+
+    if (labels.length === 0) return;
 
     const target = state.superset.norms.globalAvg;
     const datasets = [
@@ -694,6 +704,8 @@ export function buildErrorsByMarkerChart() {
     const markers = [...new Set(state.filteredData.map(r => r.marker).filter(Boolean))].sort();
     const errorTypes = [...new Set(state.filteredData.map(r => r.errorType).filter(Boolean))].sort();
     
+    if (markers.length === 0) return;
+
     const datasets = errorTypes.map((type, idx) => ({
         label: type,
         data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
