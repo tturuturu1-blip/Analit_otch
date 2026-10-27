@@ -1,9 +1,4 @@
-// js/feedback.js — МУЛЬТИВЫБОР РАЗМЕТЧИКОВ В ОС + НЕОБЯЗАТЕЛЬНЫЕ ПУЛЫ
-// Изменено:
-//   1. renderFeedbackTable: заполняет msFbRecordMarkers
-//   2. editFeedback: устанавливает выбранные чекбоксы
-//   3. handleAddFeedback: цикл по маркерам, pools необязательны
-// Остальное — как в предыдущей версии.
+// js/feedback.js — ИСПРАВЛЕНИЕ РАСЧЕТА КАЧЕСТВА В HTML-ФИДБЕКЕ
 
 import { state, saveFeedbackToStorage, ITEMS_PER_PAGE } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel, getVal } from './utils.js';
@@ -159,7 +154,6 @@ function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeAction
 }
 
 export function renderFeedbackTable() {
-    // ★ ИЗМЕНЕНО: заполняем мультиселект разметчиков (вместо select)
     const markersList = document.getElementById('msFbRecordMarkers_options');
     if (markersList) {
         const markers = [...new Set(state.processedData.map(r => r.marker).filter(Boolean))].sort();
@@ -318,7 +312,7 @@ export function generateFeedbackHtml() {
                 errors: [],
                 totalFragments: 0,
                 uniqueFiles: new Set(),
-                quality: r.quality
+                fileQualities: {} // ★ ИЗМЕНЕНО: храним качество каждого файла отдельно
             };
         }
 
@@ -328,6 +322,9 @@ export function generateFeedbackHtml() {
         if (!mData.uniqueFiles.has(fileKey)) {
             mData.uniqueFiles.add(fileKey);
             mData.totalFragments += (r.fragments || 0);
+            if (r.quality != null && isFinite(r.quality)) {
+                mData.fileQualities[fileKey] = r.quality;
+            }
         }
         
         if (r.result === 'Ошибка') {
@@ -416,9 +413,13 @@ export function generateFeedbackHtml() {
                     </div>`;
                 });
 
-                const q = (mData.quality !== null && mData.quality !== undefined) 
-                    ? (mData.quality * 100).toFixed(1) + '%' 
-                    : '—';
+                // ★ ИЗМЕНЕНО: вычисляем среднее качество по всем уникальным файлам задания
+                let q = '—';
+                const qVals = Object.values(mData.fileQualities);
+                if (qVals.length > 0) {
+                    const avg = qVals.reduce((a, b) => a + b, 0) / qVals.length;
+                    q = (avg * 100).toFixed(1) + '%';
+                }
 
                 bodyHtml += `
                 <details class="marker-card">
@@ -530,7 +531,6 @@ export function editFeedback(idx) {
     const f = state.feedbackData[idx];
     if (!f) return;
     
-    // ★ ИЗМЕНЕНО: устанавливаем выбранный маркер в мультиселекте
     state.filterState.fbRecordMarkers.clear();
     if (f.marker) state.filterState.fbRecordMarkers.add(f.marker);
     document.querySelectorAll('#msFbRecordMarkers_options input').forEach(cb => {
@@ -590,7 +590,6 @@ function handleAddFeedback() {
         alert('Выберите хотя бы одного разметчика и дату'); 
         return; 
     }
-    // ★ ИЗМЕНЕНО: пулы необязательны, проверка убрана
 
     const poolProjectCache = buildPoolProjectCache();
     const project = deriveProjectFromPools(pools, poolProjectCache);
@@ -631,8 +630,6 @@ function handleAddFeedback() {
 
         const newRecord = { marker, date: dateStr, status, typeVKS, conductor, pools, avgQuality, project };
 
-        // Если редактируем и выбран ровно один маркер — обновляем.
-        // Если выбрано несколько маркеров — добавляем новые записи (а старую не трогаем).
         if (state.editingFeedbackIndex !== null && markers.length === 1) {
             state.feedbackData[state.editingFeedbackIndex] = newRecord;
         } else {
