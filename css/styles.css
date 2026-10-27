@@ -307,24 +307,18 @@ textarea.rec-comment { padding: 8px; width: 100%; min-width: 250px; border: 1px 
     box-shadow: var(--shadow-soft); 
     display: flex; 
     flex-direction: column; 
-    height: 380px; 
 }
-.charts-grid.full-width .chart-card {
-    height: 500px; 
+/* Высота графика задается здесь, как и было раньше */
+.chart-card canvas { 
+    max-height: 280px; 
+    width: 100% !important; 
 }
-.chart-card h3 { font-size: 1.2rem; margin-bottom: 15px; color: var(--text); flex-shrink: 0; }
+/* Для широкого графика делаем больше высоту */
+.charts-grid.full-width .chart-card canvas {
+    max-height: 400px;
+}
 
-/* ★ НОВОЕ: Контейнер для canvas, чтобы графики не схлопывались */
-.chart-container {
-    flex: 1;
-    position: relative;
-    width: 100%;
-    min-height: 0;
-}
-.chart-container canvas {
-    width: 100% !important;
-    height: 100% !important;
-}
+.chart-card h3 { font-size: 1.2rem; margin-bottom: 20px; color: var(--text); }
 
 /* ============ Детали и Комментарии ============ */
 .expandable-row { cursor: pointer; }
