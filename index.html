@@ -13,7 +13,7 @@
 <body>
 
 <div class="app-layout">
-    <!-- НОВАЯ БОКОВАЯ ПАНЕЛЬ -->
+    <!-- БОКОВАЯ ПАНЕЛЬ -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="sidebar-logo">
@@ -181,15 +181,14 @@
                     <button id="btnResetFilters" style="height:40px;">Сбросить</button>
                 </div>
 
-                <div class="kpi-row">
-                    <div class="kpi-card"><div class="label">Всего размеченных фрагментов</div><div class="value" id="kpiTotalFragments">0</div></div>
-                    <div class="kpi-card"><div class="label">Разметчиков</div><div class="value" id="kpiTotalMarkers">0</div></div>
-                    <div class="kpi-card"><div class="label">Целевое качество</div><div class="value" id="kpiTargetQuality">—</div></div>
-                    <div class="kpi-card"><div class="label">Ошибок</div><div class="value" id="kpiErrorsPercent">0%</div></div>
-                    <div class="kpi-card"><div class="label">Качество</div><div class="value" id="kpiQuality">—</div></div>
-                </div>
+                <!-- Контейнер для новых 9 карточек KPI -->
+                <div class="kpi-row" id="mainKpisContainer"></div>
 
+                <!-- Таблица 1: Результаты валидации -->
                 <div class="table-card">
+                    <div class="table-header">
+                        <h3>Результаты валидации</h3>
+                    </div>
                     <table id="dataTable">
                         <thead>
                             <tr>
@@ -202,7 +201,7 @@
                                         <div>Интервал</div>
                                     </div>
                                 </th>
-                                <th>Качество</th><th>Ссылка</th><th>Связь</th>
+                                <th>Качество</th><th>Ссылка</th>
                             </tr>
                         </thead>
                         <tbody id="tableBody"></tbody>
@@ -222,8 +221,11 @@
                     <div class="chart-card"><h3>Динамика по датам</h3><canvas id="chartTrend"></canvas></div>
                 </div>
 
-                <h2 style="margin-top: 40px; margin-bottom: 20px;">Обратная связь</h2>
+                <!-- Таблица 2: Обратные связи -->
                 <div class="table-card">
+                    <div class="table-header">
+                        <h3>Обратные связи</h3>
+                    </div>
                     <table id="fbTableHome">
                         <thead>
                             <tr>
@@ -394,7 +396,9 @@
                         <button id="btnResetSupersetFilters" style="height:40px;" onclick="resetSupersetFilters()">Сбросить</button>
                     </div>
                 </div>
-                <div class="kpi-row" id="supersetKpis"></div>
+                
+                <!-- KPI карточки удалены, они переехали на главную -->
+
                 <h3 style="margin-bottom: 15px;">Сводная таблица (проект + задача)</h3>
                 <div class="table-card">
                     <table id="supersetTable1">
