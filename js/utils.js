@@ -1,3 +1,6 @@
+// js/utils.js — ЧИСТКА КОДА
+// Удалено: progressStartTimer, progressETA (не используются)
+
 import { state } from './state.js';
 
 // ===== Ссылка на валидацию =====
@@ -99,10 +102,8 @@ export function detectTableType(row) {
 }
 
 // ===== Шифрование почты =====
-// Изменено: 5 символов в начале, 7 в конце
 export function maskEmail(email) {
     if (!email || typeof email !== 'string') return email;
-    // Если почта слишком короткая для маскировки (меньше 12 символов)
     if (email.length <= 12) return email;
     return email.substring(0, 5) + "***" + email.slice(-7);
 }
@@ -133,14 +134,6 @@ export function updateLabel(containerId, stateKey) {
     }
 }
 
-let _progressStart = 0;
-export function progressStartTimer() { _progressStart = Date.now(); }
-export function progressETA(percent) {
-    if (percent <= 0.5) return '';
-    const elapsed = (Date.now() - _progressStart) / 1000;
-    const remaining = Math.max(0, (elapsed / (percent / 100)) - elapsed);
-    return remaining < 1 ? '' : ' · осталось ~' + remaining.toFixed(1) + ' с';
-}
 export function updateProgress(percent, stage, title) {
     const fill = document.getElementById('progressFill');
     const pct = document.getElementById('progressPct');
@@ -152,7 +145,9 @@ export function updateProgress(percent, stage, title) {
     if (stage !== undefined && stageEl) stageEl.textContent = stage || '';
     if (title !== undefined && titleEl) titleEl.textContent = title || '';
 }
+
 export function yieldToUI() { return new Promise(r => setTimeout(r, 0)); }
+
 export function log(msg, isError) {
     const box = document.getElementById('logBox');
     if (!box) return;
@@ -163,6 +158,7 @@ export function log(msg, isError) {
     box.scrollTop = box.scrollHeight;
     while (box.children.length > 50) box.removeChild(box.firstChild);
 }
+
 export function debounce(fn, delay = 100) {
     let timer = null;
     return function (...args) {
@@ -170,6 +166,7 @@ export function debounce(fn, delay = 100) {
         timer = setTimeout(() => fn.apply(this, args), delay);
     };
 }
+
 export function destroyChart(chartRef) {
     if (chartRef) { try { chartRef.destroy(); } catch (e) { /* ignore */ } }
 }
