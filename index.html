@@ -174,12 +174,19 @@
             <div class="table-card">
                 <table id="dataTable">
                     <thead>
-                        <tr>
-                            <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
-                            <th>Итог</th><th>Тип ошибки</th><th>Комментарий</th><th>Интервал</th>
-                            <th>Качество</th><th>Ссылка</th><th>Связь</th>
-                        </tr>
-                    </thead>
+    <tr>
+        <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
+        <th colspan="4" style="padding: 0;">
+            <div class="th-grid">
+                <div>Итог</div>
+                <div>Тип ошибки</div>
+                <div>Комментарий</div>
+                <div>Интервал</div>
+            </div>
+        </th>
+        <th>Качество</th><th>Ссылка</th><th>Связь</th>
+    </tr>
+</thead>
                     <tbody id="tableBody"></tbody>
                 </table>
                 <div class="pagination-container" id="pagination-data">
