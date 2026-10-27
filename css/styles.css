@@ -31,17 +31,16 @@ h1, h2, h3, h4, h5, h6, .brand, .kpi-card .value, .chart-card h3, button, label.
     flex: 1; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-lg);
 }
 
-/* ============ НОВАЯ SIDEBAR ============ */
+/* ============ SIDEBAR ============ */
 .sidebar {
     width: var(--sidebar-w); background: var(--container); 
     border-radius: var(--radius-lg); box-shadow: var(--shadow-soft);
     display: flex; flex-direction: column; align-items: center; 
-    height: 100%; /* Панель всегда на всю высоту */
+    height: 100%;
     padding: 25px 0; gap: 15px;
     flex-shrink: 0; transition: width 0.3s ease; 
     overflow-y: auto; overflow-x: hidden;
 }
-/* Прячем скроллбар у сайдбара */
 .sidebar::-webkit-scrollbar { display: none; }
 .sidebar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -57,8 +56,9 @@ h1, h2, h3, h4, h5, h6, .brand, .kpi-card .value, .chart-card h3, button, label.
 }
 
 .sidebar-logo { display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: default; }
-.sidebar.expanded .sidebar-logo { flex-direction: row; align-items: baseline; gap: 8px; }
+.sidebar.expanded .sidebar-logo { flex-direction: row; align-items: center; gap: 8px; }
 
+/* ★ ОБНОВЛЕНО: Стили логотипа */
 .logo-main { 
     font-size: 1.6rem; color: #fff; line-height: 1; 
     background: var(--accent); border-radius: 50%; 
@@ -66,7 +66,14 @@ h1, h2, h3, h4, h5, h6, .brand, .kpi-card .value, .chart-card h3, button, label.
     transition: all 0.3s; flex-shrink: 0;
 }
 .sidebar.expanded .logo-main {
-    background: transparent; color: var(--text); width: auto; height: auto; font-size: 1.4rem; border-radius: 0;
+    background: var(--accent); /* Черный фон */
+    color: #fff; /* Белый текст */
+    width: auto; 
+    height: auto; 
+    font-size: 1.2rem; 
+    border-radius: var(--radius-pill); /* Максимальное закругление */
+    padding: 8px 16px; /* Отступы, чтобы это была плашка */
+    margin-right: 5px;
 }
 .logo-sub { font-size: 0.75rem; color: var(--muted); letter-spacing: 1px; margin-top: 4px; text-transform: uppercase; }
 .sidebar.expanded .logo-sub { margin-top: 0; font-size: 0.95rem; }
