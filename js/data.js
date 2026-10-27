@@ -1,4 +1,4 @@
-// js/data.js — ИТЕРАЦИЯ 2 (универсальный парсинг Markers + новые рекомендации)
+// js/data.js — СВЯЗЫВАНИЕ РЕКОМЕНДАЦИЙ ПО item_id
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -345,7 +345,8 @@ export async function recomputeDashboard() {
             quality: null,
             interval: getVal(r, 'Временной интервал фрагмента', 'Интервал') || null,
             fragments: 0,
-            assignmentId: getVal(r, 'ID задания') || null
+            // ★ ИЗМЕНЕНО: используем item_id вместо assignmentId
+            itemId: getVal(r, 'item_id', 'ID задания', 'ID item') || null
         });
     }
 
@@ -353,15 +354,16 @@ export async function recomputeDashboard() {
     await yieldToUI();
 
     const valIndexByFile = {};
-    const valIndexByAssignment = {};
+    const valIndexByItem = {};
     
     for (const v of state.processedData) {
         if (v._type === 'validation') {
             const key = `${v.pool || ''}|${v.marker || ''}|${v.validator || ''}|${v.fileName || ''}`;
             if (!valIndexByFile[key]) valIndexByFile[key] = v;
             
-            if (v.assignmentId) {
-                if (!valIndexByAssignment[v.assignmentId]) valIndexByAssignment[v.assignmentId] = v;
+            // ★ ИЗМЕНЕНО: индекс по itemId
+            if (v.itemId) {
+                if (!valIndexByItem[v.itemId]) valIndexByItem[v.itemId] = v;
             }
         }
     }
@@ -370,8 +372,9 @@ export async function recomputeDashboard() {
         if (r._type === 'recommendations') {
             let linkedVal = null;
             
-            if (r.assignmentId && valIndexByAssignment[r.assignmentId]) {
-                linkedVal = valIndexByAssignment[r.assignmentId];
+            // ★ ИЗМЕНЕНО: сначала ищем по itemId, потом по файлу
+            if (r.itemId && valIndexByItem[r.itemId]) {
+                linkedVal = valIndexByItem[r.itemId];
             } else {
                 const key = `${r.pool || ''}|${r.marker || ''}|${r.validator || ''}|${r.fileName || ''}`;
                 if (valIndexByFile[key]) linkedVal = valIndexByFile[key];
