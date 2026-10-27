@@ -1,5 +1,4 @@
-// js/utils.js — ЧИСТКА КОДА
-// Удалено: progressStartTimer, progressETA (не используются)
+// js/utils.js — ИЗМЕНЕНИЕ ФОРМАТА ДАТЫ НА ДД.ММ.ГГ
 
 import { state } from './state.js';
 
@@ -22,10 +21,13 @@ export function parseExcelDate(v) {
     return isNaN(new Date(s).getTime()) ? null : new Date(s);
 }
 
+// ★ ИЗМЕНЕНО: формат даты теперь дд.мм.гг
 export function formatDate(d) {
     if (!d) return '';
-    return String(d.getDate()).padStart(2, '0') + '.' +
-           String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = String(d.getFullYear()).slice(-2); // Обрезаем до 2 последних цифр
+    return day + '.' + month + '.' + year;
 }
 
 export function getVal(row, ...names) {
