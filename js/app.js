@@ -1,4 +1,4 @@
-// js/app.js — ЛОГИКА МОДАЛЬНОГО ОКНА НОРМЫ И НАВИГАЦИИ ГРАФИКОВ
+// js/app.js — ЛОГИКА МОДАЛЬНОГО ОКНА НОРМЫ (БЕЗ СТРЕЛОК ГРАФИКОВ)
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
@@ -9,7 +9,7 @@ import {
     populateRecDatalists, addRecRow,
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, onSupersetTableFilterChange,
-    changePage, changeChartProject
+    changePage
 } from './ui.js';
 import { 
     renderFeedbackTable, 
@@ -29,7 +29,6 @@ import { generateHtmlReport } from './report.js';
 const normModal = document.getElementById('normModal');
 const normInput = document.getElementById('normInput');
 
-// Определяем функцию открытия модального окна (вместо prompt)
 const editSupersetNorm = () => {
     const today = new Date().toISOString().slice(0, 10);
     const currentNorm = getNormForDate(today);
@@ -37,7 +36,6 @@ const editSupersetNorm = () => {
     if (normModal) normModal.classList.add('active');
 };
 
-// Обработчики кнопок модального окна
 if (document.getElementById('btnCancelNorm')) {
     document.getElementById('btnCancelNorm').addEventListener('click', () => {
         if (normModal) normModal.classList.remove('active');
@@ -66,7 +64,7 @@ Object.assign(window, {
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
     handleVideoLinkInput,
-    changePage, changeChartProject
+    changePage
 });
 
 // ===== Логика боковой панели и логотипа =====
@@ -78,7 +76,6 @@ if (btnSidebarToggle) {
     btnSidebarToggle.addEventListener('click', () => {
         sidebar.classList.toggle('expanded');
         
-        // Меняем текст логотипа
         if (sidebar.classList.contains('expanded')) {
             sidebarLogoText.textContent = 'Валидатор';
         } else {
