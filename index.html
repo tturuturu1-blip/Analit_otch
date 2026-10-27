@@ -55,48 +55,38 @@
                 <div id="markersStatusList" class="markers-status-list" style="display:none;"></div>
             </div>
 
-            <!-- ДОБАВЛЕНО: ДОБАВИТЬ РЕКОМЕНДАЦИЮ -->
+            <!-- ДОБАВИТЬ РЕКОМЕНДАЦИИ (таблица) -->
             <div class="card">
-                <h3 style="margin-bottom: 15px;">Добавить рекомендацию</h3>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Дата валидации</label>
-                        <input type="date" id="recDate">
-                    </div>
-                    <div class="form-group">
-                        <label>Проект</label>
-                        <input type="text" id="recProject" list="recProjectsList" placeholder="Выберите или введите">
-                        <datalist id="recProjectsList"></datalist>
-                    </div>
-                    <div class="form-group">
-                        <label>Пул</label>
-                        <input type="text" id="recPool" list="recPoolsList" placeholder="Выберите или введите">
-                        <datalist id="recPoolsList"></datalist>
-                    </div>
-                    <div class="form-group">
-                        <label>Почта разметчика</label>
-                        <input type="text" id="recMarker" list="recMarkersList" placeholder="Выберите или введите">
-                        <datalist id="recMarkersList"></datalist>
-                    </div>
-                    <div class="form-group">
-                        <label>ID задания (assignment)</label>
-                        <input type="text" id="recAssignmentId" placeholder="Введите ID задания">
-                    </div>
-                    <div class="form-group">
-                        <label>Интервал</label>
-                        <input type="text" id="recInterval" placeholder="Например: 1:23.456-2:34.567">
-                    </div>
-                    <div class="form-group">
-                        <label>Комментарий</label>
-                        <input type="text" id="recComment" placeholder="Текст комментария">
-                    </div>
-                    <div class="form-group">
-                        <label>Почта валидатора</label>
-                        <input type="text" id="recValidator" list="recValidatorsList" placeholder="Выберите или введите">
-                        <datalist id="recValidatorsList"></datalist>
-                    </div>
+                <h3 style="margin-bottom: 15px;">Добавить рекомендации</h3>
+                <div class="table-card" style="margin-bottom: 15px; background: #fff; box-shadow: none;">
+                    <table id="recTable">
+                        <thead>
+                            <tr>
+                                <th style="min-width: 120px;">Дата валидации</th>
+                                <th style="min-width: 140px;">Проект</th>
+                                <th style="min-width: 140px;">Пул</th>
+                                <th style="min-width: 180px;">Почта разметчика</th>
+                                <th style="min-width: 100px;">item_id</th>
+                                <th style="min-width: 140px;">Интервал</th>
+                                <th style="min-width: 180px;">Комментарий</th>
+                                <th style="min-width: 180px;">Почта валидатора</th>
+                                <th style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="recTableBody">
+                        </tbody>
+                    </table>
                 </div>
-                <button class="success" id="btnAddRecommendation" style="margin-top: 20px;">Добавить рекомендацию</button>
+                <div style="display:flex; gap:10px; flex-wrap: wrap;">
+                    <button class="secondary" id="btnAddRecRow">+ Добавить строку</button>
+                    <button class="success" id="btnSaveRecommendations">Добавить</button>
+                    <button class="secondary" id="btnExportRecommendations">📥 Скачать Excel</button>
+                </div>
+                <!-- Скрытые datalist для автодополнения -->
+                <datalist id="recProjectsList"></datalist>
+                <datalist id="recPoolsList"></datalist>
+                <datalist id="recMarkersList"></datalist>
+                <datalist id="recValidatorsList"></datalist>
             </div>
 
             <div class="card">
@@ -289,7 +279,20 @@
             <div class="card" style="margin-bottom: 20px;">
                 <h3 style="margin-bottom: 15px;">Добавить запись</h3>
                 <div class="form-grid">
-                    <div class="form-group"><label>Разметчик</label><select id="fbMarker"></select></div>
+                    <div class="filter-group" style="margin-bottom:0;">
+                        <label>Разметчики (можно несколько)</label>
+                        <div class="multi-select" id="msFbRecordMarkers">
+                            <div class="ms-header" onclick="toggleDropdown('msFbRecordMarkers')">
+                                <span class="ms-label empty" id="msFbRecordMarkers_label">Выберите разметчиков</span>
+                                <span class="ms-arrow">▼</span>
+                            </div>
+                            <div class="ms-dropdown" id="msFbRecordMarkers_dropdown">
+                                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                <label class="ms-item ms-all"><input type="checkbox" id="msFbRecordMarkers_all" onchange="toggleAll('msFbRecordMarkers', 'fbRecordMarkers')"> Выбрать все</label>
+                                <div id="msFbRecordMarkers_options"></div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="form-group"><label>Дата</label><input type="date" id="fbDate"></div>
                     <div class="form-group">
                         <label>Статус</label>
@@ -316,7 +319,7 @@
                         <datalist id="conductorsList"></datalist>
                     </div>
                     <div class="filter-group" style="margin-bottom:0;">
-                        <label>Пулы с ошибками</label>
+                        <label>Пулы с ошибками (необязательно)</label>
                         <div class="multi-select" id="msFbFormPools">
                             <div class="ms-header" onclick="toggleDropdown('msFbFormPools')">
                                 <span class="ms-label empty" id="msFbFormPools_label">Выберите пулы</span>
