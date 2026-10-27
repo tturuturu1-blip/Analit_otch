@@ -1,10 +1,21 @@
-// js/data.js — ИСПРАВЛЕНИЕ БАГА С ФИЛЬТРОМ ДАТ
+// js/data.js — ИСПРАВЛЕНИЕ СВЯЗЫВАНИЯ ID И ПРОЕКТОВ
 
 import { state, saveToStorage } from './state.js';
 import {
     parseExcelDate, getVal, stripJson, formatInterval,
     detectTableType, updateProgress, log, yieldToUI
 } from './utils.js';
+
+// ★ НОВАЯ ФУНКЦИЯ: Приводит ID (task_id, marker_id и т.д.) к единому виду, убирая .0
+function normalizeId(id) {
+    if (id == null) return '';
+    const s = String(id).trim();
+    // Если это число с плавающей точкой (например, 123.0), отрезаем .0
+    if (/^\d+\.0+$/.test(s)) {
+        return s.split('.')[0];
+    }
+    return s;
+}
 
 function readOneExcelFile(file) {
     return new Promise((resolve) => {
@@ -230,8 +241,9 @@ export async function recomputeDashboard() {
             }
         }
         
-        const taskId = getVal(m, 'ID задачи');
-        const markerId = getVal(m, 'ID разметчика');
+        // ★ ИЗМЕНЕНО: Применяем normalizeId
+        const taskId = normalizeId(getVal(m, 'ID задачи'));
+        const markerId = normalizeId(getVal(m, 'ID разметчика'));
         const project = (getVal(m, 'Проект') || '').replace(/_validate$/, '').trim() || null;
         
         if (taskId && markerId) {
@@ -247,13 +259,13 @@ export async function recomputeDashboard() {
     const valDict = {};
     for (const v of state.rawValidation) {
         if (!v) continue;
-        const aid = getVal(v, 'assignment_id');
+        const aid = normalizeId(getVal(v, 'assignment_id'));
         if (aid) valDict[aid] = v;
     }
     const childrenToRemove = new Set();
     for (const v of state.rawValidation) {
         if (!v) continue;
-        const origId = getVal(v, 'original_assignment_id');
+        const origId = normalizeId(getVal(v, 'original_assignment_id'));
         if (origId && origId !== '') {
             const parent = valDict[origId];
             if (parent) parent['OUTPUT:marks'] = v['OUTPUT:marks'];
@@ -266,14 +278,15 @@ export async function recomputeDashboard() {
     await yieldToUI();
 
     for (const v of validValidations) {
-        const taskId = getVal(v, 'task_id');
-        const markerId = getVal(v, 'marker_id');
+        // ★ ИЗМЕНЕНО: Применяем normalizeId
+        const taskId = normalizeId(getVal(v, 'task_id'));
+        const markerId = normalizeId(getVal(v, 'marker_id'));
         const fileName = stripJson(getVal(v, 'file_name', 'Наименование файла'));
         const date = parseExcelDate(getVal(v, 'start_date', 'Дата валидации'));
 
         const orgId = getVal(v, 'organization_id');
-        const assignmentId = getVal(v, 'assignment_id');
-        const itemId = getVal(v, 'item_id');
+        const assignmentId = normalizeId(getVal(v, 'assignment_id'));
+        const itemId = normalizeId(getVal(v, 'item_id'));
 
         const mInfo = markerDict[`${taskId}|${markerId}`] || { pool: null, marker: null, validator: null, project: null };
 
@@ -345,7 +358,7 @@ export async function recomputeDashboard() {
             quality: null,
             interval: getVal(r, 'Временной интервал фрагмента', 'Интервал') || null,
             fragments: 0,
-            itemId: getVal(r, 'item_id', 'ID задания', 'ID item') || null
+            itemId: normalizeId(getVal(r, 'item_id', 'ID задания', 'ID item')) || null
         });
     }
 
@@ -411,7 +424,7 @@ export function applyFilters() {
         if (!markerEmpty && !marker.has(r.marker || '')) return false;
         if (!resultEmpty && !result.has(r.result || '')) return false;
         
-        // ★ ИЗМЕНЕНО: Сравниваем даты как строки YYYY-MM-DD, чтобы избежать проблем с часовыми поясами
+        // Сравниваем даты как строки YYYY-MM-DD, чтобы избежать проблем с часовыми поясами
         if (r.date) {
             const d = new Date(r.date);
             if (!isNaN(d.getTime())) {
