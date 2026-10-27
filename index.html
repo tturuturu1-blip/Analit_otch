@@ -181,8 +181,10 @@
                     <button id="btnResetFilters" style="height:40px;">Сбросить</button>
                 </div>
 
+                <!-- Контейнер для 9 карточек KPI -->
                 <div class="kpi-row" id="mainKpisContainer"></div>
 
+                <!-- Таблица 1: Результаты валидации -->
                 <div class="table-card">
                     <div class="table-header">
                         <h3>Результаты валидации</h3>
@@ -210,38 +212,40 @@
                     </div>
                 </div>
 
-                <!-- ГРАФИКИ С НОВЫМИ КОНТЕЙНЕРАМИ -->
+                <!-- ГРАФИКИ -->
                 <div class="charts-grid">
                     <div class="chart-card">
                         <h3>Качество по разметчикам</h3>
-                        <div class="chart-container"><canvas id="chartQuality"></canvas></div>
+                        <canvas id="chartQuality"></canvas>
                     </div>
                     
                     <div class="chart-card">
                         <h3>Распределение типов ошибок</h3>
-                        <div class="chart-container"><canvas id="chartErrors"></canvas></div>
+                        <canvas id="chartErrors"></canvas>
                     </div>
                 </div>
 
+                <!-- Качество по пулам на всю ширину -->
                 <div class="charts-grid full-width">
                     <div class="chart-card" style="height: 500px;">
                         <h3>Качество по пулам</h3>
-                        <div class="chart-container"><canvas id="chartPoolQuality"></canvas></div>
+                        <canvas id="chartPoolQuality"></canvas>
                     </div>
                 </div>
 
                 <div class="charts-grid">
                     <div class="chart-card">
                         <h3>Качество по дням</h3>
-                        <div class="chart-container"><canvas id="chartDayQuality"></canvas></div>
+                        <canvas id="chartDayQuality"></canvas>
                     </div>
                     
                     <div class="chart-card">
                         <h3>Типы ошибок по разметчикам</h3>
-                        <div class="chart-container"><canvas id="chartErrorsByMarker"></canvas></div>
+                        <canvas id="chartErrorsByMarker"></canvas>
                     </div>
                 </div>
 
+                <!-- Таблица 2: Обратные связи -->
                 <div class="table-card">
                     <div class="table-header">
                         <h3>Обратные связи</h3>
