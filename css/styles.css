@@ -553,9 +553,11 @@ tbody tr:last-child td {
 /* ===== Выравнивание ошибок в таблице главной ===== */
 .th-grid, .item-row {
     display: grid;
-    grid-template-columns: 90px 160px 1fr 140px; /* Итог, Тип, Комментарий, Интервал */
+    /* Итог, Тип, Комментарий, Интервал */
+    grid-template-columns: 90px 160px minmax(200px, 1fr) 140px; 
     gap: 8px;
     align-items: start;
+    width: 100%;
 }
 
 .th-grid {
@@ -566,6 +568,7 @@ tbody tr:last-child td {
     letter-spacing: 0.5px;
     color: #8e8e8e;
     text-align: left;
+    min-width: 520px; /* ★ ДОБАВЛЕНО: заставляет таблицу расшириться */
 }
 
 .items-grid {
@@ -573,6 +576,7 @@ tbody tr:last-child td {
     flex-direction: column;
     gap: 6px;
     padding: 8px 0;
+    min-width: 520px; /* ★ ДОБАВЛЕНО: заставляет таблицу расшириться */
 }
 
 .item-row {
