@@ -1,4 +1,4 @@
-// js/report-runtime.js — ЗАМЕНА ТЕКСТА НА "Ошибки не выявлены" и поддержка новой структуры таблицы
+// js/report-runtime.js — ФИНАЛЬНАЯ ВЕРСИЯ (9 KPI, правильные графики, 8 строк)
 
 (function () {
     'use strict';
@@ -7,8 +7,10 @@
     var processedData = REPORT_DATA.processedData || [];
     var feedbackData = REPORT_DATA.feedbackData || [];
     var targetQualityGlobal = REPORT_DATA.targetQuality || null;
+    var supersetTable1 = REPORT_DATA.supersetTable1 || [];
 
     var ITEMS_PER_PAGE = 10;
+    var MAIN_ITEMS_PER_PAGE = 8;
     var currentPage = 1;
     var currentPageFb = 1;
 
@@ -18,25 +20,60 @@
     var currentTab = 'all';
     var filterState = { pool: new Set(), marker: new Set(), result: new Set() };
 
+    // Плагин подписей для графиков
+    var dataLabelsPlugin = {
+        id: 'dataLabels',
+        afterDatasetsDraw: function(chart) {
+            var ctx = chart.ctx;
+            ctx.save();
+            chart.data.datasets.forEach(function(dataset, i) {
+                var meta = chart.getDatasetMeta(i);
+                if (!meta.hidden && dataset.showLabels !== false && meta.type === 'bar') {
+                    meta.data.forEach(function(element, index) {
+                        var val = dataset.data[index];
+                        if (val != null && val !== 0 && typeof val === 'number') {
+                            var height = element.base - element.y;
+                            if (height < 15) return;
+                            
+                            ctx.fillStyle = '#1f1f1f';
+                            ctx.font = 'bold 11px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            
+                            var displayVal = dataset.isPercentage ? Number(val).toFixed(1) + '%' : val;
+                            ctx.fillText(displayVal, element.x, element.y + (height / 2));
+                        }
+                    });
+                }
+            });
+            ctx.restore();
+        }
+    };
+    Chart.register(dataLabelsPlugin);
+
     function formatDate(d) {
         if (!d) return '';
-        if (typeof d === 'string' && /^\d{2}\.\d{2}\.\d{4}$/.test(d)) {
+        if (typeof d === 'string' && /^\d{2}\.\d{2}\.\d{2}$/.test(d)) {
             return d;
         }
         var dt = (d instanceof Date) ? d : new Date(d);
         if (isNaN(dt.getTime())) return '';
         return String(dt.getDate()).padStart(2, '0') + '.' +
-               String(dt.getMonth() + 1).padStart(2, '0') + '.' + dt.getFullYear();
+               String(dt.getMonth() + 1).padStart(2, '0') + '.' + String(dt.getFullYear()).slice(-2);
     }
 
     function parseDate(str) {
         if (!str) return null;
         if (str instanceof Date) return str;
         var s = String(str).trim();
-        var m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
-        if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+        var m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+        if (m) {
+            var year = parseInt(m[3], 10);
+            if (year < 100) year += 2000;
+            return new Date(year, parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+        }
         m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-        if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+        if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
         var d = new Date(s);
         return isNaN(d.getTime()) ? null : d;
     }
@@ -155,48 +192,81 @@
 
         var errorPercent = totalFragments > 0 ? (weightedErrorsCount / totalFragments) * 100 : 0;
         var avgQ = qualityCount ? qualitySum / qualityCount : null;
+        var avgQPct = avgQ !== null ? avgQ * 100 : 0;
 
-        document.getElementById('kpiTotalFragments').textContent = totalFragments;
-        document.getElementById('kpiTotalMarkers').textContent = uniqueMarkers.size;
-        document.getElementById('kpiErrorsPercent').textContent = errorPercent.toFixed(2) + '%';
-        document.getElementById('kpiQuality').textContent = avgQ !== null ? (avgQ * 100).toFixed(1) + '%' : '—';
+        var isRed = (targetQualityGlobal != null) && (errorPercent > 5) && (avgQPct < targetQualityGlobal);
+        var isGreen = (targetQualityGlobal != null) && (errorPercent <= 5) && (avgQPct >= targetQualityGlobal);
+        var qColorClass = 'val-brown';
+        var errColorClass = 'val-brown';
+
+        if (isRed) { qColorClass = 'val-red'; errColorClass = 'val-red'; }
+        else if (isGreen) { qColorClass = 'val-green'; errColorClass = 'val-green'; }
+
+        // ★ ИЗМЕНЕНО: Расчет Факт/Цена/Время/Коэффициент на основе фильтров
+        var activeTasks = supersetTable1 || [];
+        if (currentTab !== 'all') activeTasks = activeTasks.filter(function(t) { return t.project === currentTab; });
+        if (filterState.pool.size > 0) activeTasks = activeTasks.filter(function(t) { return filterState.pool.has(t.task); });
         
-        var targetEl = document.getElementById('kpiTargetQuality');
-        if (targetEl) {
-            targetEl.textContent = targetQualityGlobal != null ? targetQualityGlobal.toFixed(1) + '%' : '—';
+        if (from || to) {
+            activeTasks = activeTasks.filter(function(t) {
+                var rowStart = t.dateStart ? parseDate(t.dateStart) : null;
+                var rowEnd = t.dateEnd ? parseDate(t.dateEnd) : null;
+                if (fromDate && rowEnd && rowEnd < fromDate) return false;
+                if (toDate && rowStart && rowStart > toDate) return false;
+                return true;
+            });
         }
 
-        var elTotalFragments = document.getElementById('kpiTotalFragments');
-        var elTotalMarkers = document.getElementById('kpiTotalMarkers');
-        var elErrorsPercent = document.getElementById('kpiErrorsPercent');
-        var elQuality = document.getElementById('kpiQuality');
-        
-        [elTotalFragments, elTotalMarkers, elErrorsPercent, elQuality, targetEl].forEach(function(el) {
-            if (el) el.classList.remove('val-brown', 'val-red', 'val-green');
+        var parseHtmlNumberToFloat = function(val) {
+            if (val == null) return null;
+            var s = String(val).trim().replace(/<[^>]*>/g, '').replace(/\./g, ',');
+            if (!s) return null;
+            var n = parseFloat(s.replace(',', '.'));
+            return isNaN(n) ? null : n;
+        };
+        var parsePriceToFloat = function(val) {
+            if (val == null || val === '') return null;
+            var s = String(val).replace(/\s+/g, '').replace(',', '.');
+            var n = parseFloat(s);
+            return isNaN(n) ? null : n;
+        };
+        var avg = function(arr) { return arr.length ? arr.reduce(function(a,b){return a+b;},0)/arr.length : null; };
+
+        var balls = activeTasks.map(function(r){ return parseHtmlNumberToFloat(r.ballsPerHour); }).filter(function(v){return v!==null;});
+        var ballsPerHour = avg(balls);
+
+        var prods = activeTasks.map(function(r){ return parseHtmlNumberToFloat(r.prodPerHour); }).filter(function(v){return v!==null;});
+        var prodPerHour = avg(prods);
+
+        var prices = activeTasks.map(function(r){ return parsePriceToFloat(r.price); }).filter(function(v){return v!==null;});
+        var avgPrice = avg(prices);
+
+        var timesByTask = {};
+        activeTasks.forEach(function(r) {
+            var p = parsePriceToFloat(r.price);
+            var b = parseHtmlNumberToFloat(r.ballsPerHour);
+            if (p === null || p <= 0 || b === null || b <= 0) return;
+            var t = (p * 60) / b;
+            var key = (r.project || '') + '|' + (r.task || '');
+            if (!timesByTask[key]) timesByTask[key] = [];
+            timesByTask[key].push(t);
         });
-        
-        if (elTotalFragments) elTotalFragments.classList.add('val-brown');
-        if (elTotalMarkers) elTotalMarkers.classList.add('val-brown');
-        if (targetEl) targetEl.classList.add('val-brown');
+        var taskAverages = Object.values(timesByTask).map(avg).filter(function(a){return a!==null;});
+        var avgTime = avg(taskAverages);
 
-        if (targetQualityGlobal != null) {
-            var isRed = (errorPercent > 5) && (avgQ !== null && avgQ * 100 < targetQualityGlobal);
-            var isGreen = (errorPercent <= 5) && (avgQ !== null && avgQ * 100 >= targetQualityGlobal);
-            
-            if (isRed) {
-                if (elErrorsPercent) elErrorsPercent.classList.add('val-red');
-                if (elQuality) elQuality.classList.add('val-red');
-            } else if (isGreen) {
-                if (elErrorsPercent) elErrorsPercent.classList.add('val-green');
-                if (elQuality) elQuality.classList.add('val-green');
-            } else {
-                if (elErrorsPercent) elErrorsPercent.classList.add('val-brown');
-                if (elQuality) elQuality.classList.add('val-brown');
-            }
-        } else {
-            if (elErrorsPercent) elErrorsPercent.classList.add('val-brown');
-            if (elQuality) elQuality.classList.add('val-brown');
-        }
+        var container = document.getElementById('mainKpisContainer');
+        if (!container) return;
+
+        container.innerHTML = 
+            '<div class="kpi-card"><div class="label">Целевое качество</div><div class="value val-brown">' + (targetQualityGlobal != null ? targetQualityGlobal.toFixed(1) + '%' : '—') + '</div></div>' +
+            '<div class="kpi-card"><div class="label">Качество</div><div class="value ' + qColorClass + '">' + (avgQ !== null ? avgQPct.toFixed(1) + '%' : '—') + '</div></div>' +
+            '<div class="kpi-card"><div class="label">Ошибок</div><div class="value ' + errColorClass + '">' + errorPercent.toFixed(2) + '%</div></div>' +
+            '<div class="kpi-card"><div class="label">Разметчиков</div><div class="value val-brown">' + uniqueMarkers.size + '</div></div>' +
+            '<div class="kpi-card"><div class="label">Норма, у.е./час</div><div class="value val-brown">580</div></div>' + // В отчете норма фиксированная (без истории)
+            '<div class="kpi-card"><div class="label">Факт, у.е./час</div><div class="value val-brown">' + (ballsPerHour != null ? ballsPerHour.toFixed(1) : '—') + '</div></div>' +
+            '<div class="kpi-card"><div class="label">Стоимость, у.е.</div><div class="value val-brown">' + (avgPrice != null ? avgPrice.toFixed(2) : '—') + '</div></div>' +
+            '<div class="kpi-card"><div class="label">Среднее время разметки, мин</div><div class="value val-brown">' + (avgTime != null ? avgTime.toFixed(1) : '—') + '</div></div>' +
+            '<div class="kpi-card"><div class="label">Коэффициент</div><div class="value val-brown">' + (prodPerHour != null ? prodPerHour.toFixed(2) : '—') + '</div></div>';
     }
 
     function destroyChart(k) {
@@ -229,10 +299,10 @@
         });
         
         var datasets = [
-            { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2 }
+            { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true, isPercentage: true }
         ];
         if (targetQualityGlobal != null) {
-            datasets.push({ label: 'Целевое качество', data: Array(labels.length).fill(targetQualityGlobal), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 });
+            datasets.push({ label: 'Целевое', data: Array(labels.length).fill(targetQualityGlobal), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 });
         }
 
         charts.quality = new Chart(document.getElementById('chartQuality'), {
@@ -262,7 +332,7 @@
                 labels: Object.keys(byType),
                 datasets: [{ data: Object.keys(byType).map(function (k) { return byType[k]; }), backgroundColor: ['#85c4ae', '#f07171', '#f2c94c', '#6b4d38', '#a39081', '#fce8e8'] }]
             },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } } }
+            options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } }, dataLabels: { showLabels: false } } }
         });
     }
 
@@ -292,14 +362,14 @@
         });
         
         var datasets = [
-            { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2 }
+            { label: 'Ср. качество, %', data: values, borderColor: '#85c4ae', backgroundColor: 'rgba(133, 196, 174, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 }
         ];
         if (targetQualityGlobal != null) {
-            datasets.push({ label: 'Целевое качество', data: Array(labels.length).fill(targetQualityGlobal), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 });
+            datasets.push({ label: 'Целевое', data: labels.map(function() { return targetQualityGlobal; }), borderColor: '#f07171', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
         }
 
         charts.poolQuality = new Chart(document.getElementById('chartPoolQuality'), {
-            type: 'bar',
+            type: 'line',
             data: { labels: labels.map(function (l) { return l.length > 30 ? l.slice(0, 27) + '…' : l; }), datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
@@ -344,7 +414,7 @@
             { label: 'Ср. качество, %', data: values, borderColor: '#85c4ae', backgroundColor: 'rgba(133, 196, 174, 0.1)', tension: .3, fill: true, pointRadius: 4, order: 2 }
         ];
         if (targetQualityGlobal != null) {
-            datasets.push({ label: 'Целевое качество', data: labels.map(function() { return targetQualityGlobal; }), borderColor: '#f07171', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
+            datasets.push({ label: 'Целевое', data: labels.map(function() { return targetQualityGlobal; }), borderColor: '#f07171', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
         }
 
         charts.dayQuality = new Chart(document.getElementById('chartDayQuality'), {
@@ -401,40 +471,6 @@
         });
     }
 
-    function buildTrendChart() {
-        destroyChart('trend');
-        var byDate = {};
-        for (var i = 0; i < filteredData.length; i++) {
-            var r = filteredData[i];
-            if (!r.date) continue;
-            var k = formatDate(r.date);
-            if (!byDate[k]) byDate[k] = { errors: 0, recs: 0 };
-            if (r.result === 'Ошибка') byDate[k].errors++;
-            if (r.result === 'Рекомендация') byDate[k].recs++;
-        }
-        var labels = Object.keys(byDate).sort(function (a, b) {
-            return a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-'));
-        });
-        charts.trend = new Chart(document.getElementById('chartTrend'), {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    { label: 'Ошибки', data: labels.map(function (l) { return byDate[l].errors; }), borderColor: '#f07171', backgroundColor: 'rgba(240, 113, 113, 0.1)', tension: .3, fill: true },
-                    { label: 'Рекомендации', data: labels.map(function (l) { return byDate[l].recs; }), borderColor: '#f2c94c', backgroundColor: 'rgba(242, 201, 76, 0.1)', tension: .3, fill: true }
-                ]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: '#6b4d38' } } },
-                scales: {
-                    y: { beginAtZero: true, ticks: { color: '#6b4d38' } },
-                    x: { ticks: { color: '#6b4d38' } }
-                }
-            }
-        });
-    }
-
     function changePage(tableKey, page) {
         if (tableKey === 'main') currentPage = page;
         else if (tableKey === 'fb') currentPageFb = page;
@@ -442,17 +478,17 @@
         renderFeedbackTableHome();
     }
 
-    function renderPaginationControls(controlsId, infoId, totalItems, currentPage, tableKey) {
+    function renderPaginationControls(controlsId, infoId, totalItems, currentPage, tableKey, limit) {
         var container = document.getElementById(controlsId);
         var info = document.getElementById(infoId);
         if (!container || !info) return;
 
-        var totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+        var totalPages = Math.ceil(totalItems / limit) || 1;
         if (currentPage > totalPages) currentPage = totalPages;
         if (currentPage < 1) currentPage = 1;
 
-        var start = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
-        var end = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+        var start = totalItems === 0 ? 0 : (currentPage - 1) * limit + 1;
+        var end = Math.min(currentPage * limit, totalItems);
         info.textContent = totalItems === 0 ? 'Показано 0 из 0' : 'Показано ' + start + '-' + end + ' из ' + totalItems;
 
         var html = '';
@@ -467,7 +503,6 @@
         }
         
         html += '<button class="page-btn" ' + (currentPage === totalPages ? 'disabled' : '') + ' onclick="changePage(\'' + tableKey + '\', ' + (currentPage + 1) + ')">&gt;</button>';
-
         container.innerHTML = html;
     }
 
@@ -475,41 +510,25 @@
         var tbody = document.getElementById('tableBody');
         if (!tbody) return;
 
-        var groups = new Map();
-        var groupByKey = new Map();
-
+        var groups = {};
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
-            if (r._type !== 'validation') continue;
             var key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
-            var group = groupByKey.get(key);
-            if (!group) {
-                group = { _id: r._id, date: r.date, project: r.project, pool: r.pool, marker: r.marker, fileName: r.fileName, quality: r.quality, fragments: r.fragments, url: r.url, orgId: r.orgId, assignmentId: r.assignmentId, itemId: r.itemId, _type: r._type, _linked: r._linked, items: [] };
-                groupByKey.set(key, group);
-                groups.set(r._id, group);
+            if (!groups[key]) {
+                groups[key] = {
+                    date: r.date, project: r.project, pool: r.pool, marker: r.marker, fileName: r.fileName,
+                    quality: r.quality, fragments: r.fragments, url: r.url, orgId: r.orgId, assignmentId: r.assignmentId, itemId: r.itemId,
+                    _type: r._type, _linked: r._linked, items: []
+                };
             }
-            group.items.push({ result: r.result, errorType: r.errorType, comment: r.comment, interval: r.interval });
+            if (r.result === 'Ошибка' || r.result === 'Рекомендация') {
+                groups[key].items.push({ result: r.result, errorType: r.errorType, comment: r.comment, interval: r.interval });
+            } else if (r.result === 'Ошибки не выявлены' && groups[key].items.length === 0) {
+                groups[key].items.push({ result: r.result, errorType: r.errorType, comment: r.comment, interval: r.interval });
+            }
         }
 
-        for (var j = 0; j < filteredData.length; j++) {
-            var rr = filteredData[j];
-            if (rr._type !== 'recommendations') continue;
-            var grp = null;
-            if (rr._linked) grp = groups.get(rr._linked);
-            if (!grp) {
-                var key2 = (rr.marker || '') + '|' + (rr.project || '') + '|' + (rr.pool || '') + '|' + (rr.fileName || '');
-                grp = groupByKey.get(key2);
-            }
-            if (!grp) {
-                grp = { _id: rr._id, date: rr.date, project: rr.project, pool: rr.pool, marker: rr.marker, fileName: rr.fileName, quality: rr.quality, fragments: rr.fragments, url: rr.url, orgId: rr.orgId, assignmentId: rr.assignmentId, itemId: rr.itemId, _type: rr._type, _linked: rr._linked, items: [] };
-                var key3 = (rr.marker || '') + '|' + (rr.project || '') + '|' + (rr.pool || '') + '|' + (rr.fileName || '');
-                groupByKey.set(key3, grp);
-                groups.set(rr._id, grp);
-            }
-            grp.items.push({ result: rr.result, errorType: rr.errorType, comment: rr.comment, interval: rr.interval });
-        }
-
-        var groupedArray = Array.from(groups.values());
+        var groupedArray = Object.values(groups);
         groupedArray.sort(function(a, b) {
             var dA = parseDate(a.date);
             var dB = parseDate(b.date);
@@ -520,8 +539,8 @@
         });
 
         var totalItems = groupedArray.length;
-        var startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-        var endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+        var startIndex = (currentPage - 1) * MAIN_ITEMS_PER_PAGE;
+        var endIndex = Math.min(startIndex + MAIN_ITEMS_PER_PAGE, totalItems);
         var rows = groupedArray.slice(startIndex, endIndex);
 
         var html = '';
@@ -530,11 +549,6 @@
             var valLink = getValidationLink(g);
             var fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
             var fileNameTitle = escapeHtml(g.fileName || '');
-            
-            var link = g._type === 'recommendations'
-                ? (g._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fde8e8;color:#e55555">нет пары</span>')
-                : '—';
-
             var quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(1) + '%' : '';
 
             var itemsHtml = '<div class="items-grid">';
@@ -557,7 +571,7 @@
             itemsHtml += '</div>';
 
             html += '<tr>' +
-                '<td>' + formatDate(g.date) + '</td>' +
+                '<td>' + (g.date ? formatDate(g.date) : '') + '</td>' +
                 '<td>' + escapeHtml((g.project || '').replace(/_validate$/, '')) + '</td>' +
                 '<td>' + escapeHtml(g.pool || '') + '</td>' +
                 '<td>' + escapeHtml(g.marker || '') + '</td>' +
@@ -565,12 +579,11 @@
                 '<td colspan="4" style="padding: 0;">' + itemsHtml + '</td>' +
                 '<td>' + quality + '</td>' +
                 '<td>' + valLink + '</td>' +
-                '<td>' + link + '</td>' +
             '</tr>';
         }
         tbody.innerHTML = html;
 
-        renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, currentPage, 'main');
+        renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, currentPage, 'main', MAIN_ITEMS_PER_PAGE);
     }
 
     function renderFeedbackTableHome() {
@@ -585,13 +598,8 @@
         var html = '';
         for (var j = 0; j < rows.length; j++) {
             var f = rows[j];
-            var statusColor = f.status === 'Проведена' ? '#85c4ae'
-                : f.status === 'Отменена' ? '#e55555'
-                : f.status === 'Перенесена' ? '#f2c94c'
-                : '#7a95b8';
-            var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null)
-                ? (f.avgQuality * 100).toFixed(1) + '%'
-                : '—';
+            var statusColor = f.status === 'Проведена' ? '#85c4ae' : f.status === 'Отменена' ? '#e55555' : f.status === 'Перенесена' ? '#f2c94c' : '#7a95b8';
+            var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null) ? (f.avgQuality * 100).toFixed(1) + '%' : '—';
             var displayProject = f.project || '—';
             html += '<tr>' +
                 '<td>' + escapeHtml(formatDate(f.date)) + '</td>' +
@@ -610,7 +618,7 @@
             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--muted); padding: 20px;">Нет данных.</td></tr>';
         }
 
-        renderPaginationControls('pagination-fbHome-controls', 'pagination-fbHome-info', totalItems, currentPageFb, 'fb');
+        renderPaginationControls('pagination-fbHome-controls', 'pagination-fbHome-info', totalItems, currentPageFb, 'fb', ITEMS_PER_PAGE);
     }
 
     function triggerFilterUpdate() {
@@ -623,7 +631,6 @@
         buildPoolQualityChart();
         buildDayQualityChart();
         buildErrorsByMarkerChart();
-        buildTrendChart();
         buildTable();
         renderFeedbackTableHome();
     }
@@ -804,7 +811,7 @@
 
         populateMultiSelect('msPool', 'pool', pools);
         populateMultiSelect('msMarker', 'marker', markers);
-        populateMultiSelect('msResult', 'result', ['Ошибка', 'Рекомендация', 'Ошибки не выявлены']); // ★ ИЗМЕНЕНО
+        populateMultiSelect('msResult', 'result', ['Ошибка', 'Рекомендация', 'Ошибки не выявлены']);
 
         document.getElementById('filterDateFrom').addEventListener('change', triggerFilterUpdate);
         document.getElementById('filterDateTo').addEventListener('change', triggerFilterUpdate);
