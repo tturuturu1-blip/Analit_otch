@@ -1,4 +1,4 @@
-// js/app.js — ЛОГИКА БОКОВОЙ ПАНЕЛИ, МОДАЛЬНОГО ОКНА И СМЕНЫ ЛОГОТИПА
+// js/app.js — ЛОГИКА МОДАЛЬНОГО ОКНА НОРМЫ И НАВИГАЦИИ ГРАФИКОВ
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
@@ -8,8 +8,8 @@ import {
     buildProjectTabs, renderMarkersTasksStatus, renderSupersetPage,
     populateRecDatalists, addRecRow,
     onSupersetTaskChange, onSupersetDateChange,
-    resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
-    changePage
+    resetSupersetFilters, onSupersetTableFilterChange,
+    changePage, changeChartProject
 } from './ui.js';
 import { 
     renderFeedbackTable, 
@@ -19,11 +19,44 @@ import {
     applyFeedbackFilters, 
     handleVideoLinkInput 
 } from './feedback.js';
-import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw } from './superset.js';
+import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw, addNormEntry, getNormForDate } from './superset.js';
 import {
     updateProgress, yieldToUI, log, formatDate, escapeHtml, parseExcelDate
 } from './utils.js';
 import { generateHtmlReport } from './report.js';
+
+// ===== Модальное окно редактирования нормы =====
+const normModal = document.getElementById('normModal');
+const normInput = document.getElementById('normInput');
+
+// Определяем функцию открытия модального окна (вместо prompt)
+const editSupersetNorm = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const currentNorm = getNormForDate(today);
+    if (normInput) normInput.value = currentNorm;
+    if (normModal) normModal.classList.add('active');
+};
+
+// Обработчики кнопок модального окна
+if (document.getElementById('btnCancelNorm')) {
+    document.getElementById('btnCancelNorm').addEventListener('click', () => {
+        if (normModal) normModal.classList.remove('active');
+    });
+}
+
+if (document.getElementById('btnSaveNorm')) {
+    document.getElementById('btnSaveNorm').addEventListener('click', () => {
+        const val = normInput.value;
+        const today = new Date().toISOString().slice(0, 10);
+        if (addNormEntry(today, val)) {
+            if (normModal) normModal.classList.remove('active');
+            triggerFilterUpdate();
+            if (state.currentMenu === 'superset') renderSupersetPage();
+        } else {
+            alert('Введите корректное положительное число');
+        }
+    });
+}
 
 // ===== Экспорт функций в window =====
 Object.assign(window, {
@@ -33,7 +66,7 @@ Object.assign(window, {
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
     handleVideoLinkInput,
-    changePage
+    changePage, changeChartProject
 });
 
 // ===== Логика боковой панели и логотипа =====
