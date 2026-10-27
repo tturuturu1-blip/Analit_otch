@@ -1,18 +1,14 @@
-// js/feedback.js — ИСПРАВЛЕНИЕ БАГОВ
+// js/feedback.js — МУЛЬТИВЫБОР РАЗМЕТЧИКОВ В ОС + НЕОБЯЗАТЕЛЬНЫЕ ПУЛЫ
 // Изменено:
-//   1. deleteFeedback: сброс editingFeedbackIndex
-//   2. generateFeedbackHtml: вес 0.5 для "Некритичной ошибки", escapeHtml(videoUrl)
-//   3. applyFeedbackFilters: oninput через data-* (не ломается на апострофах)
-//   4. handleAddFeedback: avgQuality дедуплицируется по marker|project|pool|fileName
-//   5. statusColor "Запланирована" → нейтральный синий
-//   6. renderFeedbackRows: кэш pool→project
-//   7. initFeedbackForm: идемпотентность
+//   1. renderFeedbackTable: заполняет msFbRecordMarkers
+//   2. editFeedback: устанавливает выбранные чекбоксы
+//   3. handleAddFeedback: цикл по маркерам, pools необязательны
+// Остальное — как в предыдущей версии.
 
 import { state, saveFeedbackToStorage, ITEMS_PER_PAGE } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel, getVal } from './utils.js';
 import { matchesTab } from './data.js';
 
-// ===== Определение проекта по пулам записи =====
 function deriveProjectFromPools(poolsStr, cache) {
     if (!poolsStr) return null;
     const pools = String(poolsStr).split(',').map(p => p.trim()).filter(Boolean);
@@ -30,7 +26,6 @@ function deriveProjectFromPools(poolsStr, cache) {
     return null;
 }
 
-// Строим кэш pool → project для одного рендера
 function buildPoolProjectCache() {
     const cache = {};
     for (const r of state.processedData) {
@@ -41,7 +36,6 @@ function buildPoolProjectCache() {
     return cache;
 }
 
-// ===== Работа с группами =====
 function getGroups() {
     const groups = new Set();
     for (const emp of state.rawEmployeeMap) {
@@ -63,7 +57,6 @@ function getMarkerGroup(markerEmail) {
     return '';
 }
 
-// ===== Рендер строк таблицы обратной связи =====
 function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeActions) {
     const tbody = document.getElementById(tbodyId);
     const controlsContainer = document.getElementById(controlsId);
@@ -100,7 +93,6 @@ function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeAction
     const rows = filteredFb.slice(startIndex, endIndex);
 
     tbody.innerHTML = rows.map((f) => {
-        // ★ ИЗМЕНЕНО: "Запланирована" — нейтральный синий, не путается с "Отменена"
         const statusColor = f.status === 'Проведена' ? '#85c4ae'
             : f.status === 'Отменена' ? '#e55555'
             : f.status === 'Перенесена' ? '#f2c94c'
@@ -167,12 +159,17 @@ function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeAction
 }
 
 export function renderFeedbackTable() {
-    const markerSelect = document.getElementById('fbMarker');
-    if (markerSelect) {
+    // ★ ИЗМЕНЕНО: заполняем мультиселект разметчиков (вместо select)
+    const markersList = document.getElementById('msFbRecordMarkers_options');
+    if (markersList) {
         const markers = [...new Set(state.processedData.map(r => r.marker).filter(Boolean))].sort();
-        markerSelect.innerHTML = markers
-            .map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`)
-            .join('');
+        const currentSelected = state.filterState.fbRecordMarkers;
+        markersList.innerHTML = markers.map(m => {
+            const safe = escapeHtml(m);
+            const checked = currentSelected.has(m) ? 'checked' : '';
+            return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onOptionChange('msFbRecordMarkers', 'fbRecordMarkers', this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
+        }).join('');
+        updateLabel('msFbRecordMarkers', 'fbRecordMarkers');
     }
 
     const conductorsList = document.getElementById('conductorsList');
@@ -207,8 +204,6 @@ export function renderFeedbackTable() {
 export function renderFeedbackTableHome() {
     renderFeedbackRows('fbTableBodyHome', 'pagination-fbHome-controls', 'pagination-fbHome-info', 'fbHome', false);
 }
-
-// ===== Логика создания фидбека =====
 
 export function applyFeedbackFilters() {
     const container = document.getElementById('feedbackGenerationBlocks');
@@ -261,8 +256,6 @@ export function applyFeedbackFilters() {
                 const linkKey = `${marker}|${file}`;
                 const savedUrl = state.feedbackGeneration.videoLinks[linkKey] || '';
                 
-                // ★ ИЗМЕНЕНО: используем data-* атрибуты вместо inline-аргументов.
-                // Это защищает от апострофов и других «опасных» символов в маркере/файле.
                 html += `
                 <div class="feedback-link-input-group">
                     <label>${escapeHtml(file)} (Ссылка на видео)</label>
@@ -363,7 +356,6 @@ export function generateFeedbackHtml() {
                     const videoUrl = state.feedbackGeneration.videoLinks[`${marker}|${file}`] || '';
                     const isValidUrl = videoUrl.trim().startsWith('http');
 
-                    // ★ ИЗМЕНЕНО: escapeHtml для URL (защита от кавычек и прочих символов)
                     const videoContent = isValidUrl 
                         ? `<a href="${escapeHtml(videoUrl.trim())}" download target="_blank" class="video-button">
                                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
@@ -385,7 +377,6 @@ export function generateFeedbackHtml() {
 
                         for (const type in errorsByType) {
                             const errs = errorsByType[type];
-                            // ★ ИЗМЕНЕНО: учитываем вес 0.5 для «Некритичной ошибки»
                             const weighted = errs.reduce((a, e) => {
                                 return a + (e.type === 'Некритичная ошибка' ? 0.5 : 1);
                             }, 0);
@@ -535,11 +526,18 @@ export function generateFeedbackHtml() {
     URL.revokeObjectURL(url);
 }
 
-// ===== CRUD для записей обратной связи =====
 export function editFeedback(idx) {
     const f = state.feedbackData[idx];
     if (!f) return;
-    document.getElementById('fbMarker').value = f.marker;
+    
+    // ★ ИЗМЕНЕНО: устанавливаем выбранный маркер в мультиселекте
+    state.filterState.fbRecordMarkers.clear();
+    if (f.marker) state.filterState.fbRecordMarkers.add(f.marker);
+    document.querySelectorAll('#msFbRecordMarkers_options input').forEach(cb => {
+        cb.checked = (cb.value === f.marker);
+    });
+    updateLabel('msFbRecordMarkers', 'fbRecordMarkers');
+
     document.getElementById('fbDate').value = f.date;
     document.getElementById('fbStatus').value = f.status;
     document.getElementById('fbType').value = f.typeVKS;
@@ -566,7 +564,6 @@ export function editFeedback(idx) {
 export function deleteFeedback(idx) {
     if (!confirm('Удалить запись?')) return;
     
-    // ★ ИЗМЕНЕНО: корректная синхронизация editingFeedbackIndex
     if (state.editingFeedbackIndex !== null) {
         if (state.editingFeedbackIndex === idx) {
             state.editingFeedbackIndex = null;
@@ -582,60 +579,70 @@ export function deleteFeedback(idx) {
 }
 
 function handleAddFeedback() {
-    const marker = document.getElementById('fbMarker').value;
+    const markers = Array.from(state.filterState.fbRecordMarkers);
     const dateStr = document.getElementById('fbDate').value;
     const status = document.getElementById('fbStatus').value;
     const typeVKS = document.getElementById('fbType').value;
     const conductor = document.getElementById('fbConductor').value;
     const pools = Array.from(state.filterState.fbFormPools).join(', ');
 
-    if (!marker || !dateStr) { alert('Выберите разметчика и дату'); return; }
-    if (!pools) { alert('Выберите хотя бы один пул с ошибками'); return; }
+    if (markers.length === 0 || !dateStr) { 
+        alert('Выберите хотя бы одного разметчика и дату'); 
+        return; 
+    }
+    // ★ ИЗМЕНЕНО: пулы необязательны, проверка убрана
 
     const poolProjectCache = buildPoolProjectCache();
     const project = deriveProjectFromPools(pools, poolProjectCache);
 
     const currentDate = new Date(dateStr);
-    const pastFeedbacks = state.feedbackData
-        .filter(f => f.marker === marker && f.status === 'Проведена' && new Date(f.date) < currentDate)
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    let startDate = null;
-    if (pastFeedbacks.length > 0) {
-        startDate = new Date(pastFeedbacks[0].date);
-        startDate.setDate(startDate.getDate() + 1);
+    for (const marker of markers) {
+        const pastFeedbacks = state.feedbackData
+            .filter(f => f.marker === marker && f.status === 'Проведена' && new Date(f.date) < currentDate)
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        let startDate = null;
+        if (pastFeedbacks.length > 0) {
+            startDate = new Date(pastFeedbacks[0].date);
+            startDate.setDate(startDate.getDate() + 1);
+        }
+
+        const relevantData = state.processedData.filter(r => {
+            if (r.marker !== marker) return false;
+            if (r.quality == null || !isFinite(r.quality)) return false;
+            const rDate = new Date(r.date);
+            if (startDate && rDate < startDate) return false;
+            if (rDate > currentDate) return false;
+            return true;
+        });
+
+        const uniqueFiles = new Map();
+        for (const r of relevantData) {
+            const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
+            if (!uniqueFiles.has(key)) uniqueFiles.set(key, r.quality);
+        }
+        
+        let avgQuality = null;
+        if (uniqueFiles.size > 0) {
+            const vals = Array.from(uniqueFiles.values());
+            avgQuality = vals.reduce((a, b) => a + b, 0) / vals.length;
+        }
+
+        const newRecord = { marker, date: dateStr, status, typeVKS, conductor, pools, avgQuality, project };
+
+        // Если редактируем и выбран ровно один маркер — обновляем.
+        // Если выбрано несколько маркеров — добавляем новые записи (а старую не трогаем).
+        if (state.editingFeedbackIndex !== null && markers.length === 1) {
+            state.feedbackData[state.editingFeedbackIndex] = newRecord;
+        } else {
+            state.feedbackData.push(newRecord);
+        }
     }
-
-    const relevantData = state.processedData.filter(r => {
-        if (r.marker !== marker) return false;
-        if (r.quality == null || !isFinite(r.quality)) return false;
-        const rDate = new Date(r.date);
-        if (startDate && rDate < startDate) return false;
-        if (rDate > currentDate) return false;
-        return true;
-    });
-
-    // ★ ИЗМЕНЕНО: дедупликация по marker|project|pool|fileName (как в KPI)
-    const uniqueFiles = new Map();
-    for (const r of relevantData) {
-        const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
-        if (!uniqueFiles.has(key)) uniqueFiles.set(key, r.quality);
-    }
-    
-    let avgQuality = null;
-    if (uniqueFiles.size > 0) {
-        const vals = Array.from(uniqueFiles.values());
-        avgQuality = vals.reduce((a, b) => a + b, 0) / vals.length;
-    }
-
-    const newRecord = { marker, date: dateStr, status, typeVKS, conductor, pools, avgQuality, project };
 
     if (state.editingFeedbackIndex !== null) {
-        state.feedbackData[state.editingFeedbackIndex] = newRecord;
         state.editingFeedbackIndex = null;
         document.getElementById('btnAddFeedback').textContent = 'Добавить';
-    } else {
-        state.feedbackData.push(newRecord);
     }
 
     saveFeedbackToStorage();
@@ -644,13 +651,15 @@ function handleAddFeedback() {
     document.getElementById('fbDate').value = '';
     document.getElementById('fbConductor').value = '';
     state.filterState.fbFormPools.clear();
+    state.filterState.fbRecordMarkers.clear();
     document.querySelectorAll('#msFbFormPools_options input').forEach(cb => { cb.checked = false; });
+    document.querySelectorAll('#msFbRecordMarkers_options input').forEach(cb => { cb.checked = false; });
     document.getElementById('msFbFormPools_all').checked = false;
+    document.getElementById('msFbRecordMarkers_all').checked = false;
     updateLabel('msFbFormPools', 'fbFormPools');
+    updateLabel('msFbRecordMarkers', 'fbRecordMarkers');
 }
 
-// ===== Инициализация =====
-// ★ ИЗМЕНЕНО: идемпотентность — не навешиваем обработчики повторно
 export function initFeedbackForm() {
     if (state._fbFormInitialized) return;
     state._fbFormInitialized = true;
@@ -665,6 +674,5 @@ export function initFeedbackForm() {
     document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedbackHtml);
 }
 
-// Экспортируем функции в window для пагинации
 window.renderFeedbackTableHome = renderFeedbackTableHome;
 window.renderFeedbackTable = renderFeedbackTable;
