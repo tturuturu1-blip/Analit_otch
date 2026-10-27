@@ -1,5 +1,4 @@
-// js/report.js — генерация автономного HTML-отчёта
-// Обновлено: шапка таблицы dataTable приведена к новому формату (colspan=4 + th-grid)
+// js/report.js — ОБНОВЛЕНО: Передача данных для новых 9 карточек KPI
 
 import { state } from './state.js';
 import { escapeHtml, formatDate, parseExcelDate } from './utils.js';
@@ -64,7 +63,7 @@ export async function generateHtmlReport() {
 
     const targetQuality = state.superset.norms.globalAvg;
 
-    // === Нормализация дат в dd.mm.yyyy (TZ-фикс) ===
+    // === Нормализация дат в dd.mm.yy (TZ-фикс) ===
     const serializedProcessedData = state.processedData.map(r => {
         const copy = Object.assign({}, r);
         if (r.date) copy.date = formatDate(r.date);
@@ -84,7 +83,9 @@ export async function generateHtmlReport() {
     const reportData = {
         processedData: serializedProcessedData,
         feedbackData: serializedFeedbackData,
-        targetQuality: targetQuality
+        targetQuality: targetQuality,
+        supersetTable1: state.superset.table1 || [], // ★ ДОБАВЛЕНО: для расчета KPI на главной
+        norms: state.superset.norms || { byProjectPool: {}, byProject: {}, globalAvg: null } // ★ ДОБАВЛЕНО
     };
     const reportDataJson = JSON.stringify(reportData).replace(/</g, '\\u003c');
 
@@ -107,9 +108,9 @@ export async function generateHtmlReport() {
     ${tabsHtml}
 </header>
 
-<div class="main-container">
-    <main class="content">
-        <section class="section active">
+<div class="main-container" style="display: flex; flex: 1; overflow: hidden; padding: 15px 20px 20px 20px;">
+    <main class="content" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px;">
+        <section class="section active" style="display: flex; flex-direction: column; gap: 20px;">
 
             <div class="filters">
                 <div class="filter-group">
@@ -159,15 +160,13 @@ export async function generateHtmlReport() {
                 <button id="btnResetFilters" style="height:40px;">Сбросить</button>
             </div>
 
-            <div class="kpi-row">
-                <div class="kpi-card"><div class="label">Всего размеченных фрагментов</div><div class="value" id="kpiTotalFragments">0</div></div>
-                <div class="kpi-card"><div class="label">Разметчиков</div><div class="value" id="kpiTotalMarkers">0</div></div>
-                <div class="kpi-card"><div class="label">Целевое качество</div><div class="value" id="kpiTargetQuality">—</div></div>
-                <div class="kpi-card"><div class="label">Ошибок</div><div class="value" id="kpiErrorsPercent">0%</div></div>
-                <div class="kpi-card"><div class="label">Качество</div><div class="value" id="kpiQuality">—</div></div>
-            </div>
+            <!-- ★ ИЗМЕНЕНО: Контейнер для 9 карточек KPI -->
+            <div class="kpi-row" id="mainKpisContainer"></div>
 
             <div class="table-card">
+                <div class="table-header">
+                    <h3>Результаты валидации</h3>
+                </div>
                 <table id="dataTable">
                     <thead>
                         <tr>
@@ -180,7 +179,7 @@ export async function generateHtmlReport() {
                                     <div>Интервал</div>
                                 </div>
                             </th>
-                            <th>Качество</th><th>Ссылка</th><th>Связь</th>
+                            <th>Качество</th><th>Ссылка</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -192,16 +191,40 @@ export async function generateHtmlReport() {
             </div>
 
             <div class="charts-grid">
-                <div class="chart-card"><h3>Среднее качество по разметчикам</h3><canvas id="chartQuality"></canvas></div>
-                <div class="chart-card"><h3>Распределение типов ошибок</h3><canvas id="chartErrors"></canvas></div>
-                <div class="chart-card"><h3>Качество по пулам</h3><canvas id="chartPoolQuality"></canvas></div>
-                <div class="chart-card"><h3>Качество по дням</h3><canvas id="chartDayQuality"></canvas></div>
-                <div class="chart-card"><h3>Типы ошибок по разметчикам</h3><canvas id="chartErrorsByMarker"></canvas></div>
-                <div class="chart-card"><h3>Динамика по датам</h3><canvas id="chartTrend"></canvas></div>
+                <div class="chart-card">
+                    <h3>Качество по разметчикам</h3>
+                    <canvas id="chartQuality"></canvas>
+                </div>
+                
+                <div class="chart-card">
+                    <h3>Распределение типов ошибок</h3>
+                    <canvas id="chartErrors"></canvas>
+                </div>
             </div>
 
-            <h2 style="margin-top: 40px; margin-bottom: 20px;">Обратная связь</h2>
+            <div class="charts-grid full-width">
+                <div class="chart-card">
+                    <h3>Качество по пулам</h3>
+                    <canvas id="chartPoolQuality"></canvas>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>Качество по дням</h3>
+                    <canvas id="chartDayQuality"></canvas>
+                </div>
+                
+                <div class="chart-card">
+                    <h3>Типы ошибок по разметчикам</h3>
+                    <canvas id="chartErrorsByMarker"></canvas>
+                </div>
+            </div>
+
             <div class="table-card">
+                <div class="table-header">
+                    <h3>Обратные связи</h3>
+                </div>
                 <table id="fbTableHome">
                     <thead>
                         <tr>
