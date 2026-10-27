@@ -1,4 +1,4 @@
-// js/data.js — ЗАМЕНА ТЕКСТА НА "Ошибки не выявлены"
+// js/data.js — ИСПРАВЛЕНИЕ БАГА С ФИЛЬТРОМ ДАТ
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -181,7 +181,7 @@ function processFlatValidations() {
                 _id: 'vf_' + Math.random().toString(36).slice(2, 9),
                 _type: 'validation', _linked: null,
                 date, pool, marker, validator, project, fileName,
-                result: 'Ошибки не выявлены', errorType: null, comment: null, // ★ ИЗМЕНЕНО
+                result: 'Ошибки не выявлены', errorType: null, comment: null,
                 quality: 1, interval: null, fragments: totalFragments,
                 url: taskUrl
             });
@@ -304,7 +304,7 @@ export async function recomputeDashboard() {
                 _id: 'v_' + Math.random().toString(36).slice(2, 9),
                 _type: 'validation', _linked: null,
                 date, pool: mInfo.pool, marker: mInfo.marker, validator: mInfo.validator, project: mInfo.project,
-                fileName, result: 'Ошибки не выявлены', errorType: null, comment: null, // ★ ИЗМЕНЕНО
+                fileName, result: 'Ошибки не выявлены', errorType: null, comment: null,
                 quality: 1, interval: null, fragments: totalFragments,
                 orgId, assignmentId, itemId
             });
@@ -399,9 +399,6 @@ export function matchesTab(r) {
 export function applyFilters() {
     const from = document.getElementById('filterDateFrom').value;
     const to = document.getElementById('filterDateTo').value;
-    const fromDate = from ? new Date(from) : null;
-    const toDate = to ? new Date(to) : null;
-    if (toDate) toDate.setDate(toDate.getDate() + 1);
 
     const { pool, marker, result } = state.filterState;
     const poolEmpty = pool.size === 0;
@@ -413,8 +410,21 @@ export function applyFilters() {
         if (!poolEmpty && !pool.has(r.pool || '')) return false;
         if (!markerEmpty && !marker.has(r.marker || '')) return false;
         if (!resultEmpty && !result.has(r.result || '')) return false;
-        if (fromDate && r.date && r.date < fromDate) return false;
-        if (toDate && r.date && r.date >= toDate) return false;
+        
+        // ★ ИЗМЕНЕНО: Сравниваем даты как строки YYYY-MM-DD, чтобы избежать проблем с часовыми поясами
+        if (r.date) {
+            const d = new Date(r.date);
+            if (!isNaN(d.getTime())) {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                const rDateStr = `${y}-${m}-${day}`;
+
+                if (from && rDateStr < from) return false;
+                if (to && rDateStr > to) return false;
+            }
+        }
+        
         return true;
     });
 }
