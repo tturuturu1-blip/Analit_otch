@@ -549,3 +549,53 @@ tbody tr:last-child td {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(28, 28, 28, 0.1);
 }
+
+/* ===== Выравнивание ошибок в таблице главной ===== */
+.th-grid, .item-row {
+    display: grid;
+    grid-template-columns: 90px 160px 1fr 140px; /* Итог, Тип, Комментарий, Интервал */
+    gap: 8px;
+    align-items: start;
+}
+
+.th-grid {
+    padding: 12px 20px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #8e8e8e;
+    text-align: left;
+}
+
+.items-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.item-row {
+    padding: 6px 20px;
+    border-bottom: 1px dashed #f0f0f0;
+}
+.item-row:last-child {
+    border-bottom: none;
+}
+.item-row:hover {
+    background: #fafafa;
+}
+
+/* Textarea для комментариев в рекомендациях */
+textarea.rec-comment {
+    padding: 8px;
+    width: 100%;
+    min-width: 250px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    resize: vertical;
+    min-height: 70px;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+}
