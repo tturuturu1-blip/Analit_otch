@@ -1,5 +1,5 @@
-// js/report.js — ИСПРАВЛЕНИЕ TZ-СДВИГА ДАТ
-// Изменено: reportData собирается с датами в формате dd.mm.yyyy (без TZ)
+// js/report.js — генерация автономного HTML-отчёта
+// Обновлено: шапка таблицы dataTable приведена к новому формату (colspan=4 + th-grid)
 
 import { state } from './state.js';
 import { escapeHtml, formatDate, parseExcelDate } from './utils.js';
@@ -64,7 +64,7 @@ export async function generateHtmlReport() {
 
     const targetQuality = state.superset.norms.globalAvg;
 
-    // ★ ИЗМЕНЕНО (TZ-фикс): нормализуем даты в dd.mm.yyyy (без времени, без TZ)
+    // === Нормализация дат в dd.mm.yyyy (TZ-фикс) ===
     const serializedProcessedData = state.processedData.map(r => {
         const copy = Object.assign({}, r);
         if (r.date) copy.date = formatDate(r.date);
@@ -75,7 +75,6 @@ export async function generateHtmlReport() {
     const serializedFeedbackData = state.feedbackData.map(f => {
         const copy = Object.assign({}, f);
         if (f.date) {
-            // f.date может быть YYYY-MM-DD или dd.mm.yyyy
             const parsed = parseExcelDate(f.date);
             copy.date = parsed ? formatDate(parsed) : f.date;
         }
@@ -173,7 +172,14 @@ export async function generateHtmlReport() {
                     <thead>
                         <tr>
                             <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
-                            <th>Итог</th><th>Тип ошибки</th><th>Комментарий</th><th>Интервал</th>
+                            <th colspan="4" style="padding: 0;">
+                                <div class="th-grid">
+                                    <div>Итог</div>
+                                    <div>Тип ошибки</div>
+                                    <div>Комментарий</div>
+                                    <div>Интервал</div>
+                                </div>
+                            </th>
                             <th>Качество</th><th>Ссылка</th><th>Связь</th>
                         </tr>
                     </thead>
