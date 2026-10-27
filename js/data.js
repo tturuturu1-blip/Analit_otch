@@ -1,4 +1,4 @@
-// js/data.js — СВЯЗЫВАНИЕ РЕКОМЕНДАЦИЙ ПО item_id
+// js/data.js — ЗАМЕНА ТЕКСТА НА "Ошибки не выявлены"
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -181,7 +181,7 @@ function processFlatValidations() {
                 _id: 'vf_' + Math.random().toString(36).slice(2, 9),
                 _type: 'validation', _linked: null,
                 date, pool, marker, validator, project, fileName,
-                result: 'Ошибки не выявлены', errorType: null, comment: null,
+                result: 'Ошибки не выявлены', errorType: null, comment: null, // ★ ИЗМЕНЕНО
                 quality: 1, interval: null, fragments: totalFragments,
                 url: taskUrl
             });
@@ -304,7 +304,7 @@ export async function recomputeDashboard() {
                 _id: 'v_' + Math.random().toString(36).slice(2, 9),
                 _type: 'validation', _linked: null,
                 date, pool: mInfo.pool, marker: mInfo.marker, validator: mInfo.validator, project: mInfo.project,
-                fileName, result: 'Ошибки не выявлены', errorType: null, comment: null,
+                fileName, result: 'Ошибки не выявлены', errorType: null, comment: null, // ★ ИЗМЕНЕНО
                 quality: 1, interval: null, fragments: totalFragments,
                 orgId, assignmentId, itemId
             });
@@ -345,7 +345,6 @@ export async function recomputeDashboard() {
             quality: null,
             interval: getVal(r, 'Временной интервал фрагмента', 'Интервал') || null,
             fragments: 0,
-            // ★ ИЗМЕНЕНО: используем item_id вместо assignmentId
             itemId: getVal(r, 'item_id', 'ID задания', 'ID item') || null
         });
     }
@@ -361,7 +360,6 @@ export async function recomputeDashboard() {
             const key = `${v.pool || ''}|${v.marker || ''}|${v.validator || ''}|${v.fileName || ''}`;
             if (!valIndexByFile[key]) valIndexByFile[key] = v;
             
-            // ★ ИЗМЕНЕНО: индекс по itemId
             if (v.itemId) {
                 if (!valIndexByItem[v.itemId]) valIndexByItem[v.itemId] = v;
             }
@@ -372,7 +370,6 @@ export async function recomputeDashboard() {
         if (r._type === 'recommendations') {
             let linkedVal = null;
             
-            // ★ ИЗМЕНЕНО: сначала ищем по itemId, потом по файлу
             if (r.itemId && valIndexByItem[r.itemId]) {
                 linkedVal = valIndexByItem[r.itemId];
             } else {
