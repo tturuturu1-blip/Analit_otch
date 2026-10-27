@@ -1,4 +1,4 @@
-// js/ui.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД (ГРАФИКИ, 9 KPI, 8 СТРОК)
+// js/ui.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -11,16 +11,14 @@ import {
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
-// Кастомный плагин для подписей значений на графиках
+// Исправленный плагин подписей (без вызова функции callback)
 const dataLabelsPlugin = {
     id: 'dataLabels',
     afterDatasetsDraw(chart) {
         const { ctx } = chart;
         ctx.save();
-        
         chart.data.datasets.forEach((dataset, i) => {
             const meta = chart.getDatasetMeta(i);
-            // Рисуем подписи только для столбчатых диаграмм
             if (!meta.hidden && dataset.showLabels !== false && meta.type === 'bar') {
                 meta.data.forEach((element, index) => {
                     const val = dataset.data[index];
@@ -30,12 +28,8 @@ const dataLabelsPlugin = {
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'bottom';
                         
-                        let displayVal = Number(val).toFixed(1);
-                        // Проверяем, есть ли знак % в настройках оси Y, чтобы добавить его к подписи
-                        const isPercent = chart.options.scales?.y?.ticks?.callback?.('test')?.includes('%');
-                        if (isPercent) displayVal += '%';
-                        
-                        ctx.fillText(displayVal, element.x, element.y - 5);
+                        // Всегда добавляем процент для bar-графиков
+                        ctx.fillText(Number(val).toFixed(1) + '%', element.x, element.y - 5);
                     }
                 });
             }
@@ -541,7 +535,6 @@ export function buildQualityChart() {
         }
     }
     const labels = Object.keys(byMarker).sort();
-    // Умножаем на 100 до передачи в Chart.js, чтобы шкала работала в процентах
     const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
     
     const datasets = [
@@ -561,7 +554,8 @@ export function buildQualityChart() {
             scales: { 
                 y: { 
                     beginAtZero: true, 
-                    max: 100, // Только max, без min и stepSize
+                    min: 0,
+                    max: 100,
                     grid: { color: '#f0f0f0' }, 
                     ticks: { callback: v => v + '%', color: '#7a7a7a' } 
                 }, 
@@ -622,7 +616,8 @@ export function buildPoolQualityChart() {
             scales: { 
                 y: { 
                     beginAtZero: true, 
-                    max: 100, 
+                    min: 0,
+                    max: 100,
                     grid: { color: '#f0f0f0' }, 
                     ticks: { callback: v => v + '%', color: '#7a7a7a' } 
                 }, 
@@ -670,7 +665,8 @@ export function buildDayQualityChart() {
             scales: { 
                 y: { 
                     beginAtZero: true, 
-                    max: 100, 
+                    min: 0,
+                    max: 100,
                     grid: { color: '#f0f0f0' }, 
                     ticks: { callback: v => v + '%', color: '#7a7a7a' } 
                 }, 
