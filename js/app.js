@@ -1,13 +1,14 @@
-// js/app.js — ИТЕРАЦИЯ 2 (с добавлением рекомендаций)
+// js/app.js — ЧИСТКА КОДА
+// Удалены неиспользуемые импорты и вызовы (progressStartTimer, toggleRow и др.)
+// Остальная логика без изменений.
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
 import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
-    populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable, toggleRow,
+    populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable,
     buildProjectTabs, renderMarkersTasksStatus, renderSupersetPage,
-    renderSupersetFilters, renderSupersetKPIs,
-    updateSupersetTaskLabel, populateRecDatalists,
+    populateRecDatalists,
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
     changePage
@@ -22,14 +23,14 @@ import {
 } from './feedback.js';
 import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw } from './superset.js';
 import {
-    progressStartTimer, updateProgress, yieldToUI, log, formatDate, escapeHtml
+    updateProgress, yieldToUI, log, formatDate, escapeHtml
 } from './utils.js';
 import { generateHtmlReport } from './report.js';
 
 // ===== Экспорт функций в window (для inline-обработчиков в HTML) =====
 Object.assign(window, {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll,
-    onOptionChange, toggleRow, renderErrorsTable,
+    onOptionChange, renderErrorsTable,
     editFeedback, deleteFeedback,
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
@@ -55,25 +56,22 @@ if (supersetDateTo) supersetDateTo.addEventListener('change', onSupersetDateChan
 
 // ===== Обновление UI после пересчёта данных =====
 window.addEventListener('app:data-updated', () => {
-    // Сброс фильтров суперсета
     state.superset.filters.dateFrom = '';
     state.superset.filters.dateTo = '';
     state.superset.filters.tasks.clear();
     state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
 
-    // Сброс состояния генерации фидбека
     state.feedbackGeneration.appliedPools.clear();
     state.feedbackGeneration.appliedGroups.clear();
     state.feedbackGeneration.videoLinks = {};
 
-    // Сброс пагинации на первую страницу везде
     for (const key in state.pagination) {
         state.pagination[key] = 1;
     }
 
     buildSuperset();
     populateAllMultiSelects();
-    populateRecDatalists(); // Заполняем выпадающие списки для формы рекомендаций
+    populateRecDatalists();
     buildProjectTabs();
     renderMarkersTasksStatus();
     triggerFilterUpdate();
@@ -130,7 +128,6 @@ if (fileInput) {
     fileInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         if (!files.length) return;
-        progressStartTimer();
         updateProgress(0, 'Подготовка...', 'Чтение файлов');
         await yieldToUI();
         const results = await readExcelFiles(files);
@@ -139,7 +136,7 @@ if (fileInput) {
     });
 }
 
-// ===== НОВОЕ: Добавление рекомендации =====
+// ===== Добавление рекомендации =====
 const btnAddRecommendation = document.getElementById('btnAddRecommendation');
 if (btnAddRecommendation) {
     btnAddRecommendation.addEventListener('click', async () => {
@@ -157,7 +154,6 @@ if (btnAddRecommendation) {
             return;
         }
 
-        // Формируем объект, который ожидает data.js
         const newRec = {
             'Дата валидации': dateVal,
             'Проект': project,
@@ -173,7 +169,6 @@ if (btnAddRecommendation) {
         saveToStorage();
         await recomputeDashboard();
 
-        // Очищаем форму
         document.getElementById('recDate').value = '';
         document.getElementById('recProject').value = '';
         document.getElementById('recPool').value = '';
@@ -275,7 +270,6 @@ if (importInput) {
                 for (const name of wb.SheetNames) {
                     const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
                     const lower = name.toLowerCase();
-                    // Защита от перезаписи сырых данных сводными листами
                     if (lower.includes('свод') || lower.includes('обратн')) continue;
                     
                     if (lower.includes('сотрудник') || lower.includes('employee')) parsedEmp = json;
@@ -320,9 +314,8 @@ if (btnClear) {
         state.rawSuperset3 = [];
         state.rawEmployeeMap = [];
         state.processedData = [];
-        state.feedbackData = []; // Очистка ОС
+        state.feedbackData = [];
         
-        // Очистка суперсета
         state.superset.table1 = [];
         state.superset.table2 = [];
         state.superset.table3 = [];
@@ -338,25 +331,21 @@ if (btnClear) {
         state.superset.filters = { dateFrom: '', dateTo: '', tasks: new Set() };
         state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
 
-        // Очистка генерации фидбека
         state.feedbackGeneration.appliedPools.clear();
         state.feedbackGeneration.appliedGroups.clear();
         state.feedbackGeneration.videoLinks = {};
         const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
         if (fbGenContainer) fbGenContainer.innerHTML = '';
 
-        // Сброс пагинации
         for (const key in state.pagination) {
             state.pagination[key] = 1;
         }
 
-        // Очистка localStorage
         try { 
             localStorage.removeItem('validation_dashboard_data_v3'); 
             localStorage.removeItem('validation_feedback_data_v1');
         } catch (e) { /* ignore */ }
         
-        // Сброс формы рекомендаций
         if (document.getElementById('recDate')) {
             document.getElementById('recDate').value = '';
             document.getElementById('recProject').value = '';
