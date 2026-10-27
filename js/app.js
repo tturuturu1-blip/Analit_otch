@@ -1,4 +1,4 @@
-// js/app.js — ЛОГИКА БОКОВОЙ ПАНЕЛИ И МОДАЛЬНОГО ОКНА
+// js/app.js — ЛОГИКА БОКОВОЙ ПАНЕЛИ, МОДАЛЬНОГО ОКНА И СМЕНЫ ЛОГОТИПА
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
@@ -36,12 +36,21 @@ Object.assign(window, {
     changePage
 });
 
-// ===== Логика боковой панели =====
+// ===== Логика боковой панели и логотипа =====
 const sidebar = document.getElementById('sidebar');
 const btnSidebarToggle = document.getElementById('btnSidebarToggle');
+const sidebarLogoText = document.getElementById('sidebarLogoText');
+
 if (btnSidebarToggle) {
     btnSidebarToggle.addEventListener('click', () => {
         sidebar.classList.toggle('expanded');
+        
+        // Меняем текст логотипа
+        if (sidebar.classList.contains('expanded')) {
+            sidebarLogoText.textContent = 'Валидатор';
+        } else {
+            sidebarLogoText.textContent = 'В';
+        }
     });
 }
 
