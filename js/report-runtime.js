@@ -1,8 +1,4 @@
-// js/report-runtime.js — ИСПРАВЛЕНИЕ: единый цвет баров + колонка «Проект» в ОС
-// Изменено:
-//   1. buildQualityChart / buildPoolQualityChart: единый цвет баров (было хардкод 98/99)
-//   2. renderFeedbackTableHome: добавлена колонка «Проект», colspan=8
-// Остальное — как в предыдущей версии (TZ-фикс, домен, ключи с project/pool).
+// js/report-runtime.js — ВЫРАВНИВАНИЕ ОШИБОК В ТАБЛИЦЕ
 
 (function () {
     'use strict';
@@ -232,7 +228,6 @@
             return (sum / arr.length) * 100;
         });
         
-        // ★ ИЗМЕНЕНО: единый цвет, как в ui.js (было: хардкод 98/99)
         var datasets = [
             {
                 label: 'Ср. качество, %',
@@ -301,7 +296,6 @@
             return (sum / arr.length) * 100;
         });
         
-        // ★ ИЗМЕНЕНО: единый цвет, как в ui.js (было: хардкод 98/99)
         var datasets = [
             {
                 label: 'Ср. качество, %',
@@ -487,16 +481,23 @@
         container.innerHTML = html;
     }
 
+    // ★ ОБНОВЛЕНО: группировка и grid-выравнивание
     function buildTable() {
         var tbody = document.getElementById('tableBody');
         if (!tbody) return;
 
-        var grouped = {};
+        var groups = new Map();
+        var groupByKey = new Map();
+
+        // 1. Валидации
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
+            if (r._type !== 'validation') continue;
             var key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
-            if (!grouped[key]) {
-                grouped[key] = {
+            var group = groupByKey.get(key);
+            if (!group) {
+                group = {
+                    _id: r._id,
                     date: r.date,
                     project: r.project,
                     pool: r.pool,
@@ -512,58 +513,105 @@
                     _linked: r._linked,
                     items: []
                 };
+                groupByKey.set(key, group);
+                groups.set(r._id, group);
             }
-            if (r.result === 'Ошибка' || r.result === 'Рекомендация') {
-                grouped[key].items.push({
-                    result: r.result,
-                    errorType: r.errorType,
-                    comment: r.comment,
-                    interval: r.interval
-                });
-            } else if (r.result === 'Ошибки не выявлены' && grouped[key].items.length === 0) {
-                grouped[key].items.push({
-                    result: r.result,
-                    errorType: r.errorType,
-                    comment: r.comment,
-                    interval: r.interval
-                });
-            }
+            group.items.push({
+                result: r.result,
+                errorType: r.errorType,
+                comment: r.comment,
+                interval: r.interval
+            });
         }
 
-        var groupedArray = Object.values(grouped);
+        // 2. Рекомендации
+        for (var j = 0; j < filteredData.length; j++) {
+            var rr = filteredData[j];
+            if (rr._type !== 'recommendations') continue;
+            var grp = null;
+            if (rr._linked) {
+                grp = groups.get(rr._linked);
+            }
+            if (!grp) {
+                var key2 = (rr.marker || '') + '|' + (rr.project || '') + '|' + (rr.pool || '') + '|' + (rr.fileName || '');
+                grp = groupByKey.get(key2);
+            }
+            if (!grp) {
+                grp = {
+                    _id: rr._id,
+                    date: rr.date,
+                    project: rr.project,
+                    pool: rr.pool,
+                    marker: rr.marker,
+                    fileName: rr.fileName,
+                    quality: rr.quality,
+                    fragments: rr.fragments,
+                    url: rr.url,
+                    orgId: rr.orgId,
+                    assignmentId: rr.assignmentId,
+                    itemId: rr.itemId,
+                    _type: rr._type,
+                    _linked: rr._linked,
+                    items: []
+                };
+                var key3 = (rr.marker || '') + '|' + (rr.project || '') + '|' + (rr.pool || '') + '|' + (rr.fileName || '');
+                groupByKey.set(key3, grp);
+                groups.set(rr._id, grp);
+            }
+            grp.items.push({
+                result: rr.result,
+                errorType: rr.errorType,
+                comment: rr.comment,
+                interval: rr.interval
+            });
+        }
+
+        var groupedArray = Array.from(groups.values());
+        // Сортировка по дате
+        groupedArray.sort(function(a, b) {
+            if (!a.date && !b.date) return 0;
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            return b.date - a.date;
+        });
+
         var totalItems = groupedArray.length;
         var startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         var endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
         var rows = groupedArray.slice(startIndex, endIndex);
 
         var html = '';
-        for (var j = 0; j < rows.length; j++) {
-            var g = rows[j];
+        for (var k = 0; k < rows.length; k++) {
+            var g = rows[k];
             
             var valLink = getValidationLink(g);
-
             var fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
             var fileNameTitle = escapeHtml(g.fileName || '');
             
-            var resBadges = g.items.map(function(item) {
-                var badgeClass = item.result === 'Ошибка' ? 'badge-error' : item.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
-                return '<span class="badge ' + badgeClass + '" style="margin-bottom: 4px; display: inline-block;">' + escapeHtml(item.result || '') + '</span>';
-            }).join('<br>');
-
-            var errTypes = g.items.map(function(item) { return escapeHtml(item.errorType || ''); }).join('<br>');
-            
-            var comments = g.items.map(function(item) {
-                var c = item.comment ? escapeHtml(item.comment.slice(0, 100)) : '';
-                return c ? '<span title="' + escapeHtml(item.comment) + '">' + c + '</span>' : '';
-            }).join('<br>');
-            
-            var intervals = g.items.map(function(item) { return escapeHtml(item.interval || ''); }).join('<br>');
-
             var link = g._type === 'recommendations'
                 ? (g._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fde8e8;color:#e55555">нет пары</span>')
                 : '—';
 
             var quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(1) + '%' : '';
+
+            var itemsHtml = '<div class="items-grid">';
+            for (var m = 0; m < g.items.length; m++) {
+                var item = g.items[m];
+                var badgeClass = item.result === 'Ошибка' ? 'badge-error' : item.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
+                var resBadge = '<span class="badge ' + badgeClass + '">' + escapeHtml(item.result || '') + '</span>';
+                var errType = escapeHtml(item.errorType || '');
+                var comment = item.comment ? escapeHtml(item.comment.slice(0, 100)) : '';
+                var commentTitle = item.comment ? escapeHtml(item.comment) : '';
+                var interval = escapeHtml(item.interval || '');
+
+                itemsHtml += '<div class="item-row">' +
+                    '<div>' + resBadge + '</div>' +
+                    '<div>' + errType + '</div>' +
+                    '<div' + (commentTitle ? ' title="' + commentTitle + '"' : '') + '>' + comment + '</div>' +
+                    '<div>' + interval + '</div>' +
+                '</div>';
+            }
+            itemsHtml += '</div>';
 
             html += '<tr>' +
                 '<td>' + formatDate(g.date) + '</td>' +
@@ -571,10 +619,7 @@
                 '<td>' + escapeHtml(g.pool || '') + '</td>' +
                 '<td>' + escapeHtml(g.marker || '') + '</td>' +
                 '<td title="' + fileNameTitle + '">' + fileName + '</td>' +
-                '<td style="vertical-align: top;">' + resBadges + '</td>' +
-                '<td style="vertical-align: top;">' + errTypes + '</td>' +
-                '<td style="vertical-align: top;">' + comments + '</td>' +
-                '<td style="vertical-align: top;">' + intervals + '</td>' +
+                '<td colspan="4" style="padding: 0;">' + itemsHtml + '</td>' +
                 '<td>' + quality + '</td>' +
                 '<td>' + valLink + '</td>' +
                 '<td>' + link + '</td>' +
@@ -604,7 +649,6 @@
             var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null)
                 ? (f.avgQuality * 100).toFixed(1) + '%'
                 : '—';
-            // ★ ИЗМЕНЕНО: добавлена колонка «Проект» (между Статус и Пулы)
             var displayProject = f.project || '—';
             html += '<tr>' +
                 '<td>' + escapeHtml(formatDate(f.date)) + '</td>' +
@@ -620,7 +664,6 @@
         tbody.innerHTML = html;
 
         if (rows.length === 0) {
-            // ★ ИЗМЕНЕНО: colspan=8 (было 9) — по фактическому количеству колонок
             tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--muted); padding: 20px;">Нет данных.</td></tr>';
         }
 
