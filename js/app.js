@@ -1,6 +1,5 @@
-// js/app.js — ЧИСТКА КОДА
-// Удалены неиспользуемые импорты и вызовы (progressStartTimer, toggleRow и др.)
-// Остальная логика без изменений.
+// js/app.js — ИСПРАВЛЕНИЕ БАГА: восстановление ОС при импорте Excel
+// Остальной код без изменений (из предыдущей версии с чисткой кода)
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
@@ -23,11 +22,11 @@ import {
 } from './feedback.js';
 import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw } from './superset.js';
 import {
-    updateProgress, yieldToUI, log, formatDate, escapeHtml
+    updateProgress, yieldToUI, log, formatDate, escapeHtml, parseExcelDate
 } from './utils.js';
 import { generateHtmlReport } from './report.js';
 
-// ===== Экспорт функций в window (для inline-обработчиков в HTML) =====
+// ===== Экспорт функций в window =====
 Object.assign(window, {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll,
     onOptionChange, renderErrorsTable,
@@ -38,7 +37,7 @@ Object.assign(window, {
     changePage
 });
 
-// ===== Делегирование кликов по табам проектов =====
+// ===== Делегирование кликов по табам =====
 const projectTabsContainer = document.getElementById('projectTabs');
 if (projectTabsContainer) {
     projectTabsContainer.addEventListener('click', (e) => {
@@ -48,13 +47,13 @@ if (projectTabsContainer) {
     });
 }
 
-// ===== Изменение дат на странице Суперсет =====
+// ===== Даты в суперсете =====
 const supersetDateFrom = document.getElementById('supersetDateFrom');
 const supersetDateTo = document.getElementById('supersetDateTo');
 if (supersetDateFrom) supersetDateFrom.addEventListener('change', onSupersetDateChange);
 if (supersetDateTo) supersetDateTo.addEventListener('change', onSupersetDateChange);
 
-// ===== Обновление UI после пересчёта данных =====
+// ===== Обновление UI =====
 window.addEventListener('app:data-updated', () => {
     state.superset.filters.dateFrom = '';
     state.superset.filters.dateTo = '';
@@ -80,14 +79,14 @@ window.addEventListener('app:data-updated', () => {
     if (state.currentMenu === 'feedback') renderFeedbackTable();
 });
 
-// ===== Закрытие dropdown при клике вне =====
+// ===== Закрытие dropdown =====
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.multi-select')) {
         document.querySelectorAll('.ms-dropdown').forEach(d => d.classList.remove('open'));
     }
 });
 
-// ===== Фильтры по дате (главная) =====
+// ===== Фильтры по дате =====
 for (const id of ['filterDateFrom', 'filterDateTo']) {
     const el = document.getElementById(id);
     if (el) {
@@ -255,7 +254,7 @@ if (btnExport) {
     });
 }
 
-// ===== Импорт =====
+// ===== Импорт (ИСПРАВЛЕНО: теперь читает ОС) =====
 const importInput = document.getElementById('importInput');
 if (importInput) {
     importInput.addEventListener('change', (e) => {
@@ -266,13 +265,17 @@ if (importInput) {
             try {
                 const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
                 let parsedM = [], parsedV = [], parsedR = [], parsedF = [], parsedEmp = [];
-                let parsedS1 = [], parsedS2 = [], parsedS3 = [];
+                let parsedS1 = [], parsedS2 = [], parsedS3 = [], parsedFb = [];
+                
                 for (const name of wb.SheetNames) {
                     const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
                     const lower = name.toLowerCase();
-                    if (lower.includes('свод') || lower.includes('обратн')) continue;
                     
-                    if (lower.includes('сотрудник') || lower.includes('employee')) parsedEmp = json;
+                    // Свод валидации — это производная от processedData, не перезаписываем сырые данные
+                    if (lower.includes('свод')) continue;
+                    
+                    if (lower.includes('обратн') || lower.includes('feedback')) parsedFb = json;
+                    else if (lower.includes('сотрудник') || lower.includes('employee')) parsedEmp = json;
                     else if (lower.includes('суперсет 1') || lower.includes('superset 1')) parsedS1 = json;
                     else if (lower.includes('суперсет 2') || lower.includes('superset 2')) parsedS2 = json;
                     else if (lower.includes('суперсет 3') || lower.includes('superset 3')) parsedS3 = json;
@@ -281,6 +284,7 @@ if (importInput) {
                     else if (lower.includes('валидац') || lower.includes('valid')) parsedV = json;
                     else if (lower.includes('рекоменд') || lower.includes('recommend')) parsedR = json;
                 }
+                
                 state.rawMarkers = parsedM;
                 state.rawValidation = parsedV;
                 state.rawRecommendations = parsedR;
@@ -289,8 +293,39 @@ if (importInput) {
                 state.rawSuperset2 = parsedS2;
                 state.rawSuperset3 = parsedS3;
                 state.rawEmployeeMap = parsedEmp;
+                
+                // Восстановление ОС
+                if (parsedFb.length > 0) {
+                    state.feedbackData = parsedFb.map(row => {
+                        let dateStr = row['Дата'];
+                        if (dateStr) {
+                            const d = parseExcelDate(dateStr);
+                            if (d && !isNaN(d.getTime())) {
+                                dateStr = d.toISOString().slice(0, 10); // ISO YYYY-MM-DD
+                            }
+                        }
+                        
+                        let avgQ = row['Ср. качество за период'];
+                        if (avgQ === '' || avgQ === undefined) avgQ = null;
+                        else if (typeof avgQ === 'string') avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
+
+                        return {
+                            date: dateStr || '',
+                            marker: row['Разметчик'] || '',
+                            status: row['Статус'] || '',
+                            typeVKS: row['Тип ВКС'] || '',
+                            conductor: row['Провел'] || '',
+                            project: row['Проект'] || '',
+                            pools: row['Пулы с ошибками'] || '',
+                            avgQuality: avgQ
+                        };
+                    });
+                    saveFeedbackToStorage();
+                }
+                
                 saveToStorage();
                 await recomputeDashboard();
+                log('Импорт завершён', false);
             } catch (err) {
                 alert('Ошибка импорта: ' + err.message);
             }
