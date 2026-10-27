@@ -244,7 +244,6 @@ table {
     border-collapse: collapse; 
     width: 100%; 
     margin: 0; 
-    table-layout: auto;
 }
 
 th, td { 
@@ -274,26 +273,31 @@ th {
 tr:hover td { background: #f9f9f9; }
 tbody tr:last-child td { border-bottom: none; }
 
-/* Специфичные ширины для новой структуры (9 колонок) */
+/* ========================================= */
+/* СТРОГИЕ ШИРИНЫ ДЛЯ ГЛАВНОЙ ТАБЛИЦЫ (9 КОЛОНОК) */
+/* ========================================= */
 #dataTable {
-    min-width: 1400px; /* Заставляем таблицу расшириться, чтобы всё влезло */
+    min-width: 1500px;
+    table-layout: fixed; /* ★ КРИТИЧЕСКИ ВАЖНО: заставляет браузер соблюдать ширины */
 }
 
-#dataTable th:nth-child(1), #dataTable td:nth-child(1) { white-space: nowrap; width: 90px; } /* Дата */
-#dataTable th:nth-child(2), #dataTable td:nth-child(2) { min-width: 140px; } /* Проект */
-#dataTable th:nth-child(3), #dataTable td:nth-child(3) { width: 100px; min-width: 100px; max-width: 130px; } /* Пул */
-#dataTable th:nth-child(4), #dataTable td:nth-child(4) { min-width: 120px; } /* Разметчик */
-#dataTable th:nth-child(5), #dataTable td:nth-child(5) { width: 150px; max-width: 200px; } /* Файл */
-#dataTable th:nth-child(6), #dataTable td:nth-child(6) { min-width: 650px; padding: 0; } /* Объединенная колонка */
-#dataTable th:nth-child(7), #dataTable td:nth-child(7) { white-space: nowrap; text-align: center; width: 80px; } /* Качество */
-#dataTable th:nth-child(8), #dataTable td:nth-child(8) { min-width: 80px; width: 90px; text-align: center; } /* Ссылка */
-#dataTable th:nth-child(9), #dataTable td:nth-child(9) { white-space: nowrap; text-align: center; width: 90px; } /* Связь */
+#dataTable th:nth-child(1) { width: 90px; white-space: nowrap; } /* Дата */
+#dataTable th:nth-child(2) { width: 150px; } /* Проект */
+#dataTable th:nth-child(3) { width: 110px; } /* Пул */
+#dataTable th:nth-child(4) { width: 150px; } /* Разметчик */
+#dataTable th:nth-child(5) { width: 150px; } /* Файл */
+#dataTable th:nth-child(6) { width: 680px; padding: 0; } /* ★ Объединенная колонка (Ошибки) */
+#dataTable th:nth-child(7) { width: 90px; text-align: center; white-space: nowrap; } /* Качество */
+#dataTable th:nth-child(8) { width: 90px; text-align: center; white-space: nowrap; } /* Ссылка */
+#dataTable th:nth-child(9) { width: 90px; text-align: center; white-space: nowrap; } /* Связь */
 
-/* ===== Выравнивание ошибок в таблице главной ===== */
+/* ========================================= */
+/* ВНУТРЕННЯЯ СЕТКА ДЛЯ ОШИБОК */
+/* ========================================= */
 .th-grid, .item-row {
     display: grid;
-    /* Итог, Тип, Комментарий, Интервал */
-    grid-template-columns: 100px 160px minmax(250px, 1fr) 140px; 
+    /* Итог, Тип, Комментарий, Интервал. Ширины строго подогнаны под 680px */
+    grid-template-columns: 100px 140px 1fr 120px; 
     gap: 8px;
     align-items: start;
     width: 100%;
@@ -307,7 +311,7 @@ tbody tr:last-child td { border-bottom: none; }
     letter-spacing: 0.5px;
     color: #8e8e8e;
     text-align: left;
-    min-width: 650px;
+    /* Убран min-width, который ломал таблицу */
 }
 
 .items-grid {
@@ -315,7 +319,7 @@ tbody tr:last-child td { border-bottom: none; }
     flex-direction: column;
     gap: 6px;
     padding: 8px 0;
-    min-width: 650px;
+    width: 100%;
 }
 
 .item-row {
@@ -364,9 +368,11 @@ tbody tr:last-child td { border-bottom: none; }
 .badge-ok { background: #e8f5e9; color: #2e7d32; }
 .badge-rec { background: #fff8e1; color: #f57c00; }
 .badge-linked { background: #e3f2fd; color: #1565c0; }
+
 .badge-link {
-    display: inline-block; padding: 4px 12px; border-radius: 6px;
-    background: var(--accent); color: #fff; font-size: 0.75rem; text-decoration: none; transition: all 0.2s;
+    display: inline-block; padding: 6px 12px; border-radius: 6px;
+    background: var(--accent); color: #fff; font-size: 0.75rem; text-decoration: none; 
+    transition: all 0.2s; white-space: nowrap; /* ★ ДОБАВЛЕНО, чтобы "Перейти" не ломалось */
     font-family: 'Source Sans 3', sans-serif; font-weight: 500;
 }
 .badge-link:hover { opacity: 0.8; }
