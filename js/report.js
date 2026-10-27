@@ -1,8 +1,8 @@
-// js/report.js — генерация автономного HTML-отчёта
-// Изменено: имя файла формируется по проектам + дате (было: Валидатор_PRO_Отчет_YYYY-MM-DD.html)
+// js/report.js — ИСПРАВЛЕНИЕ TZ-СДВИГА ДАТ
+// Изменено: reportData собирается с датами в формате dd.mm.yyyy (без TZ)
 
 import { state } from './state.js';
-import { escapeHtml, formatDate } from './utils.js';
+import { escapeHtml, formatDate, parseExcelDate } from './utils.js';
 
 // Генерирует автономный HTML-файл с дашбордом "Главная".
 export async function generateHtmlReport() {
@@ -64,9 +64,27 @@ export async function generateHtmlReport() {
 
     const targetQuality = state.superset.norms.globalAvg;
 
+    // ★ ИЗМЕНЕНО (TZ-фикс): нормализуем даты в dd.mm.yyyy (без времени, без TZ)
+    const serializedProcessedData = state.processedData.map(r => {
+        const copy = Object.assign({}, r);
+        if (r.date) copy.date = formatDate(r.date);
+        else copy.date = null;
+        return copy;
+    });
+
+    const serializedFeedbackData = state.feedbackData.map(f => {
+        const copy = Object.assign({}, f);
+        if (f.date) {
+            // f.date может быть YYYY-MM-DD или dd.mm.yyyy
+            const parsed = parseExcelDate(f.date);
+            copy.date = parsed ? formatDate(parsed) : f.date;
+        }
+        return copy;
+    });
+
     const reportData = {
-        processedData: state.processedData,
-        feedbackData: state.feedbackData,
+        processedData: serializedProcessedData,
+        feedbackData: serializedFeedbackData,
         targetQuality: targetQuality
     };
     const reportDataJson = JSON.stringify(reportData).replace(/</g, '\\u003c');
