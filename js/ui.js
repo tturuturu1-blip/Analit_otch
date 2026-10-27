@@ -1,4 +1,4 @@
-// js/ui.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД
+// js/ui.js — ОБНОВЛЕННЫЙ КОД
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -11,7 +11,7 @@ import {
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
-// Исправленный плагин подписей (без вызова функции callback)
+// Плагин подписей (улучшен для избежания наложения)
 const dataLabelsPlugin = {
     id: 'dataLabels',
     afterDatasetsDraw(chart) {
@@ -23,13 +23,20 @@ const dataLabelsPlugin = {
                 meta.data.forEach((element, index) => {
                     const val = dataset.data[index];
                     if (val != null && val !== 0 && typeof val === 'number') {
-                        ctx.fillStyle = '#1f1f1f';
-                        ctx.font = 'bold 12px sans-serif';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'bottom';
+                        const height = element.base - element.y;
                         
-                        // Всегда добавляем процент для bar-графиков
-                        ctx.fillText(Number(val).toFixed(1) + '%', element.x, element.y - 5);
+                        // Если столбик слишком маленький (меньше 15px), не пишем текст, чтобы не было каши
+                        if (height < 15) return;
+
+                        ctx.fillStyle = '#1f1f1f';
+                        ctx.font = 'bold 11px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        
+                        let displayVal = dataset.isPercentage ? Number(val).toFixed(1) + '%' : val;
+                        
+                        // Центрируем текст посередине столбца
+                        ctx.fillText(displayVal, element.x, element.y + (height / 2));
                     }
                 });
             }
@@ -449,7 +456,72 @@ export function updateKPI() {
         errColorClass = 'val-green';
     }
 
-    const k = state.superset.kpis || {};
+    // ★ ИЗМЕНЕНО: Расчет Факт/Цена/Время/Коэффициент на основе фильтров Главной
+    let activeTasks = state.superset.table1 || [];
+    
+    // Фильтр по проекту (табы)
+    if (state.currentTab !== 'all') {
+        activeTasks = activeTasks.filter(r => r.project === state.currentTab);
+    }
+    
+    // Фильтр по пулам
+    if (state.filterState.pool.size > 0) {
+        activeTasks = activeTasks.filter(r => state.filterState.pool.has(r.task));
+    }
+
+    // Фильтр по датам
+    const filterFrom = document.getElementById('filterDateFrom')?.value;
+    const filterTo = document.getElementById('filterDateTo')?.value;
+    if (filterFrom || filterTo) {
+        const fTime = filterFrom ? new Date(filterFrom).getTime() : null;
+        const tTime = filterTo ? new Date(filterTo).getTime() + 86400000 : null;
+        activeTasks = activeTasks.filter(r => {
+            let rowStart = r.dateStart ? r.dateStart.getTime() : null;
+            let rowEnd = r.dateEnd ? r.dateEnd.getTime() : null;
+            if (fTime && rowEnd && rowEnd < fTime) return false;
+            if (tTime && rowStart && rowStart > tTime) return false;
+            return true;
+        });
+    }
+
+    // Локальные парсеры
+    const parseHtmlNumberToFloatLocal = (val) => {
+        if (val == null) return null;
+        let s = String(val).trim().replace(/<[^>]*>/g, '').replace(/\./g, ',');
+        if (!s) return null;
+        const n = parseFloat(s.replace(',', '.'));
+        return isNaN(n) ? null : n;
+    };
+    const parsePriceToFloatLocal = (val) => {
+        if (val == null || val === '') return null;
+        const s = String(val).replace(/\s+/g, '').replace(',', '.');
+        const n = parseFloat(s);
+        return isNaN(n) ? null : n;
+    };
+    const avgLocal = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+
+    const balls = activeTasks.map(r => parseHtmlNumberToFloatLocal(r.ballsPerHour)).filter(v => v !== null);
+    const ballsPerHour = avgLocal(balls);
+
+    const prods = activeTasks.map(r => parseHtmlNumberToFloatLocal(r.prodPerHour)).filter(v => v !== null);
+    const prodPerHour = avgLocal(prods);
+
+    const prices = activeTasks.map(r => parsePriceToFloatLocal(r.price)).filter(v => v !== null);
+    const avgPrice = avgLocal(prices);
+
+    const timesByTask = {};
+    for (const r of activeTasks) {
+        const p = parsePriceToFloatLocal(r.price);
+        const b = parseHtmlNumberToFloatLocal(r.ballsPerHour);
+        if (p === null || p <= 0 || b === null || b <= 0) continue;
+        const t = (p * 60) / b;
+        const key = (r.project || '') + '|' + (r.task || '');
+        if (!timesByTask[key]) timesByTask[key] = [];
+        timesByTask[key].push(t);
+    }
+    const taskAverages = Object.values(timesByTask).map(avgLocal).filter(a => a !== null);
+    const avgTime = avgLocal(taskAverages);
+
     const { dateFrom, dateTo } = state.superset.filters;
     const norms = getNormsForPeriod(dateFrom, dateTo);
 
@@ -470,6 +542,7 @@ export function updateKPI() {
     const container = document.getElementById('mainKpisContainer');
     if (!container) return;
 
+    // ★ ИЗМЕНЕНО: Новые названия карточек
     container.innerHTML = `
         <div class="kpi-card">
             <div class="label">Целевое качество</div>
@@ -491,24 +564,24 @@ export function updateKPI() {
             <button class="norm-edit-btn" onclick="editSupersetNorm()" title="Редактировать">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
             </button>
-            <div class="label">Норма у.е. в час</div>
+            <div class="label">Норма, у.е./час</div>
             ${normValuesHtml}
         </div>
         <div class="kpi-card">
-            <div class="label">Факт у.е. в час</div>
-            <div class="value val-brown">${k.ballsPerHour != null ? k.ballsPerHour.toFixed(1) : '—'}</div>
+            <div class="label">Факт, у.е./час</div>
+            <div class="value val-brown">${ballsPerHour != null ? ballsPerHour.toFixed(1) : '—'}</div>
         </div>
         <div class="kpi-card">
-            <div class="label">Цена</div>
-            <div class="value val-brown">${k.avgPrice != null ? k.avgPrice.toFixed(2) : '—'}</div>
+            <div class="label">Стоимость, у.е.</div>
+            <div class="value val-brown">${avgPrice != null ? avgPrice.toFixed(2) : '—'}</div>
         </div>
         <div class="kpi-card">
-            <div class="label">Среднее время разметки</div>
-            <div class="value val-brown">${k.avgTime != null ? k.avgTime.toFixed(1) + ' мин' : '—'}</div>
+            <div class="label">Среднее время разметки, мин</div>
+            <div class="value val-brown">${avgTime != null ? avgTime.toFixed(1) : '—'}</div>
         </div>
         <div class="kpi-card">
             <div class="label">Коэффициент</div>
-            <div class="value val-brown">${k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—'}</div>
+            <div class="value val-brown">${prodPerHour != null ? prodPerHour.toFixed(2) : '—'}</div>
         </div>
     `;
 }
@@ -538,7 +611,7 @@ export function buildQualityChart() {
     const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
     
     const datasets = [
-        { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true },
+        { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true, isPercentage: true },
         ...targetLinesForLabels(labels)
     ];
     const canvas = document.getElementById('chartQuality');
@@ -552,13 +625,7 @@ export function buildQualityChart() {
             maintainAspectRatio: false, 
             plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
             scales: { 
-                y: { 
-                    beginAtZero: true, 
-                    min: 0,
-                    max: 100,
-                    grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
-                }, 
+                y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
         }
@@ -599,28 +666,27 @@ export function buildPoolQualityChart() {
     const labels = Object.keys(byPool).sort();
     const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
     
+    // ★ ИЗМЕНЕНО: Изменен тип на 'line' как у графика по дням
+    const target = state.superset.norms.globalAvg;
     const datasets = [
-        { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2, showLabels: true },
-        ...targetLinesForLabels(labels)
+        { label: 'Ср. качество, %', data: values, borderColor: '#1f1f1f', backgroundColor: 'rgba(31, 31, 31, 0.05)', tension: .4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, order: 2 }
     ];
+    if (target != null) {
+        datasets.push({ label: 'Целевое', data: labels.map(() => target), borderColor: '#e55555', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
+    }
+
     const canvas = document.getElementById('chartPoolQuality');
     if (!canvas) return;
     
     state.charts.poolQuality = new Chart(canvas, {
-        type: 'bar',
+        type: 'line',
         data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets },
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
             plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
             scales: { 
-                y: { 
-                    beginAtZero: true, 
-                    min: 0,
-                    max: 100,
-                    grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
-                }, 
+                y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
         }
@@ -663,13 +729,7 @@ export function buildDayQualityChart() {
             maintainAspectRatio: false, 
             plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
             scales: { 
-                y: { 
-                    beginAtZero: true, 
-                    min: 0,
-                    max: 100,
-                    grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
-                }, 
+                y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
         }
@@ -687,6 +747,7 @@ export function buildErrorsByMarkerChart() {
         data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
         backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
         borderRadius: 4
+        // isPercentage не передаем, так как это штуки, а не проценты
     }));
     
     const canvas = document.getElementById('chartErrorsByMarker');
