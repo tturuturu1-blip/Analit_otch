@@ -1,4 +1,4 @@
-// js/ui.js — ИСПРАВЛЕНИЕ ШКАЛЫ ГРАФИКОВ И ПУСТЫХ ДИАГРАММ
+// js/ui.js — ИСПРАВЛЕНИЕ ШКАЛЫ ГРАФИКОВ И УДАЛЕНИЕ СТРЕЛОК
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -19,7 +19,6 @@ const dataLabelsPlugin = {
         ctx.save();
         chart.data.datasets.forEach((dataset, i) => {
             const meta = chart.getDatasetMeta(i);
-            // Рисуем подписи только для столбчатых диаграмм (bar), чтобы не ломать линии и круги
             if (!meta.hidden && dataset.showLabels !== false && meta.type === 'bar') {
                 meta.data.forEach((element, index) => {
                     const val = dataset.data[index];
@@ -43,24 +42,6 @@ const dataLabelsPlugin = {
     }
 };
 Chart.register(dataLabelsPlugin);
-
-// --- Состояние для переключения проектов в круговых диаграммах ---
-let errChartIndex = 0;
-let errChartProjects = [];
-let markerChartIndex = 0;
-let markerChartProjects = [];
-
-export function changeChartProject(chartId, dir) {
-    if (chartId === 'errors') {
-        if (errChartProjects.length <= 1) return;
-        errChartIndex = (errChartIndex + dir + errChartProjects.length) % errChartProjects.length;
-        buildErrorChart();
-    } else if (chartId === 'errorsByMarker') {
-        if (markerChartProjects.length <= 1) return;
-        markerChartIndex = (markerChartIndex + dir + markerChartProjects.length) % markerChartProjects.length;
-        buildErrorsByMarkerChart();
-    }
-}
 
 export function switchMenu(menuId, btn) {
     state.currentMenu = menuId;
@@ -98,9 +79,6 @@ export function switchTab(tabId, btn) {
     state.pagination.superset2 = 1;
     state.pagination.superset3 = 1;
     state.pagination.superset4 = 1;
-    
-    errChartIndex = 0;
-    markerChartIndex = 0;
 
     if (state.currentMenu === 'main') triggerFilterUpdate();
     if (state.currentMenu === 'errors') renderErrorsTable();
@@ -563,7 +541,7 @@ export function buildQualityChart() {
     const labels = Object.keys(byMarker).sort();
     const values = labels.map(m => {
         const avg = byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length;
-        return Math.round(avg * 1000) / 10; // Округляем до 1 знака после запятой
+        return Math.round(avg * 1000) / 10;
     });
     const datasets = [
         { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true },
@@ -584,7 +562,7 @@ export function buildQualityChart() {
                     min: 0, 
                     max: 100, 
                     grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a', stepSize: 10 } 
                 }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
@@ -594,14 +572,10 @@ export function buildQualityChart() {
 
 export function buildErrorChart() {
     destroyChart(state.charts.errors);
-    errChartProjects = ['Все проекты', ...new Set(state.filteredData.map(r => r.project).filter(Boolean))].sort();
-    if (errChartIndex >= errChartProjects.length) errChartIndex = 0;
-    const curProj = errChartProjects[errChartIndex];
-
+    
     const byType = {};
     for (const r of state.filteredData) {
         if (!r.errorType) continue;
-        if (curProj !== 'Все проекты' && r.project !== curProj) continue;
         byType[r.errorType] = (byType[r.errorType] || 0) + 1;
     }
     
@@ -609,10 +583,7 @@ export function buildErrorChart() {
     if (!canvas) return;
     
     const labels = Object.keys(byType);
-    const title = curProj === 'Все проекты' ? 'Распределение типов ошибок' : `Распределение типов ошибок (${curProj})`;
-    const h3 = canvas.closest('.chart-card').querySelector('h3');
-    if (h3) h3.textContent = title;
-
+    
     state.charts.errors = new Chart(canvas, {
         type: 'doughnut',
         data: { labels: labels, datasets: [{ data: Object.values(byType), backgroundColor: CHART_COLORS, borderWidth: 0 }] },
@@ -657,7 +628,7 @@ export function buildPoolQualityChart() {
                     min: 0, 
                     max: 100, 
                     grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a', stepSize: 10 } 
                 }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
@@ -709,7 +680,7 @@ export function buildDayQualityChart() {
                     min: 0, 
                     max: 100, 
                     grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a', stepSize: 10 } 
                 }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
@@ -719,28 +690,19 @@ export function buildDayQualityChart() {
 
 export function buildErrorsByMarkerChart() {
     destroyChart(state.charts.errorsByMarker);
-    markerChartProjects = ['Все проекты', ...new Set(state.filteredData.map(r => r.project).filter(Boolean))].sort();
-    if (markerChartIndex >= markerChartProjects.length) markerChartIndex = 0;
-    const curProj = markerChartProjects[markerChartIndex];
 
-    const filtered = state.filteredData.filter(r => curProj === 'Все проекты' || r.project === curProj);
-
-    const markers = [...new Set(filtered.map(r => r.marker).filter(Boolean))].sort();
-    const errorTypes = [...new Set(filtered.map(r => r.errorType).filter(Boolean))].sort();
+    const markers = [...new Set(state.filteredData.map(r => r.marker).filter(Boolean))].sort();
+    const errorTypes = [...new Set(state.filteredData.map(r => r.errorType).filter(Boolean))].sort();
     
     const datasets = errorTypes.map((type, idx) => ({
         label: type,
-        data: markers.map(m => filtered.filter(r => r.marker === m && r.errorType === type).length),
+        data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
         backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
         borderRadius: 4
     }));
     
     const canvas = document.getElementById('chartErrorsByMarker');
     if (!canvas) return;
-
-    const title = curProj === 'Все проекты' ? 'Типы ошибок по разметчикам' : `Типы ошибок по разметчикам (${curProj})`;
-    const h3 = canvas.closest('.chart-card').querySelector('h3');
-    if (h3) h3.textContent = title;
 
     state.charts.errorsByMarker = new Chart(canvas, {
         type: 'bar',
