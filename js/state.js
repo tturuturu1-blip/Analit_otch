@@ -1,7 +1,8 @@
+// js/state.js — ДОБАВЛЕНО: fbRecordMarkers в filterState
+
 export const STORAGE_KEY = 'validation_dashboard_data_v3';
 export const FB_STORAGE_KEY = 'validation_feedback_data_v1';
 
-// Количество строк на одной странице таблицы
 export const ITEMS_PER_PAGE = 10;
 
 const DEFAULT_NORM_HISTORY = [{ date: '2000-01-01', value: 580 }];
@@ -40,15 +41,16 @@ export const state = {
         marker: new Set(),
         result: new Set(),
         feedbackPool: new Set(),
-        feedbackGroup: new Set(), // Для фильтра групп разметчиков
-        fbFormPools: new Set()
+        feedbackGroup: new Set(),
+        fbFormPools: new Set(),
+        fbRecordMarkers: new Set()   // ★ НОВОЕ: для мультивыбора разметчиков в ОС
     },
 
     // Состояние для генерации фидбека
     feedbackGeneration: {
         appliedPools: new Set(),
         appliedGroups: new Set(),
-        videoLinks: {} // Ссылки на видео: { "marker|filename": "url" }
+        videoLinks: {}
     },
 
     superset: {
