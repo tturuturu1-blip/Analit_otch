@@ -229,7 +229,7 @@ input[type="file"] { display: none; }
 .kpi-card .value.val-red { color: var(--danger) !important; }
 .kpi-card .value.val-green { color: #2e7d32 !important; }
 
-/* ============ НОВЫЕ СТИЛИ ТАБЛИЦ (в стиле макета) ============ */
+/* ============ НОВЫЕ СТИЛИ ТАБЛИЦ ============ */
 .table-card { 
     padding: 0; 
     overflow-x: auto; 
@@ -244,6 +244,7 @@ table {
     border-collapse: collapse; 
     width: 100%; 
     margin: 0; 
+    table-layout: auto;
 }
 
 th, td { 
@@ -270,20 +271,63 @@ th {
     border-bottom: 1px solid #e0e0e0;
 }
 
-tr:hover td { 
-    background: #f9f9f9; 
+tr:hover td { background: #f9f9f9; }
+tbody tr:last-child td { border-bottom: none; }
+
+/* Специфичные ширины для новой структуры (9 колонок) */
+#dataTable {
+    min-width: 1400px; /* Заставляем таблицу расшириться, чтобы всё влезло */
 }
 
-tbody tr:last-child td { 
-    border-bottom: none; 
+#dataTable th:nth-child(1), #dataTable td:nth-child(1) { white-space: nowrap; width: 90px; } /* Дата */
+#dataTable th:nth-child(2), #dataTable td:nth-child(2) { min-width: 140px; } /* Проект */
+#dataTable th:nth-child(3), #dataTable td:nth-child(3) { width: 100px; min-width: 100px; max-width: 130px; } /* Пул */
+#dataTable th:nth-child(4), #dataTable td:nth-child(4) { min-width: 120px; } /* Разметчик */
+#dataTable th:nth-child(5), #dataTable td:nth-child(5) { width: 150px; max-width: 200px; } /* Файл */
+#dataTable th:nth-child(6), #dataTable td:nth-child(6) { min-width: 650px; padding: 0; } /* Объединенная колонка */
+#dataTable th:nth-child(7), #dataTable td:nth-child(7) { white-space: nowrap; text-align: center; width: 80px; } /* Качество */
+#dataTable th:nth-child(8), #dataTable td:nth-child(8) { min-width: 80px; width: 90px; text-align: center; } /* Ссылка */
+#dataTable th:nth-child(9), #dataTable td:nth-child(9) { white-space: nowrap; text-align: center; width: 90px; } /* Связь */
+
+/* ===== Выравнивание ошибок в таблице главной ===== */
+.th-grid, .item-row {
+    display: grid;
+    /* Итог, Тип, Комментарий, Интервал */
+    grid-template-columns: 100px 160px minmax(250px, 1fr) 140px; 
+    gap: 8px;
+    align-items: start;
+    width: 100%;
 }
 
-/* Специфичные ширины */
-#dataTable th:nth-child(1), #dataTable td:nth-child(1) { white-space: nowrap; }
-#dataTable th:nth-child(2), #dataTable td:nth-child(2) { min-width: 180px; }
-#dataTable th:nth-child(6), #dataTable td:nth-child(6) { max-width: 130px; white-space: normal; }
-#dataTable th:nth-child(10), #dataTable td:nth-child(10) { white-space: nowrap; }
-#dataTable th:nth-child(11), #dataTable td:nth-child(11) { min-width: 80px; width: 90px; text-align: center; }
+.th-grid {
+    padding: 12px 20px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #8e8e8e;
+    text-align: left;
+    min-width: 650px;
+}
+
+.items-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+    min-width: 650px;
+}
+
+.item-row {
+    padding: 6px 20px;
+    border-bottom: 1px dashed #f0f0f0;
+}
+.item-row:last-child {
+    border-bottom: none;
+}
+.item-row:hover {
+    background: #fafafa;
+}
 
 /* ============ ПАГИНАЦИЯ ============ */
 .pagination-container {
@@ -297,47 +341,18 @@ tbody tr:last-child td {
     border-bottom-right-radius: var(--radius-lg);
     margin-top: auto;
 }
-
-.pagination-info {
-    font-size: 0.85rem;
-    color: var(--muted);
-}
-
-.pagination-controls {
-    display: flex;
-    gap: 6px;
-}
-
+.pagination-info { font-size: 0.85rem; color: var(--muted); }
+.pagination-controls { display: flex; gap: 6px; }
 .page-btn {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid transparent;
-    min-width: 32px;
-    height: 32px;
-    padding: 0 8px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.2s;
+    background: transparent; color: var(--text); border: 1px solid transparent;
+    min-width: 32px; height: 32px; padding: 0 8px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; cursor: pointer; transition: all 0.2s;
     font-family: 'Source Sans 3', sans-serif;
 }
-
-.page-btn:hover:not(:disabled) { 
-    background: #f0f0f0; 
-}
-
-.page-btn.active { 
-    background: var(--accent); 
-    color: #fff; 
-}
-
-.page-btn:disabled { 
-    opacity: 0.3; 
-    cursor: not-allowed; 
-}
+.page-btn:hover:not(:disabled) { background: #f0f0f0; }
+.page-btn.active { background: var(--accent); color: #fff; }
+.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* ============ Badges ============ */
 .badge { 
@@ -373,6 +388,20 @@ tbody tr:last-child td {
     font-family: 'Source Sans 3', sans-serif;
 }
 .status-badge { padding: 6px 14px; border-radius: var(--radius-pill); font-size: 0.8rem; font-weight: 500; white-space: nowrap; }
+
+/* Textarea для комментариев в рекомендациях */
+textarea.rec-comment {
+    padding: 8px;
+    width: 100%;
+    min-width: 250px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    resize: vertical;
+    min-height: 70px;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+}
 
 /* ============ Детали и Комментарии ============ */
 .expandable-row { cursor: pointer; }
@@ -548,58 +577,4 @@ tbody tr:last-child td {
 .feedback-link-input-group input:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(28, 28, 28, 0.1);
-}
-
-/* ===== Выравнивание ошибок в таблице главной ===== */
-.th-grid, .item-row {
-    display: grid;
-    /* Итог, Тип, Комментарий, Интервал */
-    grid-template-columns: 90px 160px minmax(200px, 1fr) 140px; 
-    gap: 8px;
-    align-items: start;
-    width: 100%;
-}
-
-.th-grid {
-    padding: 12px 20px;
-    font-weight: 700;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #8e8e8e;
-    text-align: left;
-    min-width: 520px; /* ★ ДОБАВЛЕНО: заставляет таблицу расшириться */
-}
-
-.items-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 0;
-    min-width: 520px; /* ★ ДОБАВЛЕНО: заставляет таблицу расшириться */
-}
-
-.item-row {
-    padding: 6px 20px;
-    border-bottom: 1px dashed #f0f0f0;
-}
-.item-row:last-child {
-    border-bottom: none;
-}
-.item-row:hover {
-    background: #fafafa;
-}
-
-/* Textarea для комментариев в рекомендациях */
-textarea.rec-comment {
-    padding: 8px;
-    width: 100%;
-    min-width: 250px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    resize: vertical;
-    min-height: 70px;
-    font-family: 'Source Sans 3', sans-serif;
-    font-size: 0.9rem;
-    box-sizing: border-box;
 }
