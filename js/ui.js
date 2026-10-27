@@ -1,9 +1,4 @@
-// js/ui.js — ИЗМЕНЕНИЯ ДЛЯ ФОРМЫ РЕКОМЕНДАЦИЙ И МУЛЬТИВЫБОРА РАЗМЕТЧИКОВ В ОС
-// Изменено:
-//   1. populateAllMultiSelects: добавлен msFbRecordMarkers
-//   2. toggleAll / onOptionChange: fbRecordMarkers в исключениях
-//   3. Добавлена addRecRow() для динамических строк таблицы рекомендаций
-// Остальное — как в предыдущей версии.
+// js/ui.js — ВЫРАВНИВАНИЕ ОШИБОК И TEXTAREA ДЛЯ КОММЕНТАРИЕВ
 
 import { state, ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -254,7 +249,6 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msResult', 'result', ['Ошибка', 'Рекомендация', 'Ошибки не выявлены']);
     populateMultiSelect('msFbPool', 'feedbackPool', pools);
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
-    // ★ НОВОЕ: мультиселект разметчиков для формы ОС
     populateMultiSelect('msFbRecordMarkers', 'fbRecordMarkers', markers);
 }
 
@@ -286,7 +280,7 @@ export function populateRecDatalists() {
     fill('recValidatorsList', validators);
 }
 
-// ★ НОВОЕ: добавляет одну строку в таблицу рекомендаций
+// ★ ОБНОВЛЕНО: textarea вместо input для комментария
 export function addRecRow() {
     const tbody = document.getElementById('recTableBody');
     if (!tbody) return;
@@ -298,7 +292,7 @@ export function addRecRow() {
         <td><input type="text" class="rec-marker" list="recMarkersList" placeholder="Почта" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
         <td><input type="text" class="rec-item" placeholder="item_id" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
         <td><input type="text" class="rec-interval" placeholder="0:00-1:00" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
-        <td><input type="text" class="rec-comment" placeholder="Текст" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
+        <td><textarea class="rec-comment" placeholder="Текст комментария" rows="3"></textarea></td>
         <td><input type="text" class="rec-validator" list="recValidatorsList" placeholder="Почта" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:6px;"></td>
         <td style="text-align:center; vertical-align:middle;"><button class="icon-btn danger" onclick="this.closest('tr').remove()" title="Удалить"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button></td>
     `;
@@ -587,15 +581,22 @@ export function buildTrendChart() {
     });
 }
 
+// ★ ОБНОВЛЕНО: группировка с учетом _linked и grid-выравнивание
 export function buildTable() {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
 
-    const grouped = {};
+    const groups = new Map();
+    const groupByKey = new Map();
+
+    // 1. Сначала валидации
     for (const r of state.filteredData) {
+        if (r._type !== 'validation') continue;
         const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
-        if (!grouped[key]) {
-            grouped[key] = {
+        let group = groupByKey.get(key);
+        if (!group) {
+            group = {
+                _id: r._id,
                 date: r.date,
                 project: r.project,
                 pool: r.pool,
@@ -611,25 +612,67 @@ export function buildTable() {
                 _linked: r._linked,
                 items: []
             };
+            groupByKey.set(key, group);
+            groups.set(r._id, group);
         }
-        if (r.result === 'Ошибка' || r.result === 'Рекомендация') {
-            grouped[key].items.push({
-                result: r.result,
-                errorType: r.errorType,
-                comment: r.comment,
-                interval: r.interval
-            });
-        } else if (r.result === 'Ошибки не выявлены' && grouped[key].items.length === 0) {
-            grouped[key].items.push({
-                result: r.result,
-                errorType: r.errorType,
-                comment: r.comment,
-                interval: r.interval
-            });
-        }
+        group.items.push({
+            result: r.result,
+            errorType: r.errorType,
+            comment: r.comment,
+            interval: r.interval
+        });
     }
 
-    const groupedArray = Object.values(grouped);
+    // 2. Затем рекомендации
+    for (const r of state.filteredData) {
+        if (r._type !== 'recommendations') continue;
+        let group = null;
+        if (r._linked) {
+            group = groups.get(r._linked);
+        }
+        if (!group) {
+            const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
+            group = groupByKey.get(key);
+        }
+        if (!group) {
+            group = {
+                _id: r._id,
+                date: r.date,
+                project: r.project,
+                pool: r.pool,
+                marker: r.marker,
+                fileName: r.fileName,
+                quality: r.quality,
+                fragments: r.fragments,
+                url: r.url,
+                orgId: r.orgId,
+                assignmentId: r.assignmentId,
+                itemId: r.itemId,
+                _type: r._type,
+                _linked: r._linked,
+                items: []
+            };
+            const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
+            groupByKey.set(key, group);
+            groups.set(r._id, group);
+        }
+        group.items.push({
+            result: r.result,
+            errorType: r.errorType,
+            comment: r.comment,
+            interval: r.interval
+        });
+    }
+
+    const groupedArray = Array.from(groups.values());
+    // Сортировка по дате (новые сверху)
+    groupedArray.sort((a, b) => {
+        if (!a.date && !b.date) return 0;
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return b.date - a.date;
+    });
+
     const totalItems = groupedArray.length;
     const currentPage = state.pagination.mainData;
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -656,21 +699,31 @@ export function buildTable() {
         const fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
         const fileNameTitle = escapeHtml(g.fileName || '');
         
-        const resBadges = g.items.map(item => {
-            const badgeClass = item.result === 'Ошибка' ? 'badge-error' : item.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
-            return `<span class="badge ${badgeClass}" style="margin-bottom: 4px; display: inline-block;">${escapeHtml(item.result || '')}</span>`;
-        }).join('<br>');
-
-        const errTypes = g.items.map(item => escapeHtml(item.errorType || '')).join('<br>');
-        const comments = g.items.map(item => {
-            const c = item.comment ? escapeHtml(item.comment.slice(0, 100)) : '';
-            return c ? `<span title="${escapeHtml(item.comment)}">${c}</span>` : '';
-        }).join('<br>');
-        const intervals = g.items.map(item => escapeHtml(item.interval || '')).join('<br>');
-
         const link = g._type === 'recommendations'
             ? (g._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fde8e8;color:#e55555">нет пары</span>')
             : '—';
+
+        const quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(1) + '%' : '';
+
+        let itemsHtml = '<div class="items-grid">';
+        for (const item of g.items) {
+            const badgeClass = item.result === 'Ошибка' ? 'badge-error' : item.result === 'Рекомендация' ? 'badge-rec' : 'badge-ok';
+            const resBadge = `<span class="badge ${badgeClass}">${escapeHtml(item.result || '')}</span>`;
+            const errType = escapeHtml(item.errorType || '');
+            const comment = item.comment ? escapeHtml(item.comment.slice(0, 100)) : '';
+            const commentTitle = item.comment ? escapeHtml(item.comment) : '';
+            const interval = escapeHtml(item.interval || '');
+
+            itemsHtml += `
+                <div class="item-row">
+                    <div>${resBadge}</div>
+                    <div>${errType}</div>
+                    <div ${commentTitle ? `title="${commentTitle}"` : ''}>${comment}</div>
+                    <div>${interval}</div>
+                </div>
+            `;
+        }
+        itemsHtml += '</div>';
 
         return `<tr>
             <td>${g.date ? formatDate(g.date) : ''}</td>
@@ -678,11 +731,8 @@ export function buildTable() {
             <td>${escapeHtml(g.pool || '')}</td>
             <td>${escapeHtml(g.marker || '')}</td>
             <td title="${fileNameTitle}">${fileName}</td>
-            <td style="vertical-align: top;">${resBadges}</td>
-            <td style="vertical-align: top;">${errTypes}</td>
-            <td style="vertical-align: top;">${comments}</td>
-            <td style="vertical-align: top;">${intervals}</td>
-            <td>${g.quality !== null && !isNaN(g.quality) ? (g.quality * 100).toFixed(1) + '%' : ''}</td>
+            <td colspan="4" style="padding: 0;">${itemsHtml}</td>
+            <td>${quality}</td>
             <td>${valLink}</td>
             <td>${link}</td>
         </tr>`;
