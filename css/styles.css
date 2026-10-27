@@ -210,21 +210,15 @@ input[type="file"] { display: none; }
 .kpi-card:nth-child(8) { background: var(--card-purple); }
 .kpi-card:nth-child(9) { background: var(--card-blue); }
 
-/* ★ ИЗМЕНЕНО: Заливка для заголовков карточек */
 .kpi-card .label { 
-    background: var(--container); 
-    padding: 8px 15px; 
-    border-radius: var(--radius-sm); 
-    text-align: center; 
     font-size: 0.8rem; 
     color: var(--text); 
     font-weight: 700; 
     text-transform: uppercase; 
     letter-spacing: 0.5px;
-    margin-bottom: 15px; 
+    margin-bottom: 10px; 
     line-height: 1.3; 
     font-family: 'Source Sans 3', sans-serif;
-    display: block;
 }
 .kpi-card .value { font-size: 2.8rem; color: var(--text); letter-spacing: -0.5px; }
 .kpi-card .value.val-brown { color: #1f1f1f !important; }
