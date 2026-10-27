@@ -1,4 +1,4 @@
-// js/report-runtime.js — ВЫРАВНИВАНИЕ ОШИБОК В ТАБЛИЦЕ
+// js/report-runtime.js — ЗАМЕНА ТЕКСТА НА "Ошибки не выявлены" и поддержка новой структуры таблицы
 
 (function () {
     'use strict';
@@ -229,12 +229,7 @@
         });
         
         var datasets = [
-            {
-                label: 'Ср. качество, %',
-                data: values,
-                backgroundColor: '#d4ebd9',
-                borderRadius: 8, order: 2
-            }
+            { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2 }
         ];
         if (targetQualityGlobal != null) {
             datasets.push({ label: 'Целевое качество', data: Array(labels.length).fill(targetQualityGlobal), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 });
@@ -297,12 +292,7 @@
         });
         
         var datasets = [
-            {
-                label: 'Ср. качество, %',
-                data: values,
-                backgroundColor: '#d3e9fb',
-                borderRadius: 8, order: 2
-            }
+            { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2 }
         ];
         if (targetQualityGlobal != null) {
             datasets.push({ label: 'Целевое качество', data: Array(labels.length).fill(targetQualityGlobal), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 });
@@ -481,7 +471,6 @@
         container.innerHTML = html;
     }
 
-    // ★ ОБНОВЛЕНО: группировка и grid-выравнивание
     function buildTable() {
         var tbody = document.getElementById('tableBody');
         if (!tbody) return;
@@ -489,90 +478,45 @@
         var groups = new Map();
         var groupByKey = new Map();
 
-        // 1. Валидации
         for (var i = 0; i < filteredData.length; i++) {
             var r = filteredData[i];
             if (r._type !== 'validation') continue;
             var key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             var group = groupByKey.get(key);
             if (!group) {
-                group = {
-                    _id: r._id,
-                    date: r.date,
-                    project: r.project,
-                    pool: r.pool,
-                    marker: r.marker,
-                    fileName: r.fileName,
-                    quality: r.quality,
-                    fragments: r.fragments,
-                    url: r.url,
-                    orgId: r.orgId,
-                    assignmentId: r.assignmentId,
-                    itemId: r.itemId,
-                    _type: r._type,
-                    _linked: r._linked,
-                    items: []
-                };
+                group = { _id: r._id, date: r.date, project: r.project, pool: r.pool, marker: r.marker, fileName: r.fileName, quality: r.quality, fragments: r.fragments, url: r.url, orgId: r.orgId, assignmentId: r.assignmentId, itemId: r.itemId, _type: r._type, _linked: r._linked, items: [] };
                 groupByKey.set(key, group);
                 groups.set(r._id, group);
             }
-            group.items.push({
-                result: r.result,
-                errorType: r.errorType,
-                comment: r.comment,
-                interval: r.interval
-            });
+            group.items.push({ result: r.result, errorType: r.errorType, comment: r.comment, interval: r.interval });
         }
 
-        // 2. Рекомендации
         for (var j = 0; j < filteredData.length; j++) {
             var rr = filteredData[j];
             if (rr._type !== 'recommendations') continue;
             var grp = null;
-            if (rr._linked) {
-                grp = groups.get(rr._linked);
-            }
+            if (rr._linked) grp = groups.get(rr._linked);
             if (!grp) {
                 var key2 = (rr.marker || '') + '|' + (rr.project || '') + '|' + (rr.pool || '') + '|' + (rr.fileName || '');
                 grp = groupByKey.get(key2);
             }
             if (!grp) {
-                grp = {
-                    _id: rr._id,
-                    date: rr.date,
-                    project: rr.project,
-                    pool: rr.pool,
-                    marker: rr.marker,
-                    fileName: rr.fileName,
-                    quality: rr.quality,
-                    fragments: rr.fragments,
-                    url: rr.url,
-                    orgId: rr.orgId,
-                    assignmentId: rr.assignmentId,
-                    itemId: rr.itemId,
-                    _type: rr._type,
-                    _linked: rr._linked,
-                    items: []
-                };
+                grp = { _id: rr._id, date: rr.date, project: rr.project, pool: rr.pool, marker: rr.marker, fileName: rr.fileName, quality: rr.quality, fragments: rr.fragments, url: rr.url, orgId: rr.orgId, assignmentId: rr.assignmentId, itemId: rr.itemId, _type: rr._type, _linked: rr._linked, items: [] };
                 var key3 = (rr.marker || '') + '|' + (rr.project || '') + '|' + (rr.pool || '') + '|' + (rr.fileName || '');
                 groupByKey.set(key3, grp);
                 groups.set(rr._id, grp);
             }
-            grp.items.push({
-                result: rr.result,
-                errorType: rr.errorType,
-                comment: rr.comment,
-                interval: rr.interval
-            });
+            grp.items.push({ result: rr.result, errorType: rr.errorType, comment: rr.comment, interval: rr.interval });
         }
 
         var groupedArray = Array.from(groups.values());
-        // Сортировка по дате
         groupedArray.sort(function(a, b) {
-            if (!a.date && !b.date) return 0;
-            if (!a.date) return 1;
-            if (!b.date) return -1;
-            return b.date - a.date;
+            var dA = parseDate(a.date);
+            var dB = parseDate(b.date);
+            if (!dA && !dB) return 0;
+            if (!dA) return 1;
+            if (!dB) return -1;
+            return dB - dA;
         });
 
         var totalItems = groupedArray.length;
@@ -583,7 +527,6 @@
         var html = '';
         for (var k = 0; k < rows.length; k++) {
             var g = rows[k];
-            
             var valLink = getValidationLink(g);
             var fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
             var fileNameTitle = escapeHtml(g.fileName || '');
@@ -861,7 +804,7 @@
 
         populateMultiSelect('msPool', 'pool', pools);
         populateMultiSelect('msMarker', 'marker', markers);
-        populateMultiSelect('msResult', 'result', ['Ошибка', 'Рекомендация', 'Ошибки не выявлены']);
+        populateMultiSelect('msResult', 'result', ['Ошибка', 'Рекомендация', 'Ошибки не выявлены']); // ★ ИЗМЕНЕНО
 
         document.getElementById('filterDateFrom').addEventListener('change', triggerFilterUpdate);
         document.getElementById('filterDateTo').addEventListener('change', triggerFilterUpdate);
