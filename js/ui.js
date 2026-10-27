@@ -1,6 +1,6 @@
-// js/ui.js — ПОЛНЫЙ КОД (Исправлена ошибка с обрезанным файлом)
+// js/ui.js — ОБНОВЛЕННЫЙ (9 KPI на главной, 8 строк в таблице, удален столбец Связь)
 
-import { state, ITEMS_PER_PAGE } from './state.js';
+import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
 import { formatDate, updateLabel, escapeHtml, destroyChart, getVal, getValidationUrl } from './utils.js';
 import { renderFeedbackTable, renderFeedbackTableHome, applyFeedbackFilters } from './feedback.js';
@@ -326,14 +326,16 @@ function renderPaginationControls(controlsId, infoId, totalItems, tableKey) {
     const info = document.getElementById(infoId);
     if (!container || !info) return;
 
-    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+    // ★ ИЗМЕНЕНО: учитываем лимит для главной таблицы
+    const limit = tableKey === 'mainData' ? MAIN_ITEMS_PER_PAGE : ITEMS_PER_PAGE;
+    const totalPages = Math.ceil(totalItems / limit) || 1;
     let currentPage = state.pagination[tableKey] || 1;
     if (currentPage > totalPages) currentPage = totalPages;
     if (currentPage < 1) currentPage = 1;
     state.pagination[tableKey] = currentPage;
 
-    const start = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
-    const end = Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+    const start = totalItems === 0 ? 0 : (currentPage - 1) * limit + 1;
+    const end = Math.min(currentPage * limit, totalItems);
     info.textContent = totalItems === 0 ? 'Показано 0 из 0' : `Показано ${start}-${end} из ${totalItems}`;
 
     let html = '';
@@ -407,39 +409,83 @@ export function updateKPI() {
     
     const target = state.superset.norms.globalAvg;
 
-    const elTotalFragments = document.getElementById('kpiTotalFragments');
-    const elTotalMarkers = document.getElementById('kpiTotalMarkers');
-    const elErrorsPercent = document.getElementById('kpiErrorsPercent');
-    const elQuality = document.getElementById('kpiQuality');
-    const elTargetQuality = document.getElementById('kpiTargetQuality');
-
-    if (elTotalFragments) elTotalFragments.textContent = totalFragments;
-    if (elTotalMarkers) elTotalMarkers.textContent = uniqueMarkers.size;
-    if (elErrorsPercent) elErrorsPercent.textContent = errorPercent.toFixed(2) + '%';
-    if (elQuality) elQuality.textContent = avgQ !== null ? avgQPct.toFixed(1) + '%' : '—';
-    if (elTargetQuality) elTargetQuality.textContent = target != null ? target.toFixed(1) + '%' : '—';
-
-    [elTotalFragments, elTotalMarkers, elErrorsPercent, elQuality, elTargetQuality].forEach(el => {
-        if (el) el.classList.remove('val-brown', 'val-red', 'val-green');
-    });
-
-    if (elTotalFragments) elTotalFragments.classList.add('val-brown');
-    if (elTotalMarkers) elTotalMarkers.classList.add('val-brown');
-    if (elTargetQuality) elTargetQuality.classList.add('val-brown');
-
     const isRed = (target != null) && (errorPercent > 5) && (avgQPct < target);
     const isGreen = (target != null) && (errorPercent <= 5) && (avgQPct >= target);
+    
+    let qColorClass = 'val-brown';
+    let errColorClass = 'val-brown';
 
     if (isRed) {
-        if (elErrorsPercent) elErrorsPercent.classList.add('val-red');
-        if (elQuality) elQuality.classList.add('val-red');
+        qColorClass = 'val-red';
+        errColorClass = 'val-red';
     } else if (isGreen) {
-        if (elErrorsPercent) elErrorsPercent.classList.add('val-green');
-        if (elQuality) elQuality.classList.add('val-green');
-    } else {
-        if (elErrorsPercent) elErrorsPercent.classList.add('val-brown');
-        if (elQuality) elQuality.classList.add('val-brown');
+        qColorClass = 'val-green';
+        errColorClass = 'val-green';
     }
+
+    const k = state.superset.kpis || {};
+    const { dateFrom, dateTo } = state.superset.filters;
+    const norms = getNormsForPeriod(dateFrom, dateTo);
+
+    let normValuesHtml = '';
+    if (norms.length === 1) {
+        normValuesHtml = `<div class="value val-brown">${norms[0].value.toFixed(0)}</div>`;
+    } else {
+        normValuesHtml = '<div class="norm-values-multi">';
+        for (const n of norms) {
+            normValuesHtml += `<div class="norm-value-item">
+                <div class="value val-brown">${n.value.toFixed(0)}</div>
+                ${n.label ? `<div class="norm-label">${escapeHtml(n.label)}</div>` : ''}
+            </div>`;
+        }
+        normValuesHtml += '</div>';
+    }
+
+    const container = document.getElementById('mainKpisContainer');
+    if (!container) return;
+
+    // ★ НОВОЕ: Рендерим 9 карточек в нужном порядке
+    container.innerHTML = `
+        <div class="kpi-card">
+            <div class="label">Целевое качество</div>
+            <div class="value val-brown">${target != null ? target.toFixed(1) + '%' : '—'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Качество</div>
+            <div class="value ${qColorClass}">${avgQ !== null ? avgQPct.toFixed(1) + '%' : '—'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Ошибок</div>
+            <div class="value ${errColorClass}">${errorPercent.toFixed(2) + '%'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Разметчиков</div>
+            <div class="value val-brown">${uniqueMarkers.size}</div>
+        </div>
+        <div class="kpi-card">
+            <button class="norm-edit-btn" onclick="editSupersetNorm()" title="Редактировать">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+            </button>
+            <div class="label">Норма у.е. в час</div>
+            ${normValuesHtml}
+        </div>
+        <div class="kpi-card">
+            <div class="label">Факт у.е. в час</div>
+            <div class="value val-brown">${k.ballsPerHour != null ? k.ballsPerHour.toFixed(1) : '—'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Цена</div>
+            <div class="value val-brown">${k.avgPrice != null ? k.avgPrice.toFixed(2) : '—'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Среднее время разметки</div>
+            <div class="value val-brown">${k.avgTime != null ? k.avgTime.toFixed(1) + ' мин' : '—'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Коэффициент</div>
+            <div class="value val-brown">${k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—'}</div>
+        </div>
+    `;
 }
 
 function targetLinesForLabels(labels) {
@@ -648,8 +694,9 @@ export function buildTable() {
 
     const totalItems = groupedArray.length;
     const currentPage = state.pagination.mainData;
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+    // ★ ИЗМЕНЕНО: используем MAIN_ITEMS_PER_PAGE (8)
+    const startIndex = (currentPage - 1) * MAIN_ITEMS_PER_PAGE;
+    const endIndex = Math.min(startIndex + MAIN_ITEMS_PER_PAGE, totalItems);
     const rows = groupedArray.slice(startIndex, endIndex);
 
     tbody.innerHTML = rows.map(g => {
@@ -668,10 +715,6 @@ export function buildTable() {
         const fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
         const fileNameTitle = escapeHtml(g.fileName || '');
         
-        const link = g._type === 'recommendations'
-            ? (g._linked ? '<span class="badge badge-linked">связано</span>' : '<span class="badge" style="background:#fde8e8;color:#e55555">нет пары</span>')
-            : '—';
-
         const quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(1) + '%' : '';
 
         let itemsHtml = '<div class="items-grid">';
@@ -694,6 +737,7 @@ export function buildTable() {
         }
         itemsHtml += '</div>';
 
+        // ★ ИЗМЕНЕНО: убран <td>Связь</td>
         return `<tr>
             <td>${g.date ? formatDate(g.date) : ''}</td>
             <td>${escapeHtml(g.project || '')}</td>
@@ -703,7 +747,6 @@ export function buildTable() {
             <td colspan="4" style="padding: 0;">${itemsHtml}</td>
             <td>${quality}</td>
             <td>${valLink}</td>
-            <td>${link}</td>
         </tr>`;
     }).join('');
 
@@ -891,7 +934,7 @@ export function renderErrorsTable() {
 
 export function renderSupersetPage() {
     renderSupersetFilters();
-    renderSupersetKPIs();
+    // renderSupersetKPIs(); // ★ УДАЛЕНО
     renderSupersetTable1();
     renderSupersetTable2();
     renderSupersetTable3();
@@ -1000,56 +1043,12 @@ export function editSupersetNorm() {
     }
     if (addNormEntry(today, num)) {
         applySupersetFilters();
-        renderSupersetPage();
+        triggerFilterUpdate(); // ★ ДОБАВЛЕНО: пересчитываем главную
+        if (state.currentMenu === 'superset') renderSupersetPage();
     }
 }
 
-export function renderSupersetKPIs() {
-    const container = document.getElementById('supersetKpis');
-    if (!container) return;
-    const k = state.superset.kpis || {};
-
-    const { dateFrom, dateTo } = state.superset.filters;
-    const norms = getNormsForPeriod(dateFrom, dateTo);
-
-    let normValuesHtml = '';
-    if (norms.length === 1) {
-        normValuesHtml = `<div class="value">${norms[0].value.toFixed(0)}</div>`;
-    } else {
-        normValuesHtml = '<div class="norm-values-multi">';
-        for (const n of norms) {
-            normValuesHtml += `<div class="norm-value-item">
-                <div class="value">${n.value.toFixed(0)}</div>
-                ${n.label ? `<div class="norm-label">${escapeHtml(n.label)}</div>` : ''}
-            </div>`;
-        }
-        normValuesHtml += '</div>';
-    }
-
-    const normCard = `<div class="kpi-card" style="background: var(--card-pink);">
-        <button class="norm-edit-btn" onclick="editSupersetNorm()" title="Редактировать">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-        </button>
-        <div class="label">Норма у.е. в час</div>
-        ${normValuesHtml}
-    </div>`;
-
-    const otherCards = [
-        { label: 'Цена', value: k.avgPrice != null ? k.avgPrice.toFixed(2) : '—', bg: 'var(--card-peach)' },
-        { label: 'Качество факт', value: k.qualityFact != null ? (k.qualityFact * 100).toFixed(1) + '%' : '—', bg: 'var(--card-purple)' },
-        { label: 'Качество план', value: k.qualityPlan != null ? k.qualityPlan.toFixed(1) + '%' : '—', bg: 'var(--card-blue)' },
-        { label: 'Факт у.е. в час', value: k.ballsPerHour != null ? k.ballsPerHour.toFixed(1) : '—', bg: 'var(--card-mint)' },
-        { label: 'Коэффициент', value: k.prodPerHour != null ? k.prodPerHour.toFixed(2) : '—', bg: '#f5f5f5' },
-        { label: 'Среднее время разметки', value: k.avgTime != null ? k.avgTime.toFixed(1) + ' мин' : '—', bg: '#f5f5f5' }
-    ];
-
-    container.innerHTML = normCard + otherCards.map(c => `
-        <div class="kpi-card" style="background: ${c.bg};">
-            <div class="label">${escapeHtml(c.label)}</div>
-            <div class="value">${escapeHtml(c.value)}</div>
-        </div>
-    `).join('');
-}
+// ★ УДАЛЕНА ФУНКЦИЯ renderSupersetKPIs
 
 function renderTableFilters(tableId, configs, fullRows) {
     return configs.map(cfg => {
