@@ -1,20 +1,44 @@
+// js/feedback.js — ИСПРАВЛЕНИЕ БАГОВ
+// Изменено:
+//   1. deleteFeedback: сброс editingFeedbackIndex
+//   2. generateFeedbackHtml: вес 0.5 для "Некритичной ошибки", escapeHtml(videoUrl)
+//   3. applyFeedbackFilters: oninput через data-* (не ломается на апострофах)
+//   4. handleAddFeedback: avgQuality дедуплицируется по marker|project|pool|fileName
+//   5. statusColor "Запланирована" → нейтральный синий
+//   6. renderFeedbackRows: кэш pool→project
+//   7. initFeedbackForm: идемпотентность
+
 import { state, saveFeedbackToStorage, ITEMS_PER_PAGE } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel, getVal } from './utils.js';
 import { matchesTab } from './data.js';
 
 // ===== Определение проекта по пулам записи =====
-function deriveProjectFromPools(poolsStr) {
+function deriveProjectFromPools(poolsStr, cache) {
     if (!poolsStr) return null;
     const pools = String(poolsStr).split(',').map(p => p.trim()).filter(Boolean);
     if (pools.length === 0) return null;
     for (const pool of pools) {
+        if (cache && cache[pool]) return cache[pool];
         for (const r of state.processedData) {
             if (r.pool === pool && r.project) {
-                return r.project.replace(/_validate$/, '').trim();
+                const proj = r.project.replace(/_validate$/, '').trim();
+                if (cache) cache[pool] = proj;
+                return proj;
             }
         }
     }
     return null;
+}
+
+// Строим кэш pool → project для одного рендера
+function buildPoolProjectCache() {
+    const cache = {};
+    for (const r of state.processedData) {
+        if (r.pool && r.project && !cache[r.pool]) {
+            cache[r.pool] = r.project.replace(/_validate$/, '').trim();
+        }
+    }
+    return cache;
 }
 
 // ===== Работа с группами =====
@@ -39,7 +63,7 @@ function getMarkerGroup(markerEmail) {
     return '';
 }
 
-// ===== Рендер строк таблицы обратной связи с пагинацией =====
+// ===== Рендер строк таблицы обратной связи =====
 function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeActions) {
     const tbody = document.getElementById(tbodyId);
     const controlsContainer = document.getElementById(controlsId);
@@ -54,14 +78,15 @@ function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeAction
         }
     }
 
+    const poolProjectCache = buildPoolProjectCache();
+
     const filteredFb = state.feedbackData.filter(f => {
         if (state.currentTab === 'all') return true;
-        const proj = f.project || deriveProjectFromPools(f.pools);
+        const proj = f.project || deriveProjectFromPools(f.pools, poolProjectCache);
         if (proj) return proj === state.currentTab;
         return validMarkers.has(f.marker);
     }).sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    // Логика пагинации
     const totalItems = filteredFb.length;
     let currentPage = state.pagination[tableKey] || 1;
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
@@ -74,16 +99,16 @@ function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeAction
     const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
     const rows = filteredFb.slice(startIndex, endIndex);
 
-    // Рендер строк
     tbody.innerHTML = rows.map((f) => {
+        // ★ ИЗМЕНЕНО: "Запланирована" — нейтральный синий, не путается с "Отменена"
         const statusColor = f.status === 'Проведена' ? '#85c4ae'
             : f.status === 'Отменена' ? '#e55555'
             : f.status === 'Перенесена' ? '#f2c94c'
-            : '#f07171';
+            : '#7a95b8';
         const avgQText = f.avgQuality !== undefined && f.avgQuality !== null
             ? (f.avgQuality * 100).toFixed(1) + '%'
             : '—';
-        const displayProject = f.project || deriveProjectFromPools(f.pools) || '—';
+        const displayProject = f.project || deriveProjectFromPools(f.pools, poolProjectCache) || '—';
 
         let displayDate = f.date || '';
         if (displayDate.includes('-')) {
@@ -121,7 +146,6 @@ function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeAction
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color: var(--muted); padding: 20px;">Нет данных.</td></tr>';
     }
 
-    // Рендер пагинации
     if (controlsContainer && infoContainer) {
         infoContainer.textContent = totalItems === 0 ? 'Показано 0 из 0' : `Показано ${startIndex + 1}-${endIndex} из ${totalItems}`;
 
@@ -237,7 +261,8 @@ export function applyFeedbackFilters() {
                 const linkKey = `${marker}|${file}`;
                 const savedUrl = state.feedbackGeneration.videoLinks[linkKey] || '';
                 
-                // Красивое поле ввода с иконкой
+                // ★ ИЗМЕНЕНО: используем data-* атрибуты вместо inline-аргументов.
+                // Это защищает от апострофов и других «опасных» символов в маркере/файле.
                 html += `
                 <div class="feedback-link-input-group">
                     <label>${escapeHtml(file)} (Ссылка на видео)</label>
@@ -248,7 +273,9 @@ export function applyFeedbackFilters() {
                         </svg>
                         <input type="text" placeholder="Вставьте прямую ссылку на видео..." 
                                value="${escapeHtml(savedUrl)}" 
-                               oninput="handleVideoLinkInput('${escapeHtml(marker)}', '${escapeHtml(file)}', this.value)">
+                               data-marker="${escapeHtml(marker)}"
+                               data-file="${escapeHtml(file)}"
+                               oninput="handleVideoLinkInput(this.dataset.marker, this.dataset.file, this.value)">
                     </div>
                 </div>`;
             }
@@ -336,8 +363,9 @@ export function generateFeedbackHtml() {
                     const videoUrl = state.feedbackGeneration.videoLinks[`${marker}|${file}`] || '';
                     const isValidUrl = videoUrl.trim().startsWith('http');
 
+                    // ★ ИЗМЕНЕНО: escapeHtml для URL (защита от кавычек и прочих символов)
                     const videoContent = isValidUrl 
-                        ? `<a href="${videoUrl.trim()}" download target="_blank" class="video-button">
+                        ? `<a href="${escapeHtml(videoUrl.trim())}" download target="_blank" class="video-button">
                                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                                Скачать видео
                            </a>`
@@ -357,9 +385,12 @@ export function generateFeedbackHtml() {
 
                         for (const type in errorsByType) {
                             const errs = errorsByType[type];
-                            // Считаем процент от ОБЩЕГО числа фрагментов у разметчика в этом пуле
+                            // ★ ИЗМЕНЕНО: учитываем вес 0.5 для «Некритичной ошибки»
+                            const weighted = errs.reduce((a, e) => {
+                                return a + (e.type === 'Некритичная ошибка' ? 0.5 : 1);
+                            }, 0);
                             const percent = mData.totalFragments > 0 
-                                ? ((errs.length / mData.totalFragments) * 100).toFixed(2) 
+                                ? ((weighted / mData.totalFragments) * 100).toFixed(2) 
                                 : '0.00';
                             
                             let listHtml = '';
@@ -419,7 +450,6 @@ export function generateFeedbackHtml() {
         }
     }
 
-    // Шаблон документа с исправленной версткой
     const htmlContent = `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -439,35 +469,19 @@ export function generateFeedbackHtml() {
         }
         .container { width: 100%; max-width: 1200px; margin: 0; }
         
-        .main-title { 
-            font-size: 2rem; font-weight: 700; margin-bottom: 10px; color: var(--text); 
-        }
-        .pool-title { 
-            font-size: 1.5rem; font-weight: 600; margin-top: 40px; margin-bottom: 20px; 
-            padding-bottom: 10px; border-bottom: 2px solid var(--text); color: var(--text); 
-        }
+        .main-title { font-size: 2rem; font-weight: 700; margin-bottom: 10px; color: var(--text); }
+        .pool-title { font-size: 1.5rem; font-weight: 600; margin-top: 40px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid var(--text); color: var(--text); }
         
         .markers-container { display: flex; flex-direction: column; gap: 20px; width: 100%; }
         
-        details.marker-card { 
-            background: var(--card); border-radius: 16px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03); overflow: hidden; 
-            border: 1px solid var(--border); width: 100%;
-        }
+        details.marker-card { background: var(--card); border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); overflow: hidden; border: 1px solid var(--border); width: 100%; }
         details[open].marker-card { border-color: var(--text); }
         
-        summary.marker-summary { 
-            display: flex; align-items: center; padding: 20px 25px; cursor: pointer; 
-            list-style: none; user-select: none; transition: background 0.2s; 
-        }
+        summary.marker-summary { display: flex; align-items: center; padding: 20px 25px; cursor: pointer; list-style: none; user-select: none; transition: background 0.2s; }
         summary.marker-summary::-webkit-details-marker { display: none; }
         summary.marker-summary:hover { background: rgba(0,0,0,0.02); }
         
-        .avatar { 
-            width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.6); 
-            color: var(--muted); display: flex; align-items: center; justify-content: center; 
-            flex-shrink: 0; margin-right: 15px; 
-        }
+        .avatar { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.6); color: var(--muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 15px; }
         .avatar svg { width: 24px; height: 24px; }
         
         .marker-info { flex: 1; display: flex; flex-direction: column; }
@@ -477,52 +491,20 @@ export function generateFeedbackHtml() {
         .toggle-icon { color: var(--muted); font-size: 0.8rem; transition: transform 0.3s; margin-left: 10px; }
         details[open] .toggle-icon { transform: rotate(180deg); }
         
-        .marker-details { 
-            padding: 25px; border-top: 1px solid var(--border); 
-            display: flex; flex-direction: column; gap: 30px; 
-        }
+        .marker-details { padding: 25px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 30px; }
         
-        .file-block {
-            display: flex; flex-direction: column; gap: 15px;
-        }
-        .file-name {
-            font-size: 1.1rem; font-weight: 600; color: var(--text);
-            word-break: break-all; margin-bottom: 5px;
-        }
+        .file-block { display: flex; flex-direction: column; gap: 15px; }
+        .file-name { font-size: 1.1rem; font-weight: 600; color: var(--text); word-break: break-all; margin-bottom: 5px; }
         
-        .video-wrapper { 
-            width: 100%; max-width: 400px;
-        }
+        .video-wrapper { width: 100%; max-width: 400px; }
         
-        .video-button {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            background: var(--accent);
-            color: #fff;
-            text-decoration: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 1rem;
-            transition: opacity 0.2s;
-        }
+        .video-button { display: inline-flex; align-items: center; gap: 10px; background: var(--accent); color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 1rem; transition: opacity 0.2s; }
         .video-button:hover { opacity: 0.8; }
         .video-button svg { width: 20px; height: 20px; }
 
-        .video-placeholder { 
-            padding: 15px 20px; 
-            color: var(--muted); 
-            background: rgba(0,0,0,0.03);
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-style: italic;
-        }
+        .video-placeholder { padding: 15px 20px; color: var(--muted); background: rgba(0,0,0,0.03); border-radius: 8px; font-size: 0.9rem; font-style: italic; }
         
-        .errors-section { 
-            background: rgba(255,255,255,0.5); border-radius: 12px; padding: 20px; 
-            border: 1px solid var(--border); max-width: 800px;
-        }
+        .errors-section { background: rgba(255,255,255,0.5); border-radius: 12px; padding: 20px; border: 1px solid var(--border); max-width: 800px; }
         .errors-section h4 { font-size: 1.1rem; margin-bottom: 15px; color: var(--text); }
         
         .error-group { margin-bottom: 15px; }
@@ -569,8 +551,10 @@ export function editFeedback(idx) {
     if (f.pools) {
         for (const p of f.pools.split(', ')) {
             state.filterState.fbFormPools.add(p);
-            const cb = document.querySelector(`#msFbFormPools_options input[value="${CSS.escape ? CSS.escape(p) : p}"]`);
-            if (cb) cb.checked = true;
+            const cbs = document.querySelectorAll('#msFbFormPools_options input');
+            for (const cb of cbs) {
+                if (cb.value === p) { cb.checked = true; break; }
+            }
         }
     }
     updateLabel('msFbFormPools', 'fbFormPools');
@@ -581,6 +565,17 @@ export function editFeedback(idx) {
 
 export function deleteFeedback(idx) {
     if (!confirm('Удалить запись?')) return;
+    
+    // ★ ИЗМЕНЕНО: корректная синхронизация editingFeedbackIndex
+    if (state.editingFeedbackIndex !== null) {
+        if (state.editingFeedbackIndex === idx) {
+            state.editingFeedbackIndex = null;
+            document.getElementById('btnAddFeedback').textContent = 'Добавить';
+        } else if (state.editingFeedbackIndex > idx) {
+            state.editingFeedbackIndex--;
+        }
+    }
+    
     state.feedbackData.splice(idx, 1);
     saveFeedbackToStorage();
     renderFeedbackTable();
@@ -597,7 +592,8 @@ function handleAddFeedback() {
     if (!marker || !dateStr) { alert('Выберите разметчика и дату'); return; }
     if (!pools) { alert('Выберите хотя бы один пул с ошибками'); return; }
 
-    const project = deriveProjectFromPools(pools);
+    const poolProjectCache = buildPoolProjectCache();
+    const project = deriveProjectFromPools(pools, poolProjectCache);
 
     const currentDate = new Date(dateStr);
     const pastFeedbacks = state.feedbackData
@@ -612,16 +608,24 @@ function handleAddFeedback() {
 
     const relevantData = state.processedData.filter(r => {
         if (r.marker !== marker) return false;
-        if (r.quality === null || isNaN(r.quality) || r.quality <= 0) return false;
+        if (r.quality == null || !isFinite(r.quality)) return false;
         const rDate = new Date(r.date);
         if (startDate && rDate < startDate) return false;
         if (rDate > currentDate) return false;
         return true;
     });
 
+    // ★ ИЗМЕНЕНО: дедупликация по marker|project|pool|fileName (как в KPI)
+    const uniqueFiles = new Map();
+    for (const r of relevantData) {
+        const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
+        if (!uniqueFiles.has(key)) uniqueFiles.set(key, r.quality);
+    }
+    
     let avgQuality = null;
-    if (relevantData.length > 0) {
-        avgQuality = relevantData.reduce((a, b) => a + b.quality, 0) / relevantData.length;
+    if (uniqueFiles.size > 0) {
+        const vals = Array.from(uniqueFiles.values());
+        avgQuality = vals.reduce((a, b) => a + b, 0) / vals.length;
     }
 
     const newRecord = { marker, date: dateStr, status, typeVKS, conductor, pools, avgQuality, project };
@@ -646,7 +650,11 @@ function handleAddFeedback() {
 }
 
 // ===== Инициализация =====
+// ★ ИЗМЕНЕНО: идемпотентность — не навешиваем обработчики повторно
 export function initFeedbackForm() {
+    if (state._fbFormInitialized) return;
+    state._fbFormInitialized = true;
+
     document.getElementById('btnAddFeedback').addEventListener('click', handleAddFeedback);
     
     document.getElementById('btnApplyGroup').addEventListener('click', () => {
@@ -657,6 +665,6 @@ export function initFeedbackForm() {
     document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedbackHtml);
 }
 
-// Экспортируем функции в window для вызова из пагинации (ui.js)
+// Экспортируем функции в window для пагинации
 window.renderFeedbackTableHome = renderFeedbackTableHome;
 window.renderFeedbackTable = renderFeedbackTable;
