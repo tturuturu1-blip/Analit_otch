@@ -1,8 +1,5 @@
-// js/ui.js — ИТЕРАЦИЯ 1 + ИТЕРАЦИЯ 2
-// Изменено:
-//   - Все ключи дедупликации содержат project и pool (из Итерации 1)
-//   - Фильтр quality: `!= null && isFinite` (из Итерации 1)
-//   - ДОБАВЛЕНО: функция populateRecDatalists() для формы рекомендаций (Итерация 2)
+// js/ui.js — ЧИСТКА КОДА
+// Удалено: toggleRow (не используется)
 
 import { state, ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -13,7 +10,6 @@ import {
     addNormEntry, getTable1Config, getTable2Config, getTable3Config, getTable4Config
 } from './superset.js';
 
-// Палитра для графиков (в тон макету)
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
 // ===== Навигация =====
@@ -255,7 +251,6 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
 }
 
-// ★ НОВОЕ (Итерация 2): Заполнение datalists для формы рекомендаций
 export function populateRecDatalists() {
     const projects = new Set();
     const pools = new Set();
@@ -329,7 +324,6 @@ function renderPaginationControls(controlsId, infoId, totalItems, tableKey) {
     container.innerHTML = html;
 }
 
-// ===== ОБНОВЛЕНИЕ ДАННЫХ И KPI =====
 export function triggerFilterUpdate() {
     if (state.currentMenu !== 'main') return;
     applyFilters();
@@ -349,7 +343,6 @@ export function updateKPI() {
     let totalFragments = 0;
     for (const r of state.filteredData) {
         if (r._type !== 'validation') continue;
-        // ★ ИЗМЕНЕНО (Итерация 1): добавлены project и pool
         const fileKey = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '') + '|' + r.fragments;
         if (!uniqueFiles.has(fileKey)) {
             uniqueFiles.add(fileKey);
@@ -370,7 +363,6 @@ export function updateKPI() {
             weightedErrorsCount += weight;
         }
         
-        // ★ ИЗМЕНЕНО (Итерация 1): quality != null + isFinite, ключ с project/pool
         if (r.quality != null && isFinite(r.quality)) {
             const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
@@ -569,14 +561,12 @@ export function buildTrendChart() {
     });
 }
 
-// ===== ГЛАВНАЯ ТАБЛИЦА С ПАГИНАЦИЕЙ И ГРУППИРОВКОЙ =====
 export function buildTable() {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
 
     const grouped = {};
     for (const r of state.filteredData) {
-        // ★ ИЗМЕНЕНО (Итерация 1): добавлены project и pool
         const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
         if (!grouped[key]) {
             grouped[key] = {
@@ -861,16 +851,6 @@ export function renderErrorsTable() {
     }
 
     container.innerHTML = html;
-}
-
-export function toggleRow(id, rowElement, event) {
-    if (event) event.stopPropagation();
-    const el = document.getElementById(id);
-    if (!el) return;
-    const icon = rowElement.querySelector('.toggle-icon');
-    const isHidden = el.style.display === 'none' || el.style.display === '' || window.getComputedStyle(el).display === 'none';
-    if (isHidden) { el.style.display = 'table-row'; if (icon) icon.classList.add('open'); }
-    else { el.style.display = 'none'; if (icon) icon.classList.remove('open'); }
 }
 
 // ============================================================
