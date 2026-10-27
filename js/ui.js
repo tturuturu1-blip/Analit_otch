@@ -1,4 +1,4 @@
-// js/ui.js — ОБНОВЛЕННЫЙ (9 KPI на главной, 8 строк в таблице, удален столбец Связь)
+// js/ui.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД (9 KPI, 8 строк, навигация графиков, подписи)
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -10,6 +10,56 @@ import {
 } from './superset.js';
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
+
+// --- Кастомный плагин для подписей значений на графиках (чтобы не подключать внешние библиотеки) ---
+const dataLabelsPlugin = {
+    id: 'dataLabels',
+    afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        ctx.save();
+        chart.data.datasets.forEach((dataset, i) => {
+            const meta = chart.getDatasetMeta(i);
+            if (!meta.hidden && dataset.showLabels !== false && meta.type !== 'line') {
+                meta.data.forEach((element, index) => {
+                    const val = dataset.data[index];
+                    if (val != null && val !== 0 && typeof val === 'number') {
+                        ctx.fillStyle = '#1f1f1f';
+                        ctx.font = 'bold 12px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        
+                        let displayVal = Math.round(val * 10) / 10;
+                        if (chart.options.scales && chart.options.scales.y && chart.options.scales.y.ticks.callback && chart.options.scales.y.ticks.callback(1).includes('%')) {
+                            displayVal += '%';
+                        }
+                        
+                        ctx.fillText(displayVal, element.x, element.y - 5);
+                    }
+                });
+            }
+        });
+        ctx.restore();
+    }
+};
+Chart.register(dataLabelsPlugin);
+
+// --- Состояние для переключения проектов в круговых диаграммах ---
+let errChartIndex = 0;
+let errChartProjects = [];
+let markerChartIndex = 0;
+let markerChartProjects = [];
+
+export function changeChartProject(chartId, dir) {
+    if (chartId === 'errors') {
+        if (errChartProjects.length <= 1) return;
+        errChartIndex = (errChartIndex + dir + errChartProjects.length) % errChartProjects.length;
+        buildErrorChart();
+    } else if (chartId === 'errorsByMarker') {
+        if (markerChartProjects.length <= 1) return;
+        markerChartIndex = (markerChartIndex + dir + markerChartProjects.length) % markerChartProjects.length;
+        buildErrorsByMarkerChart();
+    }
+}
 
 export function switchMenu(menuId, btn) {
     state.currentMenu = menuId;
@@ -47,6 +97,9 @@ export function switchTab(tabId, btn) {
     state.pagination.superset2 = 1;
     state.pagination.superset3 = 1;
     state.pagination.superset4 = 1;
+    
+    errChartIndex = 0;
+    markerChartIndex = 0;
 
     if (state.currentMenu === 'main') triggerFilterUpdate();
     if (state.currentMenu === 'errors') renderErrorsTable();
@@ -326,7 +379,6 @@ function renderPaginationControls(controlsId, infoId, totalItems, tableKey) {
     const info = document.getElementById(infoId);
     if (!container || !info) return;
 
-    // ★ ИЗМЕНЕНО: учитываем лимит для главной таблицы
     const limit = tableKey === 'mainData' ? MAIN_ITEMS_PER_PAGE : ITEMS_PER_PAGE;
     const totalPages = Math.ceil(totalItems / limit) || 1;
     let currentPage = state.pagination[tableKey] || 1;
@@ -363,7 +415,7 @@ export function triggerFilterUpdate() {
     buildPoolQualityChart();
     buildDayQualityChart();
     buildErrorsByMarkerChart();
-    buildTrendChart();
+    // buildTrendChart(); // ★ УДАЛЕНО
     buildTable();
     renderFeedbackTableHome();
 }
@@ -444,7 +496,6 @@ export function updateKPI() {
     const container = document.getElementById('mainKpisContainer');
     if (!container) return;
 
-    // ★ НОВОЕ: Рендерим 9 карточек в нужном порядке
     container.innerHTML = `
         <div class="kpi-card">
             <div class="label">Целевое качество</div>
@@ -464,7 +515,7 @@ export function updateKPI() {
         </div>
         <div class="kpi-card">
             <button class="norm-edit-btn" onclick="editSupersetNorm()" title="Редактировать">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
             </button>
             <div class="label">Норма у.е. в час</div>
             ${normValuesHtml}
@@ -491,7 +542,7 @@ export function updateKPI() {
 function targetLinesForLabels(labels) {
     const target = state.superset.norms.globalAvg;
     if (target != null) {
-        return [{ label: 'Целевое (суперсет)', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 }];
+        return [{ label: 'Целевое', data: Array(labels.length).fill(target), type: 'line', borderDash: [5, 5], borderColor: '#1f1f1f', borderWidth: 2, pointRadius: 0, order: 1 }];
     }
     return [];
 }
@@ -512,7 +563,7 @@ export function buildQualityChart() {
     const labels = Object.keys(byMarker).sort();
     const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
     const datasets = [
-        { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2 },
+        { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true },
         ...targetLinesForLabels(labels)
     ];
     const canvas = document.getElementById('chartQuality');
@@ -526,16 +577,29 @@ export function buildQualityChart() {
 
 export function buildErrorChart() {
     destroyChart(state.charts.errors);
+    errChartProjects = [...new Set(state.filteredData.map(r => r.project).filter(Boolean))].sort();
+    if (errChartIndex >= errChartProjects.length) errChartIndex = 0;
+    const curProj = errChartProjects.length > 0 ? errChartProjects[errChartIndex] : null;
+
     const byType = {};
     for (const r of state.filteredData) {
-        if (r.errorType) byType[r.errorType] = (byType[r.errorType] || 0) + 1;
+        if (!r.errorType) continue;
+        if (curProj && r.project !== curProj) continue;
+        byType[r.errorType] = (byType[r.errorType] || 0) + 1;
     }
+    
     const canvas = document.getElementById('chartErrors');
     if (!canvas) return;
+    
+    const labels = Object.keys(byType);
+    const title = curProj ? `Распределение типов ошибок (${curProj})` : 'Распределение типов ошибок';
+    const h3 = canvas.closest('.chart-card').querySelector('h3');
+    if (h3) h3.textContent = title;
+
     state.charts.errors = new Chart(canvas, {
         type: 'doughnut',
-        data: { labels: Object.keys(byType), datasets: [{ data: Object.values(byType), backgroundColor: CHART_COLORS, borderWidth: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } } }
+        data: { labels: labels, datasets: [{ data: Object.values(byType), backgroundColor: CHART_COLORS, borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '50%', plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } }, dataLabels: { showLabels: false } } }
     });
 }
 
@@ -555,7 +619,7 @@ export function buildPoolQualityChart() {
     const labels = Object.keys(byPool).sort();
     const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
     const datasets = [
-        { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2 },
+        { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2, showLabels: true },
         ...targetLinesForLabels(labels)
     ];
     const canvas = document.getElementById('chartPoolQuality');
@@ -590,7 +654,7 @@ export function buildDayQualityChart() {
         { label: 'Ср. качество, %', data: values, borderColor: '#1f1f1f', backgroundColor: 'rgba(31, 31, 31, 0.05)', tension: .4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, order: 2 }
     ];
     if (target != null) {
-        datasets.push({ label: 'Целевое качество (суперсет)', data: labels.map(() => target), borderColor: '#e55555', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
+        datasets.push({ label: 'Целевое', data: labels.map(() => target), borderColor: '#e55555', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
     }
 
     const canvas = document.getElementById('chartDayQuality');
@@ -604,47 +668,33 @@ export function buildDayQualityChart() {
 
 export function buildErrorsByMarkerChart() {
     destroyChart(state.charts.errorsByMarker);
-    const markers = [...new Set(state.filteredData.map(r => r.marker).filter(Boolean))].sort();
-    const errorTypes = [...new Set(state.filteredData.map(r => r.errorType).filter(Boolean))].sort();
+    markerChartProjects = [...new Set(state.filteredData.map(r => r.project).filter(Boolean))].sort();
+    if (markerChartIndex >= markerChartProjects.length) markerChartIndex = 0;
+    const curProj = markerChartProjects.length > 0 ? markerChartProjects[markerChartIndex] : null;
+
+    const filtered = state.filteredData.filter(r => !curProj || r.project === curProj);
+
+    const markers = [...new Set(filtered.map(r => r.marker).filter(Boolean))].sort();
+    const errorTypes = [...new Set(filtered.map(r => r.errorType).filter(Boolean))].sort();
     
     const datasets = errorTypes.map((type, idx) => ({
         label: type,
-        data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
+        data: markers.map(m => filtered.filter(r => r.marker === m && r.errorType === type).length),
         backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
         borderRadius: 4
     }));
     
     const canvas = document.getElementById('chartErrorsByMarker');
     if (!canvas) return;
+
+    const title = curProj ? `Типы ошибок по разметчикам (${curProj})` : 'Типы ошибок по разметчикам';
+    const h3 = canvas.closest('.chart-card').querySelector('h3');
+    if (h3) h3.textContent = title;
+
     state.charts.errorsByMarker = new Chart(canvas, {
         type: 'bar',
         data: { labels: markers.map(m => m.length > 20 ? m.slice(0, 18) + '…' : m), datasets },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#7a7a7a' } }, y: { stacked: true, beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { color: '#7a7a7a' } } } }
-    });
-}
-
-export function buildTrendChart() {
-    destroyChart(state.charts.trend);
-    const byDate = {};
-    for (const r of state.filteredData) {
-        if (!r.date) continue;
-        const k = formatDate(r.date);
-        if (!byDate[k]) byDate[k] = { errors: 0, recs: 0 };
-        if (r.result === 'Ошибка') byDate[k].errors++;
-        if (r.result === 'Рекомендация') byDate[k].recs++;
-    }
-    const labels = Object.keys(byDate).sort((a, b) =>
-        a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-')));
-    
-    const canvas = document.getElementById('chartTrend');
-    if (!canvas) return;
-    state.charts.trend = new Chart(canvas, {
-        type: 'line',
-        data: { labels, datasets: [
-            { label: 'Ошибки', data: labels.map(l => byDate[l].errors), borderColor: '#e55555', backgroundColor: 'rgba(229, 85, 85, 0.1)', tension: .4, fill: true },
-            { label: 'Рекомендации', data: labels.map(l => byDate[l].recs), borderColor: '#FFC107', backgroundColor: 'rgba(255, 193, 7, 0.1)', tension: .4, fill: true }
-        ]},
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -694,7 +744,6 @@ export function buildTable() {
 
     const totalItems = groupedArray.length;
     const currentPage = state.pagination.mainData;
-    // ★ ИЗМЕНЕНО: используем MAIN_ITEMS_PER_PAGE (8)
     const startIndex = (currentPage - 1) * MAIN_ITEMS_PER_PAGE;
     const endIndex = Math.min(startIndex + MAIN_ITEMS_PER_PAGE, totalItems);
     const rows = groupedArray.slice(startIndex, endIndex);
@@ -737,7 +786,6 @@ export function buildTable() {
         }
         itemsHtml += '</div>';
 
-        // ★ ИЗМЕНЕНО: убран <td>Связь</td>
         return `<tr>
             <td>${g.date ? formatDate(g.date) : ''}</td>
             <td>${escapeHtml(g.project || '')}</td>
@@ -934,7 +982,6 @@ export function renderErrorsTable() {
 
 export function renderSupersetPage() {
     renderSupersetFilters();
-    // renderSupersetKPIs(); // ★ УДАЛЕНО
     renderSupersetTable1();
     renderSupersetTable2();
     renderSupersetTable3();
@@ -1030,25 +1077,6 @@ export function resetSupersetFilters() {
     applySupersetFilters();
     renderSupersetPage();
 }
-
-export function editSupersetNorm() {
-    const today = new Date().toISOString().slice(0, 10);
-    const currentNorm = getNormForDate(today);
-    const input = prompt('Введите новое значение нормы у.е. в час:', String(currentNorm));
-    if (input === null) return;
-    const num = parseFloat(input);
-    if (isNaN(num) || num <= 0) {
-        alert('Введите положительное число');
-        return;
-    }
-    if (addNormEntry(today, num)) {
-        applySupersetFilters();
-        triggerFilterUpdate(); // ★ ДОБАВЛЕНО: пересчитываем главную
-        if (state.currentMenu === 'superset') renderSupersetPage();
-    }
-}
-
-// ★ УДАЛЕНА ФУНКЦИЯ renderSupersetKPIs
 
 function renderTableFilters(tableId, configs, fullRows) {
     return configs.map(cfg => {
