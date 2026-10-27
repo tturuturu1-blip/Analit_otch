@@ -1,4 +1,4 @@
-// js/ui.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД (ФИНАЛ)
+// js/ui.js — ИСПРАВЛЕНИЕ ШКАЛЫ ГРАФИКОВ И ПУСТЫХ ДИАГРАММ
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -11,7 +11,7 @@ import {
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
-// --- Кастомный плагин для подписей значений на графиках ---
+// Кастомный плагин для подписей значений на графиках
 const dataLabelsPlugin = {
     id: 'dataLabels',
     afterDatasetsDraw(chart) {
@@ -539,13 +539,8 @@ export function buildQualityChart() {
         }
     }
     const labels = Object.keys(byMarker).sort();
-    const values = labels.map(m => {
-        const avg = byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length;
-        return Number((avg * 100).toFixed(1));
-    });
+    const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
     
-    if (labels.length === 0) return; // Защита от пустого графика
-
     const datasets = [
         { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true },
         ...targetLinesForLabels(labels)
@@ -563,10 +558,9 @@ export function buildQualityChart() {
             scales: { 
                 y: { 
                     beginAtZero: true, 
-                    min: 0, 
                     max: 100, 
                     grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a', stepSize: 10 } 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
                 }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
@@ -587,7 +581,6 @@ export function buildErrorChart() {
     if (!canvas) return;
     
     const labels = Object.keys(byType);
-    if (labels.length === 0) return;
 
     state.charts.errors = new Chart(canvas, {
         type: 'doughnut',
@@ -610,13 +603,8 @@ export function buildPoolQualityChart() {
         }
     }
     const labels = Object.keys(byPool).sort();
-    const values = labels.map(p => {
-        const avg = byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length;
-        return Number((avg * 100).toFixed(1));
-    });
+    const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
     
-    if (labels.length === 0) return;
-
     const datasets = [
         { label: 'Ср. качество, %', data: values, backgroundColor: '#d3e9fb', borderRadius: 8, order: 2, showLabels: true },
         ...targetLinesForLabels(labels)
@@ -633,10 +621,9 @@ export function buildPoolQualityChart() {
             scales: { 
                 y: { 
                     beginAtZero: true, 
-                    min: 0, 
                     max: 100, 
                     grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a', stepSize: 10 } 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
                 }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
@@ -660,12 +647,7 @@ export function buildDayQualityChart() {
     }
     const labels = Object.keys(byDate).sort((a, b) =>
         a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-')));
-    const values = labels.map(d => {
-        const avg = byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length;
-        return Number((avg * 100).toFixed(1));
-    });
-
-    if (labels.length === 0) return;
+    const values = labels.map(d => (byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length) * 100);
 
     const target = state.superset.norms.globalAvg;
     const datasets = [
@@ -687,10 +669,9 @@ export function buildDayQualityChart() {
             scales: { 
                 y: { 
                     beginAtZero: true, 
-                    min: 0, 
                     max: 100, 
                     grid: { color: '#f0f0f0' }, 
-                    ticks: { callback: v => v + '%', color: '#7a7a7a', stepSize: 10 } 
+                    ticks: { callback: v => v + '%', color: '#7a7a7a' } 
                 }, 
                 x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
             } 
@@ -704,8 +685,6 @@ export function buildErrorsByMarkerChart() {
     const markers = [...new Set(state.filteredData.map(r => r.marker).filter(Boolean))].sort();
     const errorTypes = [...new Set(state.filteredData.map(r => r.errorType).filter(Boolean))].sort();
     
-    if (markers.length === 0) return;
-
     const datasets = errorTypes.map((type, idx) => ({
         label: type,
         data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
