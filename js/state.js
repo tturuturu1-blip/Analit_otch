@@ -1,11 +1,13 @@
 // js/state.js — ДОБАВЛЕНА КОНСТАНТА MAIN_ITEMS_PER_PAGE = 8
+// ★ ДОБАВЛЕНО: rawRecommendationsManual (ручные рекомендации из #recTable),
+//    validationBaseUrl (домен платформы для ссылок), сохранение/загрузка в localStorage
 
 export const STORAGE_KEY = 'validation_dashboard_data_v3';
 export const FB_STORAGE_KEY = 'validation_feedback_data_v1';
 
 // Количество строк на одной странице таблицы
 export const ITEMS_PER_PAGE = 10;
-export const MAIN_ITEMS_PER_PAGE = 8; // ★ НОВОЕ: для главной таблицы результатов
+export const MAIN_ITEMS_PER_PAGE = 8; // ★ для главной таблицы результатов
 
 const DEFAULT_NORM_HISTORY = [{ date: '2000-01-01', value: 580 }];
 
@@ -13,6 +15,7 @@ export const state = {
     rawMarkers: [],
     rawValidation: [],
     rawRecommendations: [],
+    rawRecommendationsManual: [],   // ★ НОВОЕ: рекомендации, введённые вручную через #recTable
     rawFlatValidations: [],
     rawSuperset1: [],
     rawSuperset2: [],
@@ -25,6 +28,7 @@ export const state = {
     charts: {},
     currentTab: 'all',
     currentMenu: 'main',
+    validationBaseUrl: '',   // ★ НОВОЕ: домен платформы для ссылок (последний введённый)
     projects: [],
     
     pagination: {
@@ -98,12 +102,14 @@ export function saveToStorage() {
             m: state.rawMarkers,
             v: state.rawValidation,
             r: state.rawRecommendations,
+            rm: state.rawRecommendationsManual,   // ★ НОВОЕ
             f: state.rawFlatValidations,
             s1: state.rawSuperset1,
             s2: state.rawSuperset2,
             s3: state.rawSuperset3,
             emp: state.rawEmployeeMap,
-            normHistory: state.superset.normHistory
+            normHistory: state.superset.normHistory,
+            baseUrl: state.validationBaseUrl   // ★ НОВОЕ
         }));
     } catch (e) {
         console.error('Ошибка сохранения:', e.message);
@@ -119,11 +125,13 @@ export function loadFromStorage() {
                 state.rawMarkers = Array.isArray(parsed.m) ? parsed.m : [];
                 state.rawValidation = Array.isArray(parsed.v) ? parsed.v : [];
                 state.rawRecommendations = Array.isArray(parsed.r) ? parsed.r : [];
+                state.rawRecommendationsManual = Array.isArray(parsed.rm) ? parsed.rm : [];   // ★ НОВОЕ
                 state.rawFlatValidations = Array.isArray(parsed.f) ? parsed.f : [];
                 state.rawSuperset1 = Array.isArray(parsed.s1) ? parsed.s1 : [];
                 state.rawSuperset2 = Array.isArray(parsed.s2) ? parsed.s2 : [];
                 state.rawSuperset3 = Array.isArray(parsed.s3) ? parsed.s3 : [];
                 state.rawEmployeeMap = Array.isArray(parsed.emp) ? parsed.emp : [];
+                state.validationBaseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl : '';   // ★ НОВОЕ
                 state.superset.normHistory = Array.isArray(parsed.normHistory) && parsed.normHistory.length > 0
                     ? parsed.normHistory
                     : DEFAULT_NORM_HISTORY.slice();
@@ -133,11 +141,13 @@ export function loadFromStorage() {
         state.rawMarkers = [];
         state.rawValidation = [];
         state.rawRecommendations = [];
+        state.rawRecommendationsManual = [];   // ★ НОВОЕ
         state.rawFlatValidations = [];
         state.rawSuperset1 = [];
         state.rawSuperset2 = [];
         state.rawSuperset3 = [];
         state.rawEmployeeMap = [];
+        state.validationBaseUrl = '';   // ★ НОВОЕ
         state.superset.normHistory = DEFAULT_NORM_HISTORY.slice();
     }
 }
