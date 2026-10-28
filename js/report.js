@@ -1,4 +1,5 @@
 // js/report.js — ОБНОВЛЕНО: Передача данных для новых 9 карточек KPI
+// ★ ДОБАВЛЕНО: Вариант А — рекомендации в отчёт не попадают + normHistory
 
 import { state } from './state.js';
 import { escapeHtml, formatDate, parseExcelDate } from './utils.js';
@@ -64,12 +65,15 @@ export async function generateHtmlReport() {
     const targetQuality = state.superset.norms.globalAvg;
 
     // === Нормализация дат в dd.mm.yy (TZ-фикс) ===
-    const serializedProcessedData = state.processedData.map(r => {
-        const copy = Object.assign({}, r);
-        if (r.date) copy.date = formatDate(r.date);
-        else copy.date = null;
-        return copy;
-    });
+    // ★ ИЗМЕНЕНО (Вариант А): рекомендации в отчёт не попадают
+    const serializedProcessedData = state.processedData
+        .filter(r => r._type !== 'recommendations')
+        .map(r => {
+            const copy = Object.assign({}, r);
+            if (r.date) copy.date = formatDate(r.date);
+            else copy.date = null;
+            return copy;
+        });
 
     const serializedFeedbackData = state.feedbackData.map(f => {
         const copy = Object.assign({}, f);
@@ -80,12 +84,14 @@ export async function generateHtmlReport() {
         return copy;
     });
 
+    // ★ ИЗМЕНЕНО: передаём normHistory для KPI «Норма, у.е./час» на Главной в отчёте
     const reportData = {
         processedData: serializedProcessedData,
         feedbackData: serializedFeedbackData,
         targetQuality: targetQuality,
-        supersetTable1: state.superset.table1 || [], // ★ ДОБАВЛЕНО: для расчета KPI на главной
-        norms: state.superset.norms || { byProjectPool: {}, byProject: {}, globalAvg: null } // ★ ДОБАВЛЕНО
+        supersetTable1: state.superset.table1 || [], // для расчета KPI на главной
+        norms: state.superset.norms || { byProjectPool: {}, byProject: {}, globalAvg: null },
+        normHistory: state.superset.normHistory || [{ date: '2000-01-01', value: 580 }]
     };
     const reportDataJson = JSON.stringify(reportData).replace(/</g, '\\u003c');
 
@@ -160,7 +166,7 @@ export async function generateHtmlReport() {
                 <button id="btnResetFilters" style="height:40px;">Сбросить</button>
             </div>
 
-            <!-- ★ ИЗМЕНЕНО: Контейнер для 9 карточек KPI -->
+            <!-- Контейнер для 9 карточек KPI -->
             <div class="kpi-row" id="mainKpisContainer"></div>
 
             <div class="table-card">
