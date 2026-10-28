@@ -1,4 +1,6 @@
 // js/data.js — ИСПРАВЛЕНИЕ СВЯЗЫВАНИЯ ID И ПРОЕКТОВ
+// ★ ДОБАВЛЕНО: _domain на записях валидации, объединение rawRecommendationsManual,
+//    пропуск заданий с 0 фрагментов (аномалия выгрузки)
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -72,6 +74,9 @@ export async function processNewRows(results) {
     let addedM = 0, addedV = 0, addedR = 0, addedF = 0;
     let addedS1 = 0, addedS2 = 0, addedS3 = 0, addedEmp = 0;
 
+    // ★ НОВОЕ: домен на момент загрузки — привязываем к каждой записи валидации
+    const currentDomain = state.validationBaseUrl || '';
+
     for (const { file, rows } of results) {
         const hasRadioColumn = detectRadioColumn(rows);
 
@@ -80,7 +85,11 @@ export async function processNewRows(results) {
             const type = detectTableType(row);
 
             if (type === 'markers') { state.rawMarkers.push(row); addedM++; }
-            else if (type === 'validation') { state.rawValidation.push(row); addedV++; }
+            else if (type === 'validation') {
+                // ★ НОВОЕ: сохраняем домен в записи
+                state.rawValidation.push(Object.assign({}, row, { _domain: currentDomain }));
+                addedV++;
+            }
             else if (type === 'recommendations') { state.rawRecommendations.push(row); addedR++; }
             else if (type === 'employee_map') { 
                 state.rawEmployeeMap.push(row); 
@@ -138,6 +147,7 @@ function processFlatValidations() {
 
     let addedRows = 0;
     let processedTasks = 0;
+    let skippedFlat = 0;   // ★ НОВОЕ: счётчик пропущенных
 
     for (const key in groups) {
         const rows = groups[key];
@@ -153,6 +163,13 @@ function processFlatValidations() {
         const totalFragments = Number(getVal(first, 'меток с учетом предразметки')) || 0;
         const declaredErrors = Number(getVal(first, 'некорректных меток')) || 0;
         const taskUrl = getVal(first, 'url задания');
+
+        // ★ НОВОЕ: 0 фрагментов = аномалия выгрузки → пропускаем
+        if (totalFragments === 0) {
+            log(`⚠️ Плоский формат: пропущено задание ${fileName || '(без имени)'} — 0 фрагментов.`, true);
+            skippedFlat++;
+            continue;
+        }
 
         const flag = first._hasRadio;
         let hasRadio;
@@ -211,11 +228,12 @@ function processFlatValidations() {
             }
         }
     }
-    log(`Плоский формат: обработано заданий (${processedTasks}), записей (${addedRows})`);
+    log(`Плоский формат: обработано заданий (${processedTasks}), записей (${addedRows})${skippedFlat ? `, пропущено (${skippedFlat})` : ''}`);
 }
 
 export async function recomputeDashboard() {
     state.processedData = [];
+    const skippedFragments = [];   // ★ НОВОЕ: список пропущенных заданий (0 фрагментов)
     updateProgress(10, 'Построение словаря разметчиков...', 'Пересчет');
     await yieldToUI();
 
@@ -309,8 +327,20 @@ export async function recomputeDashboard() {
             } catch (e) { /* ignore */ }
         }
 
+        // ★ НОВОЕ: 0 фрагментов = аномалия выгрузки → пропускаем, копим для лога
+        if (totalFragments === 0) {
+            skippedFragments.push({
+                fileName,
+                date,
+                marker: mInfo.marker,
+                reason: '0 фрагментов'
+            });
+            continue;
+        }
+
         const sumWeights = mistakes.reduce((a, b) => a + b.weight, 0);
         const quality = computeQuality(sumWeights, totalFragments, mistakes.length);
+        const domain = v._domain || '';   // ★ НОВОЕ: домен на момент загрузки
 
         if (mistakes.length === 0) {
             state.processedData.push({
@@ -319,7 +349,8 @@ export async function recomputeDashboard() {
                 date, pool: mInfo.pool, marker: mInfo.marker, validator: mInfo.validator, project: mInfo.project,
                 fileName, result: 'Ошибки не выявлены', errorType: null, comment: null,
                 quality: 1, interval: null, fragments: totalFragments,
-                orgId, assignmentId, itemId
+                orgId, assignmentId, itemId,
+                _domain: domain
             });
         } else {
             for (const mis of mistakes) {
@@ -329,7 +360,8 @@ export async function recomputeDashboard() {
                     date, pool: mInfo.pool, marker: mInfo.marker, validator: mInfo.validator, project: mInfo.project,
                     fileName, result: 'Ошибка', errorType: mis.typ, comment: mis.comm,
                     quality, interval: mis.interval, fragments: totalFragments,
-                    orgId, assignmentId, itemId
+                    orgId, assignmentId, itemId,
+                    _domain: domain
                 });
             }
         }
@@ -342,7 +374,12 @@ export async function recomputeDashboard() {
     updateProgress(80, 'Обработка рекомендаций...', 'Пересчет');
     await yieldToUI();
 
-    for (const r of state.rawRecommendations) {
+    // ★ НОВОЕ: объединяем рекомендации из Excel и введённые вручную через #recTable
+    const allRecommendations = [
+        ...state.rawRecommendations,
+        ...(state.rawRecommendationsManual || [])
+    ];
+    for (const r of allRecommendations) {
         if (!r) continue;
         state.processedData.push({
             _id: 'r_' + Math.random().toString(36).slice(2, 9),
@@ -397,6 +434,15 @@ export async function recomputeDashboard() {
                 if (!r.fileName) r.fileName = linkedVal.fileName;
             }
         }
+    }
+
+    // ★ НОВОЕ: логируем пропущенные задания (0 фрагментов)
+    if (skippedFragments.length > 0) {
+        log(`⚠️ Пропущено ${skippedFragments.length} заданий — 0 фрагментов (аномалия выгрузки). Загружены только корректные данные.`, true);
+        const examples = skippedFragments.slice(0, 5).map(s =>
+            `• ${s.fileName || '(без имени)'}${s.marker ? ' — ' + s.marker : ''}`
+        );
+        if (examples.length) log('Примеры: ' + examples.join(' | '), true);
     }
 
     updateProgress(100, 'Готово', 'Пересчет');
