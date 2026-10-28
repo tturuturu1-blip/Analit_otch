@@ -352,11 +352,14 @@ textarea.rec-comment { padding: 8px; width: 100%; min-width: 250px; border: 1px 
 #section-superset .superset-sticky .tab { background: var(--container); box-shadow: var(--shadow-soft); }
 #section-superset .superset-sticky .tab.active { background: var(--accent); }
 #section-superset .superset-filters { box-shadow: var(--shadow-soft); }
-#section-superset .kpi-card .norm-values-multi { display: flex; flex-direction: column; gap: 8px; margin-top: 5px; }
-#section-superset .kpi-card .norm-value-item { padding: 4px 0; border-bottom: 1px dashed rgba(0,0,0,0.1); }
-#section-superset .kpi-card .norm-value-item:last-child { border-bottom: none; }
-#section-superset .kpi-card .norm-value-item .value { font-size: 1.8rem; }
-#section-superset .kpi-card .norm-label { font-size: 0.8rem; color: var(--muted); margin-top: 2px; font-family: 'Source Sans 3', sans-serif; }
+
+/* ★ ИЗМЕНЕНО: убран префикс #section-superset — работает на Главной, в Суперсете и в HTML-отчёте */
+.kpi-card .norm-values-multi { display: flex; flex-direction: column; gap: 8px; margin-top: 5px; }
+.kpi-card .norm-value-item { padding: 4px 0; border-bottom: 1px dashed rgba(0,0,0,0.1); }
+.kpi-card .norm-value-item:last-child { border-bottom: none; }
+.kpi-card .norm-value-item .value { font-size: 1.8rem; }
+.kpi-card .norm-label { font-size: 0.8rem; color: var(--muted); margin-top: 2px; font-family: 'Source Sans 3', sans-serif; }
+
 #section-superset .ms-compact .ms-header { padding: 6px 10px; min-height: 32px; font-size: 0.8rem; background: rgba(255,255,255,0.5); border-radius: var(--radius-sm); }
 #section-superset .ms-compact .ms-dropdown { min-width: 200px; }
 #section-superset .ms-compact .ms-label { font-size: 0.8rem; }
