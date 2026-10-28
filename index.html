@@ -74,6 +74,16 @@
                         <label class="file-btn" for="fileInput">📂 Загрузить Excel (исходники)</label>
                         <input type="file" id="fileInput" accept=".xlsx,.xls" multiple>
                     </div>
+                    <!-- ★ НОВОЕ: поле домена платформы -->
+                    <div class="form-group" style="margin-top: 15px; max-width: 500px;">
+                        <label>Укажите домен в формате https://platform.example.com</label>
+                        <input type="url" id="validationBaseUrlInput"
+                               placeholder="https://tagme.sberdevices.ru"
+                               autocomplete="off">
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 4px;">
+                            Домен действует на данные, загруженные после его ввода. У уже загруженных данных домен не меняется.
+                        </div>
+                    </div>
                     <div id="markersStatusList" class="markers-status-list" style="display:none;"></div>
                 </div>
 
@@ -212,7 +222,7 @@
                     </div>
                 </div>
 
-                <!-- ГРАФИКИ (Без лишних оберток и фиксированной высоты) -->
+                <!-- ГРАФИКИ -->
                 <div class="charts-grid">
                     <div class="chart-card">
                         <h3>Качество по разметчикам</h3>
@@ -412,6 +422,8 @@
                                 </div>
                                 <div class="ms-dropdown" id="msSupersetTask_dropdown">
                                     <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                    <!-- ★ НОВОЕ: галочка «Выбрать все» -->
+                                    <label class="ms-item ms-all"><input type="checkbox" id="msSupersetTask_all" onchange="toggleAll('msSupersetTask', 'tasks')"> Выбрать все</label>
                                     <div id="msSupersetTask_options"></div>
                                 </div>
                             </div>
