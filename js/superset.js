@@ -1,6 +1,6 @@
 // js/superset.js — ЧИСТКА КОДА
-// Удалено: calcFactQuality (не используется)
-// Остальное без изменений (с fallback для globalAvg и фильтрами качества)
+// Удалено: calcFactQuality (не используется), buildKPIs (мёртвый код — никем не читался)
+// ★ ИЗМЕНЕНО: buildNorms и buildTable3 — выбор по самой свежей дате
 
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
@@ -166,6 +166,8 @@ export function addNormEntry(dateISO, value) {
 }
 
 // ===== Нормативы качества =====
+// ★ ИЗМЕНЕНО: для каждого project|task берём норму с самой свежей датой
+//              При равной дате — приоритет rawSuperset2
 function buildNorms() {
     const byProjectPool = {};
     const byProjectSets = {};
@@ -177,6 +179,26 @@ function buildNorms() {
         return mainSet.has(project);
     };
 
+    // ★ Для каждого project|task храним самую свежую норму (по дате)
+    const normCandidates = {};   // project|task → { norm, date, source }
+    const considerNorm = (project, task, norm, date, source) => {
+        if (!task) return;
+        const key = project + '|' + task;
+        const existing = normCandidates[key];
+        if (!existing) {
+            normCandidates[key] = { norm, date, source };
+            return;
+        }
+        const exTime = existing.date ? existing.date.getTime() : null;
+        const newTime = date ? date.getTime() : null;
+        if (newTime !== null && (exTime === null || newTime > exTime)) {
+            normCandidates[key] = { norm, date, source };
+        } else if (newTime !== null && exTime !== null && newTime === exTime && source === 's2' && existing.source !== 's2') {
+            // равная дата — приоритет rawSuperset2
+            normCandidates[key] = { norm, date, source };
+        }
+    };
+
     for (const r of state.rawSuperset2) {
         const project = normalizeProject(getVal(r, 'Проект'));
         if (!shouldInclude(project)) continue;
@@ -185,7 +207,8 @@ function buildNorms() {
         const task = getVal(r, 'Задача');
         const norm = parseNorm(getVal(r, 'Норма качества'));
         if (norm === null) continue;
-        if (task) byProjectPool[project + '|' + task] = norm;
+        const date = parseExcelDate(getVal(r, 'Дата окончания', 'Дата начала'));
+        considerNorm(project, task, norm, date, 's2');
         if (!byProjectSets[project]) byProjectSets[project] = new Set();
         byProjectSets[project].add(norm);
     }
@@ -197,11 +220,14 @@ function buildNorms() {
         const task = getVal(r, 'Задача');
         const norm = parseNorm(getVal(r, 'Норматив'));
         if (norm === null) continue;
-        if (task && byProjectPool[project + '|' + task] == null) {
-            byProjectPool[project + '|' + task] = norm;
-        }
+        const date = parseExcelDate(getVal(r, 'Дата'));
+        considerNorm(project, task, norm, date, 's3');
         if (!byProjectSets[project]) byProjectSets[project] = new Set();
         byProjectSets[project].add(norm);
+    }
+
+    for (const key in normCandidates) {
+        byProjectPool[key] = normCandidates[key].norm;
     }
 
     const byProject = {};
@@ -501,16 +527,34 @@ function rebuildTable2() {
     state.superset.table2 = rows;
 }
 
+// ★ ИЗМЕНЕНО: цена за самую свежую дату (fallback: last wins, если даты нет)
 function buildTable3() {
     const mainSet = getMainProjects();
     const useMainSet = mainSet.size > 0;
+
+    // Для каждого проекта собираем (price, date), берём самую свежую.
+    // Если даты нет — сохраняем порядок загрузки и берём последнюю.
     const byProject = {};
     for (const r of state.rawSuperset1) {
         const project = normalizeProject(getVal(r, 'Проект'));
         if (useMainSet && !mainSet.has(project)) continue;
         const price = getVal(r, 'Цена');
-        if (!byProject[project]) byProject[project] = { project, prices: [] };
-        if (price != null && price !== '') byProject[project].prices.push(price);
+        if (price == null || price === '') continue;
+        const date = parseExcelDate(getVal(r, 'Дата окончания', 'Дата начала', 'Дата'));
+        if (!byProject[project]) {
+            byProject[project] = { project, price, date };
+        } else {
+            const existing = byProject[project];
+            const exTime = existing.date ? existing.date.getTime() : null;
+            const newTime = date ? date.getTime() : null;
+            if (newTime !== null && (exTime === null || newTime > exTime)) {
+                existing.price = price;
+                existing.date = date;
+            } else if (newTime === null && exTime === null) {
+                // нет дат — last wins (последняя загруженная цена)
+                existing.price = price;
+            }
+        }
     }
 
     const projectDates = {};
@@ -531,11 +575,10 @@ function buildTable3() {
 
     const rows = [];
     for (const project in byProject) {
-        const prices = byProject[project].prices;
         rows.push({
             date: projectDates[project] || null,
             project,
-            price: prices.length > 0 ? prices[0] : ''
+            price: byProject[project].price
         });
     }
 
@@ -592,70 +635,9 @@ function rebuildTable4() {
     state.superset.table4 = rows;
 }
 
-function buildKPIs() {
-    const t1 = state.superset.filteredTable1;
-    const qualities = [];
-    const seen = new Set();
-
-    for (const r of state.processedData) {
-        if (r.quality == null || !isFinite(r.quality)) continue;
-        const proj = normalizeProject(r.project);
-        if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
-        if (r.date && !matchesDateRangeRow(r.date)) continue;
-        
-        const key = (r.marker || '') + '|' + proj + '|' + (r.pool || '') + '|' + (r.fileName || '');
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        qualities.push(r.quality);
-    }
-    const qualityFact = avg(qualities);
-
-    const projectNorms = {};
-    for (const r of t1) {
-        const norm = parseNorm(r.normQuality);
-        if (norm !== null && r.project) {
-            if (!projectNorms[r.project]) projectNorms[r.project] = new Set();
-            projectNorms[r.project].add(norm);
-        }
-    }
-    const allUniqueNorms = [];
-    for (const p in projectNorms) {
-        projectNorms[p].forEach(n => allUniqueNorms.push(n));
-    }
-    const qualityPlan = avg(allUniqueNorms);
-
-    const balls = t1.map(r => parseHtmlNumberToFloat(r.ballsPerHour)).filter(v => v !== null);
-    const ballsPerHour = avg(balls);
-
-    const prods = t1.map(r => parseHtmlNumberToFloat(r.prodPerHour)).filter(v => v !== null);
-    const prodPerHour = avg(prods);
-
-    const prices = t1.map(r => parsePriceToFloat(r.price)).filter(v => v !== null);
-    const avgPrice = avg(prices);
-
-    const timesByTask = {};
-    for (const r of t1) {
-        const priceNum = parsePriceToFloat(r.price);
-        const ballsV = parseHtmlNumberToFloat(r.ballsPerHour);
-        if (priceNum === null || priceNum <= 0) continue;
-        if (ballsV === null || ballsV <= 0) continue;
-
-        const t = (priceNum * 60) / ballsV;
-        const key = (r.project || '') + '|' + (r.task || '');
-        if (!timesByTask[key]) timesByTask[key] = [];
-        timesByTask[key].push(t);
-    }
-
-    const taskAverages = [];
-    for (const key in timesByTask) {
-        const a = avg(timesByTask[key]);
-        if (a !== null) taskAverages.push(a);
-    }
-    const avgTime = avg(taskAverages);
-
-    state.superset.kpis = { qualityFact, qualityPlan, ballsPerHour, prodPerHour, avgTime, avgPrice };
-}
+// ★ УДАЛЕНО: buildKPIs() — мёртвый код, никем не читался.
+//            KPI на Главной считаются в updateKPI (ui.js),
+//            KPI на Суперсете отсутствуют по требованию.
 
 export function applySupersetFilters() {
     state.superset._mainProjects = computeMainProjectsSet();
@@ -692,7 +674,7 @@ export function applySupersetFilters() {
         matchesColumnFilters('t4', r, t4Config)
     );
 
-    buildKPIs();
+    // ★ УДАЛЕНО: buildKPIs() — не вызываем (мёртвый код)
 }
 
 export function buildSuperset() {
