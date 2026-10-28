@@ -1,4 +1,5 @@
 // js/feedback.js — ИСПРАВЛЕНИЕ РАСЧЕТА КАЧЕСТВА В HTML-ФИДБЕКЕ
+// ★ ДОБАВЛЕНО: window.toggleDropdown, _editUsed, дата дд.мм.гг, colspan 8/9
 
 import { state, saveFeedbackToStorage, ITEMS_PER_PAGE } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel, getVal } from './utils.js';
@@ -97,10 +98,11 @@ function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeAction
             : '—';
         const displayProject = f.project || deriveProjectFromPools(f.pools, poolProjectCache) || '—';
 
+        // ★ ИЗМЕНЕНО: формат даты дд.мм.гг (2-значный год, как везде на сайте)
         let displayDate = f.date || '';
         if (displayDate.includes('-')) {
             const parts = displayDate.split('-');
-            if (parts.length === 3) displayDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+            if (parts.length === 3) displayDate = `${parts[2]}.${parts[1]}.${String(parts[0]).slice(-2)}`;
         }
 
         let actionsCell = '';
@@ -129,8 +131,10 @@ function renderFeedbackRows(tbodyId, controlsId, infoId, tableKey, includeAction
         </tr>`;
     }).join('');
 
+    // ★ ИЗМЕНЕНО: colspan зависит от includeActions (8 без actions, 9 с actions)
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color: var(--muted); padding: 20px;">Нет данных.</td></tr>';
+        const cols = includeActions ? 9 : 8;
+        tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center; color: var(--muted); padding: 20px;">Нет данных.</td></tr>`;
     }
 
     if (controlsContainer && infoContainer) {
@@ -630,8 +634,11 @@ function handleAddFeedback() {
 
         const newRecord = { marker, date: dateStr, status, typeVKS, conductor, pools, avgQuality, project };
 
-        if (state.editingFeedbackIndex !== null && markers.length === 1) {
+        // ★ ИЗМЕНЕНО: первый маркер при редактировании заменяет исходную запись,
+        //              остальные добавляются как новые (у каждого — свой avgQuality)
+        if (state.editingFeedbackIndex !== null && !state._editUsed) {
             state.feedbackData[state.editingFeedbackIndex] = newRecord;
+            state._editUsed = true;
         } else {
             state.feedbackData.push(newRecord);
         }
@@ -641,6 +648,7 @@ function handleAddFeedback() {
         state.editingFeedbackIndex = null;
         document.getElementById('btnAddFeedback').textContent = 'Добавить';
     }
+    state._editUsed = false;   // ★ сброс временного флага
 
     saveFeedbackToStorage();
     renderFeedbackTable();
@@ -663,8 +671,9 @@ export function initFeedbackForm() {
 
     document.getElementById('btnAddFeedback').addEventListener('click', handleAddFeedback);
     
+    // ★ ИЗМЕНЕНО: window.toggleDropdown — иначе ReferenceError (модуль strict mode)
     document.getElementById('btnApplyGroup').addEventListener('click', () => {
-        toggleDropdown('msFbGroup');
+        if (window.toggleDropdown) window.toggleDropdown('msFbGroup');
         applyFeedbackFilters();
     });
 
