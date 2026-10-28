@@ -1,4 +1,6 @@
 // js/report-runtime.js — ФИНАЛЬНАЯ ВЕРСИЯ (9 KPI, правильные графики, 8 строк)
+// ★ ДОБАВЛЕНО: fix падения updateKPI (from/to), ISO-сравнение дат, _domain в ссылках,
+//    getNormsForPeriod для KPI «Норма», ISO-сортировка в buildDayQualityChart
 
 (function () {
     'use strict';
@@ -8,6 +10,7 @@
     var feedbackData = REPORT_DATA.feedbackData || [];
     var targetQualityGlobal = REPORT_DATA.targetQuality || null;
     var supersetTable1 = REPORT_DATA.supersetTable1 || [];
+    var normHistory = REPORT_DATA.normHistory || [{ date: '2000-01-01', value: 580 }];   // ★ НОВОЕ
 
     var ITEMS_PER_PAGE = 10;
     var MAIN_ITEMS_PER_PAGE = 8;
@@ -62,6 +65,69 @@
                String(dt.getMonth() + 1).padStart(2, '0') + '.' + String(dt.getFullYear()).slice(-2);
     }
 
+    // ★ НОВОЕ: ISO-хелпер (без TZ-сдвига)
+    function toISODate(v) {
+        if (!v) return null;
+        var d = parseDate(v);
+        if (!d) return null;
+        return d.getFullYear() + '-' +
+            String(d.getMonth() + 1).padStart(2, '0') + '-' +
+            String(d.getDate()).padStart(2, '0');
+    }
+
+    // ★ НОВОЕ: норма у.е./час — история (аналог superset.js)
+    function getNormForDate(dateISO) {
+        var d = dateISO || new Date().toISOString().slice(0, 10);
+        var history = normHistory.slice().sort(function(a, b) { return a.date.localeCompare(b.date); });
+        var value = 580;
+        for (var i = 0; i < history.length; i++) {
+            if (history[i].date <= d) value = history[i].value;
+            else break;
+        }
+        return value;
+    }
+
+    function getNormsForPeriod(dateFrom, dateTo) {
+        var history = normHistory.slice().sort(function(a, b) { return a.date.localeCompare(b.date); });
+        if (history.length === 0) return [{ value: 580, label: null }];
+
+        if (!dateFrom && !dateTo) {
+            var current = getNormForDate(new Date().toISOString().slice(0, 10));
+            return [{ value: current, label: null }];
+        }
+
+        var from = dateFrom || '1900-01-01';
+        var to = dateTo || '9999-12-31';
+
+        var segments = [];
+        for (var i = 0; i < history.length; i++) {
+            var segStart = history[i].date;
+            var segEndNext = i + 1 < history.length ? history[i + 1].date : null;
+            if (segEndNext && segEndNext <= from) continue;
+            if (segStart > to) break;
+            var effectiveStart = segStart > from ? segStart : from;
+            var effectiveEnd = segEndNext && segEndNext <= to ? segEndNext : to;
+            segments.push({ value: history[i].value, start: effectiveStart, end: effectiveEnd });
+        }
+
+        if (segments.length === 0) return [{ value: getNormForDate(from), label: null }];
+        if (segments.length === 1) return [{ value: segments[0].value, label: null }];
+
+        var mapped = segments.map(function(s, idx) {
+            var label = null;
+            if (idx < segments.length - 1) {
+                var endDate = new Date(s.end + 'T00:00:00');
+                endDate.setDate(endDate.getDate() - 1);
+                label = 'до ' + formatDate(endDate);
+            } else {
+                label = 'с ' + formatDate(new Date(s.start + 'T00:00:00'));
+            }
+            return { value: s.value, label: label };
+        });
+
+        return mapped.reverse();
+    }
+
     function parseDate(str) {
         if (!str) return null;
         if (str instanceof Date) return str;
@@ -88,13 +154,17 @@
             .replace(/'/g, '&#39;');
     }
 
+    // ★ ИЗМЕНЕНО: используем r._domain вместо хардкода tagme.sberdevices.ru
     function getValidationLink(r) {
         if (r.url) {
             return '<a href="' + escapeHtml(r.url) + '" target="_blank" class="badge-link">Перейти</a>';
         }
-        if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId) {
-            var constructedUrl = 'https://tagme.sberdevices.ru/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
-            return '<a href="' + escapeHtml(constructedUrl) + '" target="_blank" class="badge-link">Перейти</a>';
+        if (r._type === 'validation' && r.orgId && r.assignmentId && r.itemId && r._domain) {
+            var base = String(r._domain).trim().replace(/\/+$/, '');
+            if (base) {
+                var constructedUrl = base + '/company/' + r.orgId + '/assignment/' + r.assignmentId + '/reel?size=10&page=1&item=' + r.itemId;
+                return '<a href="' + escapeHtml(constructedUrl) + '" target="_blank" class="badge-link">Перейти</a>';
+            }
         }
         return '—';
     }
@@ -105,12 +175,10 @@
         return project === currentTab;
     }
 
+    // ★ ИЗМЕНЕНО: ISO-сравнение дат (без TZ-сдвига)
     function applyFilters() {
         var from = document.getElementById('filterDateFrom').value;
         var to = document.getElementById('filterDateTo').value;
-        var fromDate = from ? new Date(from) : null;
-        var toDate = to ? new Date(to) : null;
-        if (toDate) toDate.setDate(toDate.getDate() + 1);
 
         var poolEmpty = filterState.pool.size === 0;
         var markerEmpty = filterState.marker.size === 0;
@@ -121,13 +189,13 @@
             if (!poolEmpty && !filterState.pool.has(r.pool || '')) return false;
             if (!markerEmpty && !filterState.marker.has(r.marker || '')) return false;
             if (!resultEmpty && !filterState.result.has(r.result || '')) return false;
-            if (fromDate && r.date) {
-                var rDateFrom = parseDate(r.date);
-                if (rDateFrom && rDateFrom < fromDate) return false;
-            }
-            if (toDate && r.date) {
-                var rDateTo = parseDate(r.date);
-                if (rDateTo && rDateTo >= toDate) return false;
+            // ★ ISO-сравнение
+            if (r.date) {
+                var iso = toISODate(r.date);
+                if (iso) {
+                    if (from && iso < from) return false;
+                    if (to && iso > to) return false;
+                }
             }
             return true;
         });
@@ -202,17 +270,19 @@
         if (isRed) { qColorClass = 'val-red'; errColorClass = 'val-red'; }
         else if (isGreen) { qColorClass = 'val-green'; errColorClass = 'val-green'; }
 
-        // ★ ИЗМЕНЕНО: Расчет Факт/Цена/Время/Коэффициент на основе фильтров
+        // ★ ИЗМЕНЕНО: объявляем from/to + ISO-сравнение supersetTable1
         var activeTasks = supersetTable1 || [];
         if (currentTab !== 'all') activeTasks = activeTasks.filter(function(t) { return t.project === currentTab; });
         if (filterState.pool.size > 0) activeTasks = activeTasks.filter(function(t) { return filterState.pool.has(t.task); });
-        
+
+        var from = document.getElementById('filterDateFrom').value;
+        var to = document.getElementById('filterDateTo').value;
         if (from || to) {
             activeTasks = activeTasks.filter(function(t) {
-                var rowStart = t.dateStart ? parseDate(t.dateStart) : null;
-                var rowEnd = t.dateEnd ? parseDate(t.dateEnd) : null;
-                if (fromDate && rowEnd && rowEnd < fromDate) return false;
-                if (toDate && rowStart && rowStart > toDate) return false;
+                var rowStartISO = t.dateStart ? toISODate(t.dateStart) : null;
+                var rowEndISO = t.dateEnd ? toISODate(t.dateEnd) : null;
+                if (from && rowEndISO && rowEndISO < from) return false;
+                if (to && rowStartISO && rowStartISO > to) return false;
                 return true;
             });
         }
@@ -257,12 +327,29 @@
         var container = document.getElementById('mainKpisContainer');
         if (!container) return;
 
+        // ★ НОВОЕ: Норма с учётом истории и выбранного периода
+        var norms = getNormsForPeriod(from, to);
+        var normValuesHtml;
+        if (norms.length === 1) {
+            normValuesHtml = '<div class="value val-brown">' + norms[0].value.toFixed(0) + '</div>';
+        } else {
+            normValuesHtml = '<div class="norm-values-multi">';
+            for (var ni = 0; ni < norms.length; ni++) {
+                var nEntry = norms[ni];
+                normValuesHtml += '<div class="norm-value-item">' +
+                    '<div class="value val-brown">' + nEntry.value.toFixed(0) + '</div>' +
+                    (nEntry.label ? '<div class="norm-label">' + escapeHtml(nEntry.label) + '</div>' : '') +
+                '</div>';
+            }
+            normValuesHtml += '</div>';
+        }
+
         container.innerHTML = 
             '<div class="kpi-card"><div class="label">Целевое качество</div><div class="value val-brown">' + (targetQualityGlobal != null ? targetQualityGlobal.toFixed(1) + '%' : '—') + '</div></div>' +
             '<div class="kpi-card"><div class="label">Качество</div><div class="value ' + qColorClass + '">' + (avgQ !== null ? avgQPct.toFixed(1) + '%' : '—') + '</div></div>' +
             '<div class="kpi-card"><div class="label">Ошибок</div><div class="value ' + errColorClass + '">' + errorPercent.toFixed(2) + '%</div></div>' +
             '<div class="kpi-card"><div class="label">Разметчиков</div><div class="value val-brown">' + uniqueMarkers.size + '</div></div>' +
-            '<div class="kpi-card"><div class="label">Норма, у.е./час</div><div class="value val-brown">580</div></div>' + // В отчете норма фиксированная (без истории)
+            '<div class="kpi-card"><div class="label">Норма, у.е./час</div>' + normValuesHtml + '</div>' +
             '<div class="kpi-card"><div class="label">Факт, у.е./час</div><div class="value val-brown">' + (ballsPerHour != null ? ballsPerHour.toFixed(1) : '—') + '</div></div>' +
             '<div class="kpi-card"><div class="label">Стоимость, у.е.</div><div class="value val-brown">' + (avgPrice != null ? avgPrice.toFixed(2) : '—') + '</div></div>' +
             '<div class="kpi-card"><div class="label">Среднее время разметки, мин</div><div class="value val-brown">' + (avgTime != null ? avgTime.toFixed(1) : '—') + '</div></div>' +
@@ -382,9 +469,10 @@
         });
     }
 
+    // ★ ИЗМЕНЕНО: ISO-сортировка (без проблем на границе веков)
     function buildDayQualityChart() {
         destroyChart('dayQuality');
-        var byDate = {};
+        var byDate = {};   // label → { iso, values: [] }
         var qualityKeys = new Set();
         
         for (var i = 0; i < filteredData.length; i++) {
@@ -394,17 +482,18 @@
                 var key = k + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
                 if (!qualityKeys.has(key)) {
                     qualityKeys.add(key);
-                    if (!byDate[k]) byDate[k] = [];
-                    byDate[k].push(r.quality);
+                    if (!byDate[k]) byDate[k] = { iso: toISODate(r.date), values: [] };
+                    byDate[k].values.push(r.quality);
                 }
             }
         }
         
-        var labels = Object.keys(byDate).sort(function (a, b) {
-            return a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-'));
+        var sortedKeys = Object.keys(byDate).sort(function (a, b) {
+            return (byDate[a].iso || '').localeCompare(byDate[b].iso || '');
         });
-        var values = labels.map(function (d) {
-            var arr = byDate[d];
+        var labels = sortedKeys;
+        var values = sortedKeys.map(function (d) {
+            var arr = byDate[d].values;
             var sum = 0;
             for (var k = 0; k < arr.length; k++) sum += arr[k];
             return (sum / arr.length) * 100;
