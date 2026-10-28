@@ -1,11 +1,18 @@
 // js/utils.js — ИЗМЕНЕНИЕ ФОРМАТА ДАТЫ НА ДД.ММ.ГГ
+// ★ ДОБАВЛЕНО: getValidationUrl принимает domain параметром (без fallback),
+//    updateLabel поддерживает 'tasks' (для галочки «Выбрать все» в #msSupersetTask)
 
 import { state } from './state.js';
 
 // ===== Ссылка на валидацию =====
-export function getValidationUrl(orgId, assignmentId, itemId) {
+// ★ ИЗМЕНЕНО: домен передаётся параметром (привязка к записи через _domain в data.js/ui.js).
+//              Пустой domain → null (ссылка не собирается). Никаких fallback.
+export function getValidationUrl(orgId, assignmentId, itemId, domain) {
     if (!orgId || !assignmentId || !itemId) return null;
-    return `https://tagme.sberdevices.ru/company/${orgId}/assignment/${assignmentId}/reel?size=10&page=1&item=${itemId}`;
+    if (!domain) return null;
+    const base = String(domain).trim().replace(/\/+$/, '');
+    if (!base) return null;
+    return `${base}/company/${orgId}/assignment/${assignmentId}/reel?size=10&page=1&item=${itemId}`;
 }
 
 // ===== Даты и данные =====
@@ -120,15 +127,20 @@ export function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
+// ★ ИЗМЕНЕНО: поддержка 'tasks' (задачи Суперсета хранятся в state.superset.filters.tasks)
 export function updateLabel(containerId, stateKey) {
     const label = document.getElementById(containerId + '_label');
     if (!label) return;
-    const count = state.filterState[stateKey].size;
+    const setRef = stateKey === 'tasks'
+        ? state.superset.filters.tasks
+        : state.filterState[stateKey];
+    if (!setRef) return;
+    const count = setRef.size;
     if (count === 0) {
         label.textContent = (stateKey === 'pool' || stateKey === 'feedbackPool' || stateKey === 'fbFormPools') ? 'Все пулы' : 'Все';
         label.classList.add('empty');
     } else if (count === 1) {
-        label.textContent = Array.from(state.filterState[stateKey])[0];
+        label.textContent = Array.from(setRef)[0];
         label.classList.remove('empty');
     } else {
         label.textContent = 'Выбрано: ' + count;
