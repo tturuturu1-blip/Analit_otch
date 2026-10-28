@@ -1,4 +1,7 @@
 // js/ui.js — ОБНОВЛЕННЫЙ КОД
+// ★ ДОБАВЛЕНО: _domain в buildTable (группа + передача в getValidationUrl),
+//    toggleAll поддерживает 'tasks', ISO-сравнение дат в renderErrorsTable,
+//    ISO-сортировка в buildDayQualityChart
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -240,16 +243,33 @@ export function filterMsOptions(inputEl) {
     }
 }
 
+// ★ ИЗМЕНЕНО: поддержка 'tasks' (для галочки «Выбрать все» в #msSupersetTask)
 export function toggleAll(containerId, stateKey) {
     const allCheckbox = document.getElementById(containerId + '_all');
     const checkboxes = document.querySelectorAll('#' + containerId + '_options input[type="checkbox"]');
-    state.filterState[stateKey].clear();
+
+    const setRef = stateKey === 'tasks'
+        ? state.superset.filters.tasks
+        : state.filterState[stateKey];
+    if (!setRef) return;
+
+    setRef.clear();
     for (const cb of checkboxes) {
         cb.checked = allCheckbox.checked;
-        if (cb.checked) state.filterState[stateKey].add(cb.value);
+        if (cb.checked) setRef.add(cb.value);
     }
     updateLabel(containerId, stateKey);
-    
+
+    if (stateKey === 'tasks') {
+        state.pagination.superset1 = 1;
+        state.pagination.superset2 = 1;
+        state.pagination.superset3 = 1;
+        state.pagination.superset4 = 1;
+        applySupersetFilters();
+        renderSupersetPage();
+        return;
+    }
+
     if (stateKey === 'feedbackPool') {
         applyFeedbackFilters();
     } else {
@@ -459,17 +479,14 @@ export function updateKPI() {
     // ★ ИЗМЕНЕНО: Расчет Факт/Цена/Время/Коэффициент на основе фильтров Главной
     let activeTasks = state.superset.table1 || [];
     
-    // Фильтр по проекту (табы)
     if (state.currentTab !== 'all') {
         activeTasks = activeTasks.filter(r => r.project === state.currentTab);
     }
     
-    // Фильтр по пулам
     if (state.filterState.pool.size > 0) {
         activeTasks = activeTasks.filter(r => state.filterState.pool.has(r.task));
     }
 
-    // Фильтр по датам
     const filterFrom = document.getElementById('filterDateFrom')?.value;
     const filterTo = document.getElementById('filterDateTo')?.value;
     if (filterFrom || filterTo) {
@@ -484,7 +501,6 @@ export function updateKPI() {
         });
     }
 
-    // Локальные парсеры
     const parseHtmlNumberToFloatLocal = (val) => {
         if (val == null) return null;
         let s = String(val).trim().replace(/<[^>]*>/g, '').replace(/\./g, ',');
@@ -542,7 +558,6 @@ export function updateKPI() {
     const container = document.getElementById('mainKpisContainer');
     if (!container) return;
 
-    // ★ ИЗМЕНЕНО: Новые названия карточек
     container.innerHTML = `
         <div class="kpi-card">
             <div class="label">Целевое качество</div>
@@ -666,7 +681,6 @@ export function buildPoolQualityChart() {
     const labels = Object.keys(byPool).sort();
     const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
     
-    // ★ ИЗМЕНЕНО: Изменен тип на 'line' как у графика по дням
     const target = state.superset.norms.globalAvg;
     const datasets = [
         { label: 'Ср. качество, %', data: values, borderColor: '#1f1f1f', backgroundColor: 'rgba(31, 31, 31, 0.05)', tension: .4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, order: 2 }
@@ -693,23 +707,30 @@ export function buildPoolQualityChart() {
     });
 }
 
+// ★ ИЗМЕНЕНО: ISO-сортировка (без проблем на границе веков)
 export function buildDayQualityChart() {
     destroyChart(state.charts.dayQuality);
-    const byDate = {};
+    const byDate = {};   // label → { iso, values: [] }
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
         if (r.date && r.quality != null && isFinite(r.quality)) {
+            const d = new Date(r.date);
+            if (isNaN(d.getTime())) continue;
+            const iso = d.getFullYear() + '-' +
+                String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                String(d.getDate()).padStart(2, '0');
             const k = formatDate(r.date);
             const key = k + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
                 qualityKeys.add(key);
-                (byDate[k] = byDate[k] || []).push(r.quality);
+                if (!byDate[k]) byDate[k] = { iso, values: [] };
+                byDate[k].values.push(r.quality);
             }
         }
     }
-    const labels = Object.keys(byDate).sort((a, b) =>
-        a.split('.').reverse().join('-').localeCompare(b.split('.').reverse().join('-')));
-    const values = labels.map(d => (byDate[d].reduce((a, b) => a + b, 0) / byDate[d].length) * 100);
+    const sortedKeys = Object.keys(byDate).sort((a, b) => byDate[a].iso.localeCompare(byDate[b].iso));
+    const labels = sortedKeys;
+    const values = sortedKeys.map(k => (byDate[k].values.reduce((a, b) => a + b, 0) / byDate[k].values.length) * 100);
 
     const target = state.superset.norms.globalAvg;
     const datasets = [
@@ -747,7 +768,6 @@ export function buildErrorsByMarkerChart() {
         data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
         backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
         borderRadius: 4
-        // isPercentage не передаем, так как это штуки, а не проценты
     }));
     
     const canvas = document.getElementById('chartErrorsByMarker');
@@ -768,6 +788,7 @@ export function buildErrorsByMarkerChart() {
     });
 }
 
+// ★ ИЗМЕНЕНО: _domain в группе (2 места) + передача в getValidationUrl
 export function buildTable() {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
@@ -780,7 +801,7 @@ export function buildTable() {
         const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
         let group = groupByKey.get(key);
         if (!group) {
-            group = { _id: r._id, date: r.date, project: r.project, pool: r.pool, marker: r.marker, fileName: r.fileName, quality: r.quality, fragments: r.fragments, url: r.url, orgId: r.orgId, assignmentId: r.assignmentId, itemId: r.itemId, _type: r._type, _linked: r._linked, items: [] };
+            group = { _id: r._id, date: r.date, project: r.project, pool: r.pool, marker: r.marker, fileName: r.fileName, quality: r.quality, fragments: r.fragments, url: r.url, orgId: r.orgId, assignmentId: r.assignmentId, itemId: r.itemId, _type: r._type, _linked: r._linked, _domain: r._domain, items: [] };
             groupByKey.set(key, group);
             groups.set(r._id, group);
         }
@@ -796,7 +817,7 @@ export function buildTable() {
             group = groupByKey.get(key);
         }
         if (!group) {
-            group = { _id: r._id, date: r.date, project: r.project, pool: r.pool, marker: r.marker, fileName: r.fileName, quality: r.quality, fragments: r.fragments, url: r.url, orgId: r.orgId, assignmentId: r.assignmentId, itemId: r.itemId, _type: r._type, _linked: r._linked, items: [] };
+            group = { _id: r._id, date: r.date, project: r.project, pool: r.pool, marker: r.marker, fileName: r.fileName, quality: r.quality, fragments: r.fragments, url: r.url, orgId: r.orgId, assignmentId: r.assignmentId, itemId: r.itemId, _type: r._type, _linked: r._linked, _domain: r._domain, items: [] };
             const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             groupByKey.set(key, group);
             groups.set(r._id, group);
@@ -825,7 +846,7 @@ export function buildTable() {
 
         if (g.url) { linkUrl = g.url; hasLink = true; }
         else if (g._type === 'validation' && g.orgId && g.assignmentId && g.itemId) {
-            linkUrl = getValidationUrl(g.orgId, g.assignmentId, g.itemId);
+            linkUrl = getValidationUrl(g.orgId, g.assignmentId, g.itemId, g._domain);
             if (linkUrl) hasLink = true;
         }
 
@@ -871,21 +892,28 @@ export function buildTable() {
     renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, 'mainData');
 }
 
+// ★ ИЗМЕНЕНО: ISO-строки для сравнения дат (без TZ-сдвига)
 export function renderErrorsTable() {
     const container = document.getElementById('errorsCardsContainer');
     if (!container) return;
 
     const from = document.getElementById('errFilterDateFrom').value;
     const to = document.getElementById('errFilterDateTo').value;
-    const fromDate = from ? new Date(from) : null;
-    const toDate = to ? new Date(to) : null;
-    if (toDate) toDate.setDate(toDate.getDate() + 1);
 
     const filtered = state.processedData.filter(r => {
         if (r._type !== 'validation') return false;
         if (!matchesTab(r)) return false;
-        if (fromDate && r.date && r.date < fromDate) return false;
-        if (toDate && r.date && r.date >= toDate) return false;
+        if (r.date) {
+            const d = new Date(r.date);
+            if (!isNaN(d.getTime())) {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                const rDateStr = `${y}-${m}-${day}`;
+                if (from && rDateStr < from) return false;
+                if (to && rDateStr > to) return false;
+            }
+        }
         return true;
     });
 
