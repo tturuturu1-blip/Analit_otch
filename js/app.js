@@ -120,6 +120,16 @@ if (btnUploadSource) {
     });
 }
 
+// ===== ★ НОВОЕ: Поле домена платформы =====
+const validationBaseUrlInput = document.getElementById('validationBaseUrlInput');
+if (validationBaseUrlInput) {
+    validationBaseUrlInput.value = state.validationBaseUrl || '';
+    validationBaseUrlInput.addEventListener('change', () => {
+        state.validationBaseUrl = validationBaseUrlInput.value.trim();
+        saveToStorage();
+    });
+}
+
 // ===== Делегирование кликов по табам =====
 const projectTabsContainer = document.getElementById('projectTabs');
 if (projectTabsContainer) {
@@ -214,6 +224,10 @@ if (fileInput) {
         await yieldToUI();
         const results = await readExcelFiles(files);
         if (results.length > 0) await processNewRows(results);
+        // ★ НОВОЕ: предупреждение, если домен не задан
+        if (!state.validationBaseUrl) {
+            log('⚠️ Домен платформы не указан. Ссылки «Перейти» у загруженных данных не сформируются. Введите домен в поле «Укажите домен в формате…» выше.', true);
+        }
         e.target.value = '';
     });
 }
@@ -246,8 +260,15 @@ const btnSaveRecommendations = document.getElementById('btnSaveRecommendations')
 if (btnSaveRecommendations) {
     btnSaveRecommendations.addEventListener('click', async () => {
         const rows = getRecRowsData();
-        if (rows.length === 0) { alert('Заполните хотя бы одну строку (Дата и Почта разметчика обязательны)'); return; }
-        state.rawRecommendations.push(...rows);
+        if (rows.length === 0) { alert('Заполните хотя бы одну строку'); return; }
+        // ★ НОВОЕ: проверка обязательных полей: дата + почта разметчика
+        const invalid = rows.find(r => !r['Дата валидации'] || !r['Почта разметчика']);
+        if (invalid) {
+            alert('В каждой строке должны быть заполнены «Дата валидации» и «Почта разметчика»');
+            return;
+        }
+        // ★ НОВОЕ: сохраняем в отдельный массив — не смешиваем с Excel-ными рекомендациями
+        state.rawRecommendationsManual.push(...rows);
         saveToStorage();
         await recomputeDashboard();
         document.getElementById('recTableBody').innerHTML = '';
@@ -259,13 +280,16 @@ if (btnSaveRecommendations) {
 const btnExportRecommendations = document.getElementById('btnExportRecommendations');
 if (btnExportRecommendations) {
     btnExportRecommendations.addEventListener('click', () => {
-        const rows = getRecRowsData();
-        if (rows.length === 0) { alert('Заполните хотя бы одну строку'); return; }
+        // ★ НОВОЕ: берём сохранённые ручные + несохранённые строки из формы
+        const unsaved = getRecRowsData();
+        const saved = state.rawRecommendationsManual || [];
+        const rows = saved.concat(unsaved);
+        if (rows.length === 0) { alert('Нет рекомендаций для экспорта'); return; }
         try {
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Рекомендации");
             XLSX.writeFile(wb, `Рекомендации_${new Date().toISOString().slice(0, 10)}.xlsx`);
-            log('Excel с рекомендациями скачан', false);
+            log(`Excel с рекомендациями скачан (${rows.length} шт)`, false);
         } catch (err) {
             log('Ошибка экспорта рекомендаций: ' + err.message, true);
         }
@@ -318,7 +342,13 @@ if (btnExport) {
             if (state.rawEmployeeMap.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawEmployeeMap), "Сотрудники");
             if (state.rawMarkers.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawMarkers), "Markers (сырые)");
             if (state.rawValidation.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawValidation), "Валидация (сырые)");
-            if (state.rawRecommendations.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawRecommendations), "Рекомендации (сырые)");
+
+            // ★ НОВОЕ: объединяем Excel-ные и ручные рекомендации
+            const allRecommendationsForExport = (state.rawRecommendations || []).concat(state.rawRecommendationsManual || []);
+            if (allRecommendationsForExport.length > 0) {
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRecommendationsForExport), "Рекомендации (сырые)");
+            }
+
             if (state.rawFlatValidations.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
 
             const { s1, s2, s3 } = getFilteredSupersetRaw();
@@ -406,9 +436,13 @@ if (btnClear) {
     btnClear.addEventListener('click', () => {
         if (!confirm('Удалить все данные?')) return;
         state.rawMarkers = []; state.rawValidation = []; state.rawRecommendations = [];
+        state.rawRecommendationsManual = [];   // ★ НОВОЕ
         state.rawFlatValidations = []; state.rawSuperset1 = []; state.rawSuperset2 = [];
         state.rawSuperset3 = []; state.rawEmployeeMap = []; state.processedData = [];
         state.feedbackData = [];
+        state.validationBaseUrl = '';          // ★ НОВОЕ
+        const baseUrlInput = document.getElementById('validationBaseUrlInput');
+        if (baseUrlInput) baseUrlInput.value = '';   // ★ НОВОЕ
         state.superset.table1 = []; state.superset.table2 = []; state.superset.table3 = []; state.superset.table4 = [];
         state.superset.filteredTable1 = []; state.superset.filteredTable2 = []; state.superset.filteredTable3 = []; state.superset.filteredTable4 = [];
         state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null, avgPrice: null };
@@ -429,6 +463,7 @@ if (btnClear) {
         const recBody = document.getElementById('recTableBody');
         if (recBody) { recBody.innerHTML = ''; addRecRow(); }
         
+        buildSuperset();   // ★ НОВОЕ: пересчёт norms/employeeMap/table1/table3
         buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
         if (state.currentMenu === 'superset') renderSupersetPage();
         if (state.currentMenu === 'feedback') renderFeedbackTable();
