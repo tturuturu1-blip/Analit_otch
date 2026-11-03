@@ -74,16 +74,6 @@
                         <label class="file-btn" for="fileInput">📂 Загрузить Excel (исходники)</label>
                         <input type="file" id="fileInput" accept=".xlsx,.xls" multiple>
                     </div>
-                    <!-- ★ НОВОЕ: поле домена платформы -->
-                    <div class="form-group" style="margin-top: 15px; max-width: 500px;">
-                        <label>Укажите домен в формате https://platform.example.com</label>
-                        <input type="url" id="validationBaseUrlInput"
-                               placeholder="https://tagme.sberdevices.ru"
-                               autocomplete="off">
-                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 4px;">
-                            Домен действует на данные, загруженные после его ввода. У уже загруженных данных домен не меняется.
-                        </div>
-                    </div>
                     <div id="markersStatusList" class="markers-status-list" style="display:none;"></div>
                 </div>
 
@@ -191,10 +181,8 @@
                     <button id="btnResetFilters" style="height:40px;">Сбросить</button>
                 </div>
 
-                <!-- Контейнер для 9 карточек KPI -->
                 <div class="kpi-row" id="mainKpisContainer"></div>
 
-                <!-- Таблица 1: Результаты валидации -->
                 <div class="table-card">
                     <div class="table-header">
                         <h3>Результаты валидации</h3>
@@ -222,7 +210,6 @@
                     </div>
                 </div>
 
-                <!-- ГРАФИКИ -->
                 <div class="charts-grid">
                     <div class="chart-card">
                         <h3>Качество по разметчикам</h3>
@@ -254,7 +241,6 @@
                     </div>
                 </div>
 
-                <!-- Таблица 2: Обратные связи -->
                 <div class="table-card">
                     <div class="table-header">
                         <h3>Обратные связи</h3>
@@ -422,7 +408,6 @@
                                 </div>
                                 <div class="ms-dropdown" id="msSupersetTask_dropdown">
                                     <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                    <!-- ★ НОВОЕ: галочка «Выбрать все» -->
                                     <label class="ms-item ms-all"><input type="checkbox" id="msSupersetTask_all" onchange="toggleAll('msSupersetTask', 'tasks')"> Выбрать все</label>
                                     <div id="msSupersetTask_options"></div>
                                 </div>
@@ -513,27 +498,78 @@
     </div>
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО ЗАГРУЗКИ -->
+<!-- МОДАЛЬНОЕ ОКНО ЗАГРУЗКИ (НОВЫЙ СЦЕНАРИЙ) -->
 <div class="modal-overlay" id="uploadModal">
-    <div class="modal-content">
-        <h2 class="modal-title">Что вы хотите загрузить?</h2>
-        <div class="upload-cards">
-            <button class="upload-card" id="btnUploadDB">
-                <div class="upload-icon-wrapper">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+    <div class="modal-content upload-modal-content">
+        <button class="modal-close-x" id="btnCloseModalX">&times;</button>
+        
+        <!-- ЭКРАН 1: Выбор действия и домен -->
+        <div id="uploadViewSelect">
+            <h2 class="modal-title">Что вы хотите загрузить?</h2>
+            
+            <div class="domain-input-section">
+                <label>Домен платформы (для ссылок «Перейти»)</label>
+                <div class="domain-input-group">
+                    <input type="url" id="modalDomainInput" list="domainHistoryList" autocomplete="off">
+                    <datalist id="domainHistoryList"></datalist>
+                    <button class="success" id="btnApplyDomain">Применить</button>
                 </div>
-                <div class="upload-title">Загрузить БД</div>
-                <div class="upload-desc">Импорт ранее сохранённого Excel</div>
-            </button>
-            <button class="upload-card" id="btnUploadSource">
-                <div class="upload-icon-wrapper">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
-                </div>
-                <div class="upload-title">Загрузить исходники</div>
-                <div class="upload-desc">Загрузка новых Excel-файлов</div>
-            </button>
+            </div>
+
+            <div class="upload-cards">
+                <button class="upload-card" id="btnUploadDB">
+                    <div class="upload-icon-wrapper">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    </div>
+                    <div class="upload-title">Загрузить БД</div>
+                    <div class="upload-desc">Импорт ранее сохранённого Excel</div>
+                </button>
+                <button class="upload-card" id="btnUploadSource">
+                    <div class="upload-icon-wrapper">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+                    </div>
+                    <div class="upload-title">Загрузить исходники</div>
+                    <div class="upload-desc">Загрузка новых Excel-файлов</div>
+                </button>
+            </div>
         </div>
-        <button class="modal-close-btn" id="btnCloseModal">Отмена</button>
+
+        <!-- ЭКРАН 2: Прогресс -->
+        <div id="uploadViewProgress" style="display: none; text-align: center; padding: 40px 0;">
+            <h2 class="modal-title">Загрузка файлов...</h2>
+            <div class="progress-bar-bg" style="margin: 40px 0; height: 12px;">
+                <div class="progress-bar-fill" id="modalProgressFill" style="width: 0%;"></div>
+            </div>
+            <div id="modalProgressText" style="color: var(--muted); font-weight: 500;">Чтение файла...</div>
+        </div>
+
+        <!-- ЭКРАН 3: Предпросмотр -->
+        <div id="uploadViewPreview" style="display: none;">
+            <h2 class="modal-title" style="color: var(--success);">Файлы готовы к загрузке</h2>
+            <p style="text-align: center; color: var(--muted); margin-bottom: 20px;">Проверьте, что выбранные файлы верны</p>
+            <div id="previewFilesList" class="preview-files-list"></div>
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+                <button class="secondary" id="btnPreviewCancel">Отмена</button>
+                <button class="success" id="btnPreviewContinue">Продолжить</button>
+            </div>
+        </div>
+
+        <!-- ЭКРАН 4: Успех -->
+        <div id="uploadViewDone" style="display: none; text-align: center; padding: 20px 0;">
+            <div class="success-icon">✔</div>
+            <h2 class="modal-title" style="color: var(--success);">Файл успешно загружен</h2>
+            <p id="doneMessage" style="color: var(--muted); margin-bottom: 20px;"></p>
+            <button class="success" id="btnDoneClose">Продолжить</button>
+        </div>
+
+        <!-- ЭКРАН 5: Ошибка -->
+        <div id="uploadViewError" style="display: none; text-align: center; padding: 20px 0;">
+            <div class="error-icon">!</div>
+            <h2 class="modal-title" style="color: var(--danger);">Ошибка загрузки</h2>
+            <p id="errorMessage" style="color: var(--muted); margin-bottom: 20px;"></p>
+            <button class="secondary" id="btnErrorClose">Выбрать другой файл</button>
+        </div>
+
     </div>
 </div>
 
