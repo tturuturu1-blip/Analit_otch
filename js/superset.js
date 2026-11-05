@@ -1,14 +1,14 @@
-// js/superset.js — ИСПРАВЛЕНИЕ ЛОГИКИ КАЧЕСТВА И УДАЛЕНИЕ ТИПА ЗАДАНИЯ
-// ★ ИЗМЕНЕНО: rebuildTable2 — убран fallback, теперь качество факт считается строго по пулу (Задаче).
-// ★ ИЗМЕНЕНО: из getTable1Config и buildTable1 удалена колонка "Тип задания".
-// Ранее добавленное: buildNorms и buildTable3 — выбор по самой свежей дате, buildKPIs удален.
+// js/superset.js — ИСПРАВЛЕНА ОШИБКА TRIM (Числа в названиях проектов)
+// ★ ИЗМЕНЕНО: В normalizeProject добавлено String(), чтобы числа из Excel не ломали загрузку.
+// Ранее добавленное: rebuildTable2 без fallback, удален тип задания, цена и нормы по свежей дате.
 
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
 
 // ===== Утилиты =====
 function normalizeProject(project) {
-    return (project || '').trim();
+    // ★ ИСПРАВЛЕНО: оборачиваем в String(), чтобы избежать ошибки trim() на числах
+    return String(project || '').trim();
 }
 
 // ===== Кэш проектов главной страницы =====
@@ -49,7 +49,7 @@ function getMainProjects() {
 export function getFilteredSupersetRaw() {
     const mainSet = getMainProjects();
     const filterFn = (r) => {
-        const proj = (getVal(r, 'Проект') || '').trim();
+        const proj = String(getVal(r, 'Проект') || '').trim();
         return mainSet.has(proj);
     };
     return {
@@ -274,7 +274,7 @@ function computeEmployeeQualityIndex() {
 
     for (const r of state.processedData) {
         if (r.quality == null || !isFinite(r.quality)) continue;
-        const em = (r.marker || '').trim().toLowerCase();
+        const em = String(r.marker || '').trim().toLowerCase();
         if (!em) continue;
 
         if (dateFrom || dateTo) {
@@ -284,10 +284,10 @@ function computeEmployeeQualityIndex() {
             if (dateTo && iso > dateTo) continue;
         }
 
-        const proj = normalizeProject(r.project);
-        if (state.currentTab !== 'all' && proj && proj !== state.currentTab) continue;
+        const proj = normalizeProject(r.project).replace(/_validate$/, '').trim().toLowerCase();
+        if (state.currentTab !== 'all' && proj && proj !== state.currentTab.toLowerCase()) continue;
 
-        const pool = r.pool || '';
+        const pool = String(r.pool || '').trim().toLowerCase();
 
         const key = em + '|' + proj + '|' + pool + '|' + (r.fileName || '');
         if (seen.has(key)) continue;
@@ -374,7 +374,6 @@ export function getTable1Config() {
         { key: 'ballsPerHour', label: 'Факт баллов/час', get: r => String(r.ballsPerHour || '') },
         { key: 'prodPerHour', label: 'Кпроизв в час', get: r => String(r.prodPerHour || '') },
         { key: 'price', label: 'Цена', get: r => String(r.price || '') },
-        // ★ УДАЛЕНО: { key: 'taskType', label: 'Тип задания', get: r => String(r.taskType || '') },
         { key: 'period', label: 'Период разметки', get: r => formatPeriod(r.dateStart, r.dateEnd) }
     ];
 }
@@ -428,7 +427,7 @@ function buildTable1() {
     for (const r of state.rawSuperset2) {
         const project = normalizeProject(getVal(r, 'Проект'));
         if (useMainSet && !mainSet.has(project)) continue;
-        const task = getVal(r, 'Задача') || '';
+        const task = String(getVal(r, 'Задача') || '');
         const key = project + '|' + task;
         seen.add(key);
         const perf = idx1[key] || {};
@@ -447,14 +446,13 @@ function buildTable1() {
             ballsPerHour: parseHtmlNumber(getVal(perf, 'Факт баллов/час')),
             prodPerHour: parseHtmlNumber(getVal(perf, 'Кпроизв в час')),
             price: getVal(perf, 'Цена') || ''
-            // ★ УДАЛЕНО: taskType: getVal(perf, 'Тип задания') || ''
         });
     }
 
     for (const r of state.rawSuperset1) {
         const project = normalizeProject(getVal(r, 'Проект'));
         if (useMainSet && !mainSet.has(project)) continue;
-        const task = getVal(r, 'Задача') || '';
+        const task = String(getVal(r, 'Задача') || '');
         const key = project + '|' + task;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -467,7 +465,6 @@ function buildTable1() {
             ballsPerHour: parseHtmlNumber(getVal(r, 'Факт баллов/час')),
             prodPerHour: parseHtmlNumber(getVal(r, 'Кпроизв в час')),
             price: getVal(r, 'Цена') || ''
-            // ★ УДАЛЕНО: taskType: getVal(r, 'Тип задания') || ''
         });
     }
 
@@ -485,23 +482,31 @@ function rebuildTable2() {
         const project = normalizeProject(getVal(r, 'Проект'));
         if (useMainSet && !mainSet.has(project)) continue;
 
-        const fio = getVal(r, 'ФИО') || '';
-        const task = getVal(r, 'Задача') || '';
+        const fio = String(getVal(r, 'ФИО') || '');
+        const task = String(getVal(r, 'Задача') || '');
         const date = parseExcelDate(getVal(r, 'Дата'));
 
         if (!matchesProject(project)) continue;
         if (!matchesDateRangeRow(date)) continue;
         if (!matchesTask(task)) continue;
 
-        const email = fioToEmail[fio.trim()];
+        let email = fioToEmail[fio.trim()];
+        if (!email && fio.includes('@')) email = fio.trim();
+
         let factQuality = null;
         
-        // ★ ИЗМЕНЕНО: считаем качество строго по пулу (задаче). Без fallback на проект или всё.
-        if (email) {
-            const em = email.toLowerCase();
-            const ptKey = em + '|' + project + '|' + task;
+        const projClean = project.replace(/_validate$/, '').trim().toLowerCase();
+        const taskClean = task.trim().toLowerCase();
+        
+        const searchKeys = [];
+        if (email) searchKeys.push(email.toLowerCase().trim());
+        if (fio) searchKeys.push(fio.toLowerCase().trim());
+
+        for (const key of searchKeys) {
+            const ptKey = key + '|' + projClean + '|' + taskClean;
             if (qualityIdx.byEmailProjectTask[ptKey]) {
                 factQuality = avg(qualityIdx.byEmailProjectTask[ptKey]);
+                break;
             }
         }
 
@@ -586,7 +591,7 @@ function rebuildTable4() {
         const project = normalizeProject(getVal(r, 'Проект'));
         if (useMainSet && !mainSet.has(project)) continue;
 
-        const fio = getVal(r, 'ФИО') || '';
+        const fio = String(getVal(r, 'ФИО') || '');
         if (!fio) continue;
 
         if (!matchesProject(project)) continue;
@@ -594,7 +599,7 @@ function rebuildTable4() {
         const date = parseExcelDate(getVal(r, 'Дата'));
         if (!matchesDateRangeRow(date)) continue;
 
-        const task = getVal(r, 'Задача') || '';
+        const task = String(getVal(r, 'Задача') || '');
         if (!matchesTask(task)) continue;
 
         if (!byFio[fio]) byFio[fio] = { fio, norms: [] };
@@ -606,14 +611,21 @@ function rebuildTable4() {
 
     const rows = [];
     for (const fio in byFio) {
-        const email = fioToEmail[fio.trim()];
+        let email = fioToEmail[fio.trim()];
+        if (!email && fio.includes('@')) email = fio.trim();
+        
         let factQuality = null;
-        if (email) {
-            const em = email.toLowerCase();
-            if (qualityIdx.byEmailOnly[em]) {
-                factQuality = avg(qualityIdx.byEmailOnly[em]);
+        const searchKeys = [];
+        if (email) searchKeys.push(email.toLowerCase().trim());
+        if (fio) searchKeys.push(fio.toLowerCase().trim());
+
+        for (const key of searchKeys) {
+            if (qualityIdx.byEmailOnly[key]) {
+                factQuality = avg(qualityIdx.byEmailOnly[key]);
+                break;
             }
         }
+        
         rows.push({
             fio,
             factQuality,
