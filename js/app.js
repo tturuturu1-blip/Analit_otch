@@ -1,7 +1,11 @@
-// js/app.js — НОВАЯ ЛОГИКА МОДАЛЬНОГО ОКНА ЗАГРУЗКИ И ДОМЕНОВ
+// js/app.js — ПОЛНАЯ ПЕРЕРАБОТКА ЛОГИКИ ИНТЕРФЕЙСА
+// ★ ДОБАВЛЕНО: логика новых кнопок сайдбара (скачать, пересчитать, очистить).
+// ★ ДОБАВЛЕНО: сценарий загрузки файлов (карточки, группировка, крестики, добавление).
+// ★ ДОБАВЛЕНО: модальное окно разрешения конфликтов (дубликатов).
+// ★ ДОБАВЛЕНО: экспорт и генерация отчета перенесены в модалку скачивания.
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
-import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
+import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
 import {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll, onOptionChange,
     populateAllMultiSelects, triggerFilterUpdate, renderErrorsTable,
@@ -21,7 +25,7 @@ import {
 } from './feedback.js';
 import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw, addNormEntry, getNormForDate } from './superset.js';
 import {
-    updateProgress, yieldToUI, log, formatDate, escapeHtml, parseExcelDate
+    updateProgress, yieldToUI, log, formatDate, escapeHtml, parseExcelDate, detectTableType
 } from './utils.js';
 import { generateHtmlReport } from './report.js';
 
@@ -67,7 +71,7 @@ Object.assign(window, {
     changePage
 });
 
-// ===== Логика боковой панели и логотипа =====
+// ===== Боковая панель =====
 const sidebar = document.getElementById('sidebar');
 const btnSidebarToggle = document.getElementById('btnSidebarToggle');
 const sidebarLogoText = document.getElementById('sidebarLogoText');
@@ -75,16 +79,98 @@ const sidebarLogoText = document.getElementById('sidebarLogoText');
 if (btnSidebarToggle) {
     btnSidebarToggle.addEventListener('click', () => {
         sidebar.classList.toggle('expanded');
-        
-        if (sidebar.classList.contains('expanded')) {
-            sidebarLogoText.textContent = 'Валидатор';
-        } else {
-            sidebarLogoText.textContent = 'В';
-        }
+        sidebarLogoText.textContent = sidebar.classList.contains('expanded') ? 'Валидатор' : 'В';
     });
 }
 
-// ===== НОВАЯ ЛОГИКА МОДАЛЬНОГО ОКНА ЗАГРУЗКИ =====
+// ===== УТИЛИТЫ САЙДБАРА =====
+const btnSidebarDownload = document.getElementById('btnSidebarDownload');
+const downloadModal = document.getElementById('downloadModal');
+if (btnSidebarDownload) {
+    btnSidebarDownload.addEventListener('click', () => downloadModal.classList.add('active'));
+}
+
+const btnSidebarRelink = document.getElementById('btnSidebarRelink');
+if (btnSidebarRelink) btnSidebarRelink.addEventListener('click', () => recomputeDashboard());
+
+const btnSidebarClear = document.getElementById('btnSidebarClear');
+if (btnSidebarClear) btnSidebarClear.addEventListener('click', handleClearAll);
+
+// ===== МОДАЛЬНОЕ ОКНО СКАЧИВАНИЯ =====
+document.getElementById('btnDownloadExcel').addEventListener('click', () => {
+    if (!state.processedData.length && !state.feedbackData.length) {
+        alert('Нет данных для экспорта');
+        return;
+    }
+    try {
+        const wb = XLSX.utils.book_new();
+        if (state.processedData.length > 0) {
+            const cleanProcessed = state.processedData.map(r => ({
+                "Дата валидации": r.date ? formatDate(r.date) : "",
+                "Проект": (r.project || "").replace(/_validate$/, ''),
+                "Пул": r.pool || "",
+                "Почта разметчика": r.marker || "",
+                "Наименование файла": r.fileName || "",
+                "Итог": r.result || "",
+                "Тип ошибки": r.errorType || "",
+                "Комментарий": r.comment || "",
+                "Временной интервал": r.interval || "",
+                "Качество по задаче": r.quality,
+                "Почта валидатора": r.validator || "",
+                "Всего фрагментов": r.fragments || 0
+            }));
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
+        }
+        if (state.feedbackData.length > 0) {
+            const cleanFeedback = state.feedbackData.map(f => {
+                let formattedDate = f.date;
+                if (f.date) {
+                    const d = new Date(f.date);
+                    if (!isNaN(d.getTime())) formattedDate = formatDate(d);
+                }
+                return {
+                    "Дата": formattedDate, "Разметчик": f.marker || "", "Статус": f.status || "",
+                    "Тип ВКС": f.typeVKS || "", "Провел": f.conductor || "",
+                    "Проект": f.project || "", "Пулы с ошибками": f.pools || "",
+                    "Ср. качество за период": f.avgQuality ?? ""
+                };
+            });
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanFeedback), "Обратная связь");
+        }
+        if (state.rawEmployeeMap.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawEmployeeMap), "Сотрудники");
+        if (state.rawMarkers.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawMarkers), "Markers (сырые)");
+        if (state.rawValidation.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawValidation), "Валидация (сырые)");
+
+        const allRecommendationsForExport = (state.rawRecommendations || []).concat(state.rawRecommendationsManual || []);
+        if (allRecommendationsForExport.length > 0) {
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRecommendationsForExport), "Рекомендации (сырые)");
+        }
+
+        if (state.rawFlatValidations.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
+
+        const { s1, s2, s3 } = getFilteredSupersetRaw();
+        if (s1.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s1), "Суперсет 1 (сырые)");
+        if (s2.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s2), "Суперсет 2 (сырые)");
+        if (s3.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s3), "Суперсет 3 (сырые)");
+
+        XLSX.writeFile(wb, `full_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        log('Полный экспорт выполнен', false);
+        downloadModal.classList.remove('active');
+    } catch (err) {
+        alert('Ошибка экспорта: ' + err.message);
+    }
+});
+
+document.getElementById('btnDownloadReport').addEventListener('click', async () => {
+    try {
+        await generateHtmlReport();
+        downloadModal.classList.remove('active');
+    } catch (err) {
+        alert('Ошибка генерации отчёта: ' + err.message);
+    }
+});
+
+// ===== МОДАЛЬНОЕ ОКНО ЗАГРУЗКИ =====
 const uploadModal = document.getElementById('uploadModal');
 const btnSidebarAdd = document.getElementById('btnSidebarAdd');
 const btnCloseModalX = document.getElementById('btnCloseModalX');
@@ -95,23 +181,23 @@ const viewPreview = document.getElementById('uploadViewPreview');
 const viewDone = document.getElementById('uploadViewDone');
 const viewError = document.getElementById('uploadViewError');
 
+const previewFilesContainer = document.getElementById('previewFilesContainer');
 const modalProgressFill = document.getElementById('modalProgressFill');
-const modalProgressText = document.getElementById('modalProgressText');
-const previewFilesList = document.getElementById('previewFilesList');
-const errorMessage = document.getElementById('errorMessage');
-const doneMessage = document.getElementById('doneMessage');
+const modalProgressPct = document.getElementById('modalProgressPct');
+const modalProgressStage = document.getElementById('modalProgressStage');
+const modalProgressTitle = document.getElementById('modalProgressTitle');
 
 const modalDomainInput = document.getElementById('modalDomainInput');
 const domainHistoryList = document.getElementById('domainHistoryList');
 const btnApplyDomain = document.getElementById('btnApplyDomain');
 
-let pendingFiles = []; // Временное хранение файлов для предпросмотра
-let uploadMode = 'source'; // 'source' или 'db'
+let pendingFiles = [];
+let uploadMode = 'source';
 
 function showModalView(view) {
     viewSelect.style.display = view === 'select' ? 'block' : 'none';
-    viewProgress.style.display = view === 'progress' ? 'block' : 'none';
     viewPreview.style.display = view === 'preview' ? 'block' : 'none';
+    viewProgress.style.display = view === 'progress' ? 'block' : 'none';
     viewDone.style.display = view === 'done' ? 'block' : 'none';
     viewError.style.display = view === 'error' ? 'block' : 'none';
 }
@@ -120,159 +206,137 @@ function resetUploadModal() {
     showModalView('select');
     pendingFiles = [];
     uploadModal.classList.remove('active');
+    document.getElementById('logBox').innerHTML = '';
     
-    // Заполняем историю доменов
-    if (modalDomainInput) {
-        modalDomainInput.value = state.validationBaseUrl || '';
-    }
-    if (domainHistoryList) {
-        domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
-    }
+    if (modalDomainInput) modalDomainInput.value = state.validationBaseUrl || '';
+    if (domainHistoryList) domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
 }
 
-if (btnSidebarAdd) {
-    btnSidebarAdd.addEventListener('click', () => {
-        resetUploadModal();
-        uploadModal.classList.add('active');
-    });
-}
-
-if (btnCloseModalX) {
-    btnCloseModalX.addEventListener('click', resetUploadModal);
-}
+if (btnSidebarAdd) btnSidebarAdd.addEventListener('click', () => { resetUploadModal(); uploadModal.classList.add('active'); });
+if (btnCloseModalX) btnCloseModalX.addEventListener('click', resetUploadModal);
 
 // Применение домена
 if (btnApplyDomain) {
     btnApplyDomain.addEventListener('click', () => {
         const val = modalDomainInput.value.trim();
         state.validationBaseUrl = val;
-        
-        if (val) {
-            // Добавляем в историю, если такого еще нет
-            if (!state.domainHistory.includes(val)) {
-                state.domainHistory.push(val);
-                // Ограничиваем историю 10 записями
-                if (state.domainHistory.length > 10) state.domainHistory.shift();
-            }
+        if (val && !state.domainHistory.includes(val)) {
+            state.domainHistory.push(val);
+            if (state.domainHistory.length > 10) state.domainHistory.shift();
         }
         saveToStorage();
+        if (domainHistoryList) domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
         
-        // Обновляем datalist
-        if (domainHistoryList) {
-            domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
-        }
-        
-        // Показываем быстрый фидбек
         const oldText = btnApplyDomain.textContent;
-        btnApplyDomain.textContent = '✓ Сохранено';
+        btnApplyDomain.textContent = '✓';
         btnApplyDomain.style.background = 'var(--success)';
-        setTimeout(() => {
-            btnApplyDomain.textContent = oldText;
-            btnApplyDomain.style.background = '';
-        }, 1500);
+        setTimeout(() => { btnApplyDomain.textContent = oldText; btnApplyDomain.style.background = ''; }, 1500);
     });
 }
 
 // Выбор файлов
-const btnUploadDB = document.getElementById('btnUploadDB');
-const btnUploadSource = document.getElementById('btnUploadSource');
 const fileInput = document.getElementById('fileInput');
 const importInput = document.getElementById('importInput');
+document.getElementById('btnUploadSource').addEventListener('click', () => { uploadMode = 'source'; fileInput.click(); });
+document.getElementById('btnUploadDB').addEventListener('click', () => { uploadMode = 'db'; importInput.click(); });
+document.getElementById('btnAddMoreFiles').addEventListener('click', () => fileInput.click());
 
-if (btnUploadDB) {
-    btnUploadDB.addEventListener('click', () => {
-        uploadMode = 'db';
-        importInput.click();
-    });
+function guessFileType(filename) {
+    const n = filename.toLowerCase();
+    if (n.includes('marker') || n.includes('разметчик')) return 'Markers';
+    if (n.includes('superset 1') || n.includes('суперсет 1') || n.includes('сет1')) return 'Суперсет 1';
+    if (n.includes('superset 2') || n.includes('суперсет 2') || n.includes('сет2')) return 'Суперсет 2';
+    if (n.includes('superset 3') || n.includes('суперсет 3') || n.includes('сет3')) return 'Суперсет 3';
+    if (n.includes('valid') || n.includes('валидац')) return 'Валидация';
+    if (n.includes('recommend') || n.includes('рекоменд')) return 'Рекомендации';
+    if (n.includes('employee') || n.includes('сотрудник')) return 'Сотрудники';
+    if (n.includes('flat') || n.includes('плоск')) return 'Плоская валидация';
+    return 'Другое';
 }
 
-if (btnUploadSource) {
-    btnUploadSource.addEventListener('click', () => {
-        uploadMode = 'source';
-        fileInput.click();
+function renderPreviewFiles() {
+    const groups = {};
+    pendingFiles.forEach((file, idx) => {
+        const type = guessFileType(file.name);
+        if (!groups[type]) groups[type] = [];
+        groups[type].push({ file, idx });
     });
+
+    let html = '';
+    for (const type in groups) {
+        html += `<div style="grid-column: 1 / -1; font-weight: 700; font-size: 0.85rem; color: var(--muted); margin-top: 10px; margin-bottom: -5px; text-transform: uppercase;">${type}</div>`;
+        for (const item of groups[type]) {
+            const sizeMb = (item.file.size / (1024 * 1024)).toFixed(2);
+            html += `
+                <div class="preview-file-card">
+                    <button class="file-remove-btn" onclick="removePendingFile(${item.idx})">&times;</button>
+                    <div class="file-name" title="${escapeHtml(item.file.name)}">${escapeHtml(item.file.name)}</div>
+                    <div class="file-type-badge">${sizeMb} МБ</div>
+                </div>
+            `;
+        }
+    }
+    previewFilesContainer.innerHTML = html || '<div style="color:var(--muted); width:100%; text-align:center;">Нет выбранных файлов</div>';
 }
 
-// Обработка выбора файлов (Предпросмотр)
+window.removePendingFile = (idx) => {
+    pendingFiles.splice(idx, 1);
+    renderPreviewFiles();
+    if (pendingFiles.length === 0) showModalView('select');
+};
+
 function handleFileSelection(files) {
     if (!files.length) return;
-    pendingFiles = Array.from(files);
+    if (uploadMode === 'db' && files.length > 1) {
+        alert('Для загрузки БД выберите только один файл.');
+        pendingFiles = [files[0]];
+    } else {
+        pendingFiles.push(...Array.from(files));
+    }
     
-    previewFilesList.innerHTML = pendingFiles.map(f => {
-        const sizeMb = (f.size / (1024 * 1024)).toFixed(2);
-        return `
-            <div class="preview-file-item">
-                <div class="preview-file-info">
-                    <span class="preview-file-name">📄 ${escapeHtml(f.name)}</span>
-                    <span class="preview-file-size">${sizeMb} МБ</span>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
+    renderPreviewFiles();
     showModalView('preview');
 }
 
-// Обработчик инпута источников
-if (fileInput) {
-    fileInput.addEventListener('change', (e) => {
-        const files = Array.from(e.target.files);
-        e.target.value = '';
-        if (files.length > 0) handleFileSelection(files);
-    });
-}
+fileInput.addEventListener('change', (e) => { const files = Array.from(e.target.files); e.target.value = ''; handleFileSelection(files); });
+importInput.addEventListener('change', (e) => { const files = Array.from(e.target.files); e.target.value = ''; handleFileSelection(files); });
 
-// Обработчик инпута БД
-if (importInput) {
-    importInput.addEventListener('change', (e) => {
-        const files = Array.from(e.target.files);
-        e.target.value = '';
-        if (files.length > 0) handleFileSelection(files);
-    });
-}
-
-// Кнопки на экране Предпросмотра
-document.getElementById('btnPreviewCancel').addEventListener('click', () => {
-    resetUploadModal();
-});
+document.getElementById('btnPreviewCancel').addEventListener('click', resetUploadModal);
 
 document.getElementById('btnPreviewContinue').addEventListener('click', async () => {
     if (pendingFiles.length === 0) return;
     
     showModalView('progress');
     modalProgressFill.style.width = '10%';
-    modalProgressText.textContent = 'Чтение файлов...';
+    modalProgressPct.textContent = '10%';
+    modalProgressStage.textContent = 'Чтение файлов...';
+    modalProgressTitle.textContent = 'Загрузка';
     await yieldToUI();
     
     try {
         if (uploadMode === 'source') {
-            // Логика для источников
             const results = await readExcelFiles(pendingFiles);
-            modalProgressFill.style.width = '50%';
-            modalProgressText.textContent = 'Обработка данных...';
-            await yieldToUI();
-            
             if (results.length === 0) throw new Error('Файлы не прочитаны или имеют неверный формат.');
             
-            await processNewRows(results);
+            modalProgressStage.textContent = 'Проверка на дубликаты...';
+            const procRes = await processNewRows(results);
             
-            if (!state.validationBaseUrl) {
-                log('⚠️ Домен платформы не указан. Ссылки «Перейти» у загруженных данных не сформируются.', true);
+            if (procRes.hasConflicts) {
+                uploadModal.classList.remove('active');
+                openConflictModal(procRes);
+            } else {
+                showModalView('done');
+                document.getElementById('doneMessage').textContent = `Успешно обработано файлов: ${results.length}`;
             }
-            
-            modalProgressFill.style.width = '100%';
-            doneMessage.textContent = `Успешно обработано файлов: ${results.length}`;
-            showModalView('done');
-            
         } else {
-            // Логика для БД (Импорт)
+            // Импорт БД
             const file = pendingFiles[0];
             const reader = new FileReader();
-            
             reader.onload = async (ev) => {
                 try {
                     modalProgressFill.style.width = '40%';
-                    modalProgressText.textContent = 'Разбор структуры Excel...';
+                    modalProgressPct.textContent = '40%';
+                    modalProgressStage.textContent = 'Разбор структуры Excel...';
                     await yieldToUI();
                     
                     const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
@@ -322,41 +386,128 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                         saveFeedbackToStorage();
                     }
                     
-                    modalProgressFill.style.width = '80%';
-                    modalProgressText.textContent = 'Сохранение в базу...';
-                    await yieldToUI();
-                    
                     saveToStorage();
                     await recomputeDashboard();
-                    
-                    modalProgressFill.style.width = '100%';
-                    doneMessage.textContent = 'База данных успешно восстановлена.';
                     showModalView('done');
-                    
+                    document.getElementById('doneMessage').textContent = 'База данных успешно восстановлена.';
                 } catch (err) {
-                    errorMessage.textContent = err.message;
+                    document.getElementById('errorMessage').textContent = err.message;
                     showModalView('error');
                 }
-            };
-            reader.onerror = () => {
-                errorMessage.textContent = 'Не удалось прочитать файл. Проверьте его целостность.';
-                showModalView('error');
             };
             reader.readAsArrayBuffer(file);
         }
     } catch (err) {
-        errorMessage.textContent = err.message;
+        document.getElementById('errorMessage').textContent = err.message;
         showModalView('error');
     }
 });
 
-// Кнопки на экранах Успех / Ошибка
 document.getElementById('btnDoneClose').addEventListener('click', resetUploadModal);
+document.getElementById('btnUploadMore').addEventListener('click', () => {
+    pendingFiles = [];
+    showModalView('select');
+});
 document.getElementById('btnErrorClose').addEventListener('click', () => {
-    showModalView('select'); // Возвращаем на первый экран
+    showModalView('select');
 });
 
-// ===== Делегирование кликов по табам =====
+// ===== МОДАЛЬНОЕ ОКНО КОНФЛИКТОВ =====
+const conflictModal = document.getElementById('conflictModal');
+const conflictList = document.getElementById('conflictList');
+
+function openConflictModal(procRes) {
+    document.getElementById('doneMessage').textContent = `Добавлено новых записей: ${procRes.newCount}. Найдено конфликтов: ${procRes.conflictsCount}.`;
+    
+    conflictList.innerHTML = state.pendingConflicts.map((c, idx) => {
+        return `
+            <div class="conflict-card" id="conflict-${idx}">
+                <div class="conflict-col selected-old" onclick="selectConflict(${idx}, 'old')">
+                    <h4>Старые данные (в базе)</h4>
+                    <div class="conflict-data-row">Файл: <span>${escapeHtml(c.fileName)}</span></div>
+                    <div class="conflict-data-row">Данные: <span>${escapeHtml(JSON.stringify(c.oldRow).slice(0, 100))}...</span></div>
+                </div>
+                <div class="conflict-col" onclick="selectConflict(${idx}, 'new')">
+                    <h4 style="color: var(--success);">Новые данные (из файла)</h4>
+                    <div class="conflict-data-row">Файл: <span>${escapeHtml(c.fileName)}</span></div>
+                    <div class="conflict-data-row">Данные: <span>${escapeHtml(JSON.stringify(c.newRow).slice(0, 100))}...</span></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    state.pendingConflicts.forEach(c => c.choice = 'old'); // По умолчанию оставляем старое
+    conflictModal.classList.add('active');
+}
+
+window.selectConflict = (idx, choice) => {
+    state.pendingConflicts[idx].choice = choice;
+    const card = document.getElementById(`conflict-${idx}`);
+    const cols = card.querySelectorAll('.conflict-col');
+    if (choice === 'old') {
+        cols[0].className = 'conflict-col selected-old';
+        cols[1].className = 'conflict-col';
+    } else {
+        cols[0].className = 'conflict-col';
+        cols[1].className = 'conflict-col selected-new';
+    }
+};
+
+document.getElementById('btnConflictKeepOld').addEventListener('click', () => {
+    state.pendingConflicts.forEach(c => c.choice = 'old');
+    commitNewData(state.pendingConflicts);
+    conflictModal.classList.remove('active');
+    showModalView('done');
+});
+
+document.getElementById('btnConflictApplyAll').addEventListener('click', () => {
+    state.pendingConflicts.forEach(c => c.choice = 'new');
+    commitNewData(state.pendingConflicts);
+    conflictModal.classList.remove('active');
+    showModalView('done');
+});
+
+// ===== ОБЩАЯ ЛОГИКА =====
+function handleClearAll() {
+    if (!confirm('Удалить все данные?')) return;
+    
+    // Очистка raw данных
+    state.rawMarkers = []; state.rawValidation = []; state.rawRecommendations = []; state.rawRecommendationsManual = [];
+    state.rawFlatValidations = []; state.rawSuperset1 = []; state.rawSuperset2 = []; state.rawSuperset3 = [];
+    state.rawEmployeeMap = []; state.processedData = []; state.feedbackData = [];
+    state.validationBaseUrl = ''; state.domainHistory = [];
+    
+    // Очистка суперсета
+    state.superset.table1 = []; state.superset.table2 = []; state.superset.table3 = []; state.superset.table4 = [];
+    state.superset.filteredTable1 = []; state.superset.filteredTable2 = []; state.superset.filteredTable3 = []; state.superset.filteredTable4 = [];
+    state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null, avgPrice: null };
+    state.superset.norms = { byProjectPool: {}, byProject: {}, globalAvg: null };
+    state.superset.employeeMap = { fioToEmail: {}, emailToFio: {} };
+    state.superset._mainProjects = null;
+    state.superset.filters = { dateFrom: '', dateTo: '', tasks: new Set() };
+    state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
+    
+    // Очистка фидбека
+    state.feedbackGeneration.appliedPools.clear(); state.feedbackGeneration.appliedGroups.clear(); state.feedbackGeneration.videoLinks = {};
+    const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
+    if (fbGenContainer) fbGenContainer.innerHTML = '';
+    
+    for (const key in state.pagination) state.pagination[key] = 1;
+    try { localStorage.removeItem('validation_dashboard_data_v3'); localStorage.removeItem('validation_feedback_data_v1'); } catch (e) { }
+    
+    const recBody = document.getElementById('recTableBody');
+    if (recBody) { recBody.innerHTML = ''; addRecRow(); }
+    
+    if (modalDomainInput) modalDomainInput.value = '';
+    if (domainHistoryList) domainHistoryList.innerHTML = '';
+    
+    buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
+    if (state.currentMenu === 'superset') renderSupersetPage();
+    if (state.currentMenu === 'feedback') renderFeedbackTable();
+    updateProgress(0, '', 'Готово');
+}
+
+// Делегирование кликов по табам
 const projectTabsContainer = document.getElementById('projectTabs');
 if (projectTabsContainer) {
     projectTabsContainer.addEventListener('click', (e) => {
@@ -366,13 +517,13 @@ if (projectTabsContainer) {
     });
 }
 
-// ===== Даты в суперсете =====
+// Даты в суперсете
 const supersetDateFrom = document.getElementById('supersetDateFrom');
 const supersetDateTo = document.getElementById('supersetDateTo');
 if (supersetDateFrom) supersetDateFrom.addEventListener('change', onSupersetDateChange);
 if (supersetDateTo) supersetDateTo.addEventListener('change', onSupersetDateChange);
 
-// ===== Обновление UI =====
+// Обновление UI
 window.addEventListener('app:data-updated', () => {
     state.superset.filters.dateFrom = '';
     state.superset.filters.dateTo = '';
@@ -383,9 +534,7 @@ window.addEventListener('app:data-updated', () => {
     state.feedbackGeneration.appliedGroups.clear();
     state.feedbackGeneration.videoLinks = {};
 
-    for (const key in state.pagination) {
-        state.pagination[key] = 1;
-    }
+    for (const key in state.pagination) state.pagination[key] = 1;
 
     buildSuperset();
     populateAllMultiSelects();
@@ -398,14 +547,14 @@ window.addEventListener('app:data-updated', () => {
     if (state.currentMenu === 'feedback') renderFeedbackTable();
 });
 
-// ===== Закрытие dropdown =====
+// Закрытие dropdown
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.multi-select')) {
         document.querySelectorAll('.ms-dropdown').forEach(d => d.classList.remove('open'));
     }
 });
 
-// ===== Фильтры по дате =====
+// Фильтры по дате
 for (const id of ['filterDateFrom', 'filterDateTo']) {
     const el = document.getElementById(id);
     if (el) {
@@ -440,7 +589,7 @@ if (btnResetFilters) {
     });
 }
 
-// ===== ТАБЛИЦА РЕКОМЕНДАЦИЙ =====
+// Таблица рекомендаций
 function getRecRowsData() {
     const rows = [];
     document.querySelectorAll('#recTableBody tr').forEach(tr => {
@@ -448,192 +597,45 @@ function getRecRowsData() {
         const marker = tr.querySelector('.rec-marker').value.trim();
         if (!date && !marker && !tr.querySelector('.rec-comment').value.trim() && !tr.querySelector('.rec-item').value.trim()) return;
         rows.push({
-            'Дата валидации': date,
-            'Проект': tr.querySelector('.rec-project').value.trim(),
-            'Пул': tr.querySelector('.rec-pool').value.trim(),
-            'Почта разметчика': marker,
-            'item_id': tr.querySelector('.rec-item').value.trim(),
-            'Интервал': tr.querySelector('.rec-interval').value.trim(),
-            'Комментарий': tr.querySelector('.rec-comment').value.trim(),
-            'Почта валидатора': tr.querySelector('.rec-validator').value.trim()
+            'Дата валидации': date, 'Проект': tr.querySelector('.rec-project').value.trim(),
+            'Пул': tr.querySelector('.rec-pool').value.trim(), 'Почта разметчика': marker,
+            'item_id': tr.querySelector('.rec-item').value.trim(), 'Интервал': tr.querySelector('.rec-interval').value.trim(),
+            'Комментарий': tr.querySelector('.rec-comment').value.trim(), 'Почта валидатора': tr.querySelector('.rec-validator').value.trim()
         });
     });
     return rows;
 }
 
-const btnAddRecRow = document.getElementById('btnAddRecRow');
-if (btnAddRecRow) btnAddRecRow.addEventListener('click', addRecRow);
+document.getElementById('btnAddRecRow').addEventListener('click', addRecRow);
 
-const btnSaveRecommendations = document.getElementById('btnSaveRecommendations');
-if (btnSaveRecommendations) {
-    btnSaveRecommendations.addEventListener('click', async () => {
-        const rows = getRecRowsData();
-        if (rows.length === 0) { alert('Заполните хотя бы одну строку'); return; }
-        // Проверка обязательных полей: дата + почта разметчика
-        const invalid = rows.find(r => !r['Дата валидации'] || !r['Почта разметчика']);
-        if (invalid) {
-            alert('В каждой строке должны быть заполнены «Дата валидации» и «Почта разметчика»');
-            return;
-        }
-        // Сохраняем в отдельный массив
-        state.rawRecommendationsManual.push(...rows);
-        saveToStorage();
-        await recomputeDashboard();
-        document.getElementById('recTableBody').innerHTML = '';
-        addRecRow();
-        log(`Добавлено рекомендаций: ${rows.length}`, false);
-    });
-}
+document.getElementById('btnSaveRecommendations').addEventListener('click', async () => {
+    const rows = getRecRowsData();
+    if (rows.length === 0) { alert('Заполните хотя бы одну строку'); return; }
+    const invalid = rows.find(r => !r['Дата валидации'] || !r['Почта разметчика']);
+    if (invalid) { alert('В каждой строке должны быть заполнены «Дата валидации» и «Почта разметчика»'); return; }
+    
+    state.rawRecommendationsManual.push(...rows);
+    saveToStorage();
+    await recomputeDashboard();
+    document.getElementById('recTableBody').innerHTML = '';
+    addRecRow();
+    log(`Добавлено рекомендаций: ${rows.length}`, false);
+});
 
-const btnExportRecommendations = document.getElementById('btnExportRecommendations');
-if (btnExportRecommendations) {
-    btnExportRecommendations.addEventListener('click', () => {
-        const unsaved = getRecRowsData();
-        const saved = state.rawRecommendationsManual || [];
-        const rows = saved.concat(unsaved);
-        if (rows.length === 0) { alert('Нет рекомендаций для экспорта'); return; }
-        try {
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Рекомендации");
-            XLSX.writeFile(wb, `Рекомендации_${new Date().toISOString().slice(0, 10)}.xlsx`);
-            log(`Excel с рекомендациями скачан (${rows.length} шт)`, false);
-        } catch (err) {
-            log('Ошибка экспорта рекомендаций: ' + err.message, true);
-        }
-    });
-}
-
-// ===== Экспорт в Excel =====
-const btnExport = document.getElementById('btnExport');
-if (btnExport) {
-    btnExport.addEventListener('click', () => {
-        if (!state.processedData.length && !state.feedbackData.length) {
-            alert('Нет данных для экспорта');
-            return;
-        }
-        try {
-            const wb = XLSX.utils.book_new();
-            if (state.processedData.length > 0) {
-                const cleanProcessed = state.processedData.map(r => ({
-                    "Дата валидации": r.date ? formatDate(r.date) : "",
-                    "Проект": (r.project || "").replace(/_validate$/, ''),
-                    "Пул": r.pool || "",
-                    "Почта разметчика": r.marker || "",
-                    "Наименование файла": r.fileName || "",
-                    "Итог": r.result || "",
-                    "Тип ошибки": r.errorType || "",
-                    "Комментарий": r.comment || "",
-                    "Временной интервал": r.interval || "",
-                    "Качество по задаче": r.quality,
-                    "Почта валидатора": r.validator || "",
-                    "Всего фрагментов": r.fragments || 0
-                }));
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
-            }
-            if (state.feedbackData.length > 0) {
-                const cleanFeedback = state.feedbackData.map(f => {
-                    let formattedDate = f.date;
-                    if (f.date) {
-                        const d = new Date(f.date);
-                        if (!isNaN(d.getTime())) formattedDate = formatDate(d);
-                    }
-                    return {
-                        "Дата": formattedDate, "Разметчик": f.marker || "", "Статус": f.status || "",
-                        "Тип ВКС": f.typeVKS || "", "Провел": f.conductor || "",
-                        "Проект": f.project || "", "Пулы с ошибками": f.pools || "",
-                        "Ср. качество за период": f.avgQuality ?? ""
-                    };
-                });
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanFeedback), "Обратная связь");
-            }
-            if (state.rawEmployeeMap.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawEmployeeMap), "Сотрудники");
-            if (state.rawMarkers.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawMarkers), "Markers (сырые)");
-            if (state.rawValidation.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawValidation), "Валидация (сырые)");
-
-            // Объединяем Excel-ные и ручные рекомендации
-            const allRecommendationsForExport = (state.rawRecommendations || []).concat(state.rawRecommendationsManual || []);
-            if (allRecommendationsForExport.length > 0) {
-                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRecommendationsForExport), "Рекомендации (сырые)");
-            }
-
-            if (state.rawFlatValidations.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawFlatValidations), "Плоская валидация");
-
-            const { s1, s2, s3 } = getFilteredSupersetRaw();
-            if (s1.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s1), "Суперсет 1 (сырые)");
-            if (s2.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s2), "Суперсет 2 (сырые)");
-            if (s3.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s3), "Суперсет 3 (сырые)");
-
-            XLSX.writeFile(wb, `full_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
-            log('Полный экспорт выполнен', false);
-        } catch (err) {
-            log('Ошибка экспорта: ' + err.message, true);
-        }
-    });
-}
-
-// ===== Очистка =====
-const btnClear = document.getElementById('btnClear');
-if (btnClear) {
-    btnClear.addEventListener('click', () => {
-        if (!confirm('Удалить все данные?')) return;
-        state.rawMarkers = []; state.rawValidation = []; state.rawRecommendations = [];
-        state.rawRecommendationsManual = [];
-        state.rawFlatValidations = []; state.rawSuperset1 = []; state.rawSuperset2 = [];
-        state.rawSuperset3 = []; state.rawEmployeeMap = []; state.processedData = [];
-        state.feedbackData = [];
-        state.validationBaseUrl = '';
-        state.domainHistory = [];
-        state.superset.table1 = []; state.superset.table2 = []; state.superset.table3 = []; state.superset.table4 = [];
-        state.superset.filteredTable1 = []; state.superset.filteredTable2 = []; state.superset.filteredTable3 = []; state.superset.filteredTable4 = [];
-        state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null, avgPrice: null };
-        state.superset.norms = { byProjectPool: {}, byProject: {}, globalAvg: null };
-        state.superset.employeeMap = { fioToEmail: {}, emailToFio: {} };
-        state.superset._mainProjects = null;
-        state.superset.filters = { dateFrom: '', dateTo: '', tasks: new Set() };
-        state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
-        state.feedbackGeneration.appliedPools.clear(); state.feedbackGeneration.appliedGroups.clear(); state.feedbackGeneration.videoLinks = {};
-        
-        const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
-        if (fbGenContainer) fbGenContainer.innerHTML = '';
-        for (const key in state.pagination) state.pagination[key] = 1;
-        
-        try { 
-            localStorage.removeItem('validation_dashboard_data_v3'); 
-            localStorage.removeItem('validation_feedback_data_v1');
-        } catch (e) { /* ignore */ }
-        
-        const recBody = document.getElementById('recTableBody');
-        if (recBody) { recBody.innerHTML = ''; addRecRow(); }
-        
-        // Очищаем поле домена в модалке
-        if (modalDomainInput) modalDomainInput.value = '';
-        if (domainHistoryList) domainHistoryList.innerHTML = '';
-        
-        buildSuperset(); // Пересчет norms/employeeMap/table1/table3
-        buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
-        if (state.currentMenu === 'superset') renderSupersetPage();
-        if (state.currentMenu === 'feedback') renderFeedbackTable();
-        updateProgress(0, '', 'Готово');
-    });
-}
-
-// ===== Пересчёт и Отчёт =====
-const btnRelink = document.getElementById('btnRelink');
-if (btnRelink) btnRelink.addEventListener('click', () => recomputeDashboard());
-
-const btnGenerateReport = document.getElementById('btnGenerateReport');
-if (btnGenerateReport) {
-    btnGenerateReport.addEventListener('click', async () => {
-        try {
-            log('Формирование HTML-отчёта...', false);
-            await generateHtmlReport();
-            log('HTML-отчёт сформирован и скачан', false);
-        } catch (err) {
-            log('Ошибка генерации отчёта: ' + err.message, true);
-            console.error(err);
-        }
-    });
-}
+document.getElementById('btnExportRecommendations').addEventListener('click', () => {
+    const unsaved = getRecRowsData();
+    const saved = state.rawRecommendationsManual || [];
+    const rows = saved.concat(unsaved);
+    if (rows.length === 0) { alert('Нет рекомендаций для экспорта'); return; }
+    try {
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Рекомендации");
+        XLSX.writeFile(wb, `Рекомендации_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        log(`Excel с рекомендациями скачан (${rows.length} шт)`, false);
+    } catch (err) {
+        log('Ошибка экспорта рекомендаций: ' + err.message, true);
+    }
+});
 
 // ===== Инициализация =====
 initFeedbackForm();
