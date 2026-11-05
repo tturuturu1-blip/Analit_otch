@@ -26,40 +26,41 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
         </button>
 
-        <button class="sidebar-add-btn" id="btnSidebarAdd" title="Добавить">
+        <button class="sidebar-add-btn" id="btnSidebarAdd" title="Загрузить">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
             <span class="nav-label">Загрузить</span>
         </button>
 
         <nav class="sidebar-nav">
-            <!-- Проекты (вместо Главной) -->
             <button class="nav-icon active" onclick="switchMenu('main', this)" title="Проекты">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
                 <span class="nav-label">Проекты</span>
             </button>
-            <!-- Разметчики (вместо Топ ошибок) -->
             <button class="nav-icon" onclick="switchMenu('errors', this)" title="Разметчики">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
                 <span class="nav-label">Разметчики</span>
             </button>
-            <!-- Календарь (вместо Обратной связи) -->
             <button class="nav-icon" onclick="switchMenu('feedback', this)" title="Календарь">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
                 <span class="nav-label">Календарь</span>
             </button>
+            <!-- ★ НОВОЕ: Кнопка Уведомления -->
+            <button class="nav-icon" onclick="switchMenu('notifications', this)" title="Уведомления">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
+                <span class="nav-label">Уведомления</span>
+            </button>
         </nav>
 
-        <!-- Нижние утилиты -->
         <div class="sidebar-utils">
-            <button class="nav-icon" id="btnSidebarDownload" title="Скачать">
+            <button class="nav-icon" id="btnSidebarDownload" title="Сгенерировать">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                <span class="nav-label">Скачать</span>
+                <span class="nav-label">Сгенерировать</span>
             </button>
             <button class="nav-icon" id="btnSidebarRelink" title="Пересчитать">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
                 <span class="nav-label">Пересчитать</span>
             </button>
-            <button class="nav-icon" id="btnSidebarClear" title="Очистить всё">
+            <button class="nav-icon" id="btnSidebarClear" title="Очистить">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                 <span class="nav-label">Очистить</span>
             </button>
@@ -72,12 +73,13 @@
             <div class="tabs" id="projectTabs" style="display:none"></div>
         </header>
 
-        <main class="content">
+        <main class="content" id="mainScrollContainer">
 
             <!-- ================= ПРОЕКТЫ ================= -->
             <section id="section-main" class="section active">
-                <!-- Фильтры (относятся к статистике и валидации) -->
-                <div class="filters">
+                
+                <!-- ★ ПАНЕЛЬ ФИЛЬТРОВ 1 (Для Статистики и Валидации) -->
+                <div class="filters" id="filters-main">
                     <div class="filter-group">
                         <label>Пул</label>
                         <div class="multi-select" id="msPool">
@@ -162,47 +164,6 @@
                 <div class="project-block">
                     <h2 class="block-title">Валидация</h2>
                     
-                    <!-- Создание фидбека (перенесено) -->
-                    <div class="card" style="margin-bottom: 20px;">
-                        <h3 style="margin-bottom: 15px;">Создание фидбека</h3>
-                        <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
-                            <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
-                                <label>Выберите пулы</label>
-                                <div class="multi-select" id="msFbPool">
-                                    <div class="ms-header" onclick="toggleDropdown('msFbPool')">
-                                        <span class="ms-label empty" id="msFbPool_label">Все пулы</span>
-                                        <span class="ms-arrow">▼</span>
-                                    </div>
-                                    <div class="ms-dropdown" id="msFbPool_dropdown">
-                                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                        <label class="ms-item ms-all"><input type="checkbox" id="msFbPool_all" onchange="toggleAll('msFbPool', 'feedbackPool')"> Выбрать все</label>
-                                        <div id="msFbPool_options"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
-                                <label>Выберите группу разметчиков</label>
-                                <div class="multi-select" id="msFbGroup">
-                                    <div class="ms-header" onclick="toggleDropdown('msFbGroup')">
-                                        <span class="ms-label empty" id="msFbGroup_label">Все группы</span>
-                                        <span class="ms-arrow">▼</span>
-                                    </div>
-                                    <div class="ms-dropdown" id="msFbGroup_dropdown">
-                                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                        <label class="ms-item ms-all"><input type="checkbox" id="msFbGroup_all" onchange="toggleAll('msFbGroup', 'feedbackGroup')"> Выбрать все</label>
-                                        <div id="msFbGroup_options"></div>
-                                        <div class="ms-apply-container">
-                                            <button id="btnApplyGroup" style="padding: 6px 16px; font-size: 0.8rem; height: auto;">Применить</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <button class="success" id="btnGenerateFeedback" style="height: 40px;">Создать</button>
-                        </div>
-                        <div id="feedbackGenerationBlocks" style="margin-top: 20px;"></div>
-                    </div>
-
-                    <!-- Добавить рекомендации (перенесено) -->
                     <div class="card" style="margin-bottom: 20px;">
                         <h3 style="margin-bottom: 15px;">Добавить рекомендации</h3>
                         <div class="table-card" style="margin-bottom: 15px; background: #fff; box-shadow: none;">
@@ -234,10 +195,13 @@
                         <datalist id="recValidatorsList"></datalist>
                     </div>
 
-                    <!-- Результаты валидации -->
+                    <!-- Результаты валидации (Пагинация в шапке) -->
                     <div class="table-card">
                         <div class="table-header">
                             <h3>Результаты валидации</h3>
+                            <div class="pagination-container" id="pagination-data" style="margin-top: 0; border: none; padding: 0; background: transparent;">
+                                <div class="pagination-controls" id="pagination-data-controls"></div>
+                            </div>
                         </div>
                         <table id="dataTable">
                             <thead>
@@ -256,37 +220,32 @@
                             </thead>
                             <tbody id="tableBody"></tbody>
                         </table>
-                        <div class="pagination-container" id="pagination-data">
-                            <div class="pagination-info" id="pagination-data-info">Показано 0-0 из 0</div>
-                            <div class="pagination-controls" id="pagination-data-controls"></div>
-                        </div>
                     </div>
                 </div>
 
                 <!-- 3. СУПЕРСЕТ -->
-                <div class="project-block">
+                <div class="project-block" id="section-superset-block">
                     <h2 class="block-title">Суперсет</h2>
                     
-                    <div class="superset-sticky">
-                        <div class="filters superset-filters">
-                            <div class="filter-group"><label>Дата с</label><input type="date" id="supersetDateFrom"></div>
-                            <div class="filter-group"><label>Дата по</label><input type="date" id="supersetDateTo"></div>
-                            <div class="filter-group">
-                                <label>Задача (пул)</label>
-                                <div class="multi-select" id="msSupersetTask">
-                                    <div class="ms-header" onclick="toggleDropdown('msSupersetTask')">
-                                        <span class="ms-label empty" id="msSupersetTask_label">Все задачи</span>
-                                        <span class="ms-arrow">▼</span>
-                                    </div>
-                                    <div class="ms-dropdown" id="msSupersetTask_dropdown">
-                                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                        <label class="ms-item ms-all"><input type="checkbox" id="msSupersetTask_all" onchange="toggleAll('msSupersetTask', 'tasks')"> Выбрать все</label>
-                                        <div id="msSupersetTask_options"></div>
-                                    </div>
+                    <!-- ★ ПАНЕЛЬ ФИЛЬТРОВ 2 (Для Суперсета) -->
+                    <div class="filters superset-filters" id="filters-superset">
+                        <div class="filter-group"><label>Дата с</label><input type="date" id="supersetDateFrom"></div>
+                        <div class="filter-group"><label>Дата по</label><input type="date" id="supersetDateTo"></div>
+                        <div class="filter-group">
+                            <label>Задача (пул)</label>
+                            <div class="multi-select" id="msSupersetTask">
+                                <div class="ms-header" onclick="toggleDropdown('msSupersetTask')">
+                                    <span class="ms-label empty" id="msSupersetTask_label">Все задачи</span>
+                                    <span class="ms-arrow">▼</span>
+                                </div>
+                                <div class="ms-dropdown" id="msSupersetTask_dropdown">
+                                    <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                    <label class="ms-item ms-all"><input type="checkbox" id="msSupersetTask_all" onchange="toggleAll('msSupersetTask', 'tasks')"> Выбрать все</label>
+                                    <div id="msSupersetTask_options"></div>
                                 </div>
                             </div>
-                            <button id="btnResetSupersetFilters" style="height:40px;" onclick="resetSupersetFilters()">Сбросить</button>
                         </div>
+                        <button id="btnResetSupersetFilters" style="height:40px;" onclick="resetSupersetFilters()">Сбросить</button>
                     </div>
                     
                     <h3 style="margin-bottom: 15px;">Сводная таблица (проект + задача)</h3>
@@ -297,9 +256,8 @@
                                     <th>Проект</th><th>Задача</th><th>Размечено, шт</th><th>Норма качества</th>
                                     <th>Качество</th><th>Комментарий</th><th>Без качества, шт</th>
                                     <th>Факт баллов/час</th><th>Кпроизв в час</th><th>Цена</th>
-                                    <th>Период разметки</th>
+                                    <!-- ★ УДАЛЕНО: Период разметки -->
                                 </tr>
-                                <tr id="supersetTable1Filters"></tr>
                             </thead>
                             <tbody id="supersetTable1Body"></tbody>
                         </table>
@@ -319,7 +277,6 @@
                                     <th>Качество в суперсете</th><th>Качество факт.</th>
                                     <th>Норматив</th><th>Без качества, шт</th>
                                 </tr>
-                                <tr id="supersetTable2Filters"></tr>
                             </thead>
                             <tbody id="supersetTable2Body"></tbody>
                         </table>
@@ -336,7 +293,6 @@
                                 <table id="supersetTable3">
                                     <thead>
                                         <tr><th>Дата</th><th>Проект</th><th>Цена</th></tr>
-                                        <tr id="supersetTable3Filters"></tr>
                                     </thead>
                                     <tbody id="supersetTable3Body"></tbody>
                                 </table>
@@ -352,7 +308,6 @@
                                 <table id="supersetTable4">
                                     <thead>
                                         <tr><th>ФИО</th><th>Качество</th><th>Норматив</th></tr>
-                                        <tr id="supersetTable4Filters"></tr>
                                     </thead>
                                     <tbody id="supersetTable4Body"></tbody>
                                 </table>
@@ -366,7 +321,7 @@
                 </div>
             </section>
 
-            <!-- ================= РАЗМЕТЧИКИ (ТОП ОШИБОК) ================= -->
+            <!-- ================= РАЗМЕТЧИКИ ================= -->
             <section id="section-errors" class="section">
                 <h2 style="margin-bottom: 20px;">Разметчики</h2>
                 <div class="filters" style="margin-bottom: 15px;">
@@ -377,85 +332,41 @@
                 <div id="errorsCardsContainer" class="errors-cards-grid"></div>
             </section>
 
-            <!-- ================= КАЛЕНДАРЬ (ОБРАТНАЯ СВЯЗЬ) ================= -->
+            <!-- ================= КАЛЕНДАРЬ ================= -->
             <section id="section-feedback" class="section">
-                <h2 style="margin-bottom: 20px;">Календарь</h2>
-                
-                <div class="card" style="margin-bottom: 20px;">
-                    <h3 style="margin-bottom: 15px;">Добавить запись</h3>
-                    <div class="form-grid">
-                        <div class="filter-group" style="margin-bottom:0;">
-                            <label>Разметчики (можно несколько)</label>
-                            <div class="multi-select" id="msFbRecordMarkers">
-                                <div class="ms-header" onclick="toggleDropdown('msFbRecordMarkers')">
-                                    <span class="ms-label empty" id="msFbRecordMarkers_label">Выберите разметчиков</span>
-                                    <span class="ms-arrow">▼</span>
-                                </div>
-                                <div class="ms-dropdown" id="msFbRecordMarkers_dropdown">
-                                    <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                    <label class="ms-item ms-all"><input type="checkbox" id="msFbRecordMarkers_all" onchange="toggleAll('msFbRecordMarkers', 'fbRecordMarkers')"> Выбрать все</label>
-                                    <div id="msFbRecordMarkers_options"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-group"><label>Дата</label><input type="date" id="fbDate"></div>
-                        <div class="form-group">
-                            <label>Статус</label>
-                            <select id="fbStatus">
-                                <option value="Запланирована">Запланирована</option>
-                                <option value="Отменена">Отменена</option>
-                                <option value="Перенесена">Перенесена</option>
-                                <option value="Проведена">Проведена</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Тип ВКС</label>
-                            <select id="fbType">
-                                <option value="Общее обучение">Общее обучение</option>
-                                <option value="Индивидуальное обучение">Индивидуальное обучение</option>
-                                <option value="Обучение">Обучение</option>
-                                <option value="Общая ОС">Общая ОС</option>
-                                <option value="Индивидуальная ОС">Индивидуальная ОС</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Провел</label>
-                            <input type="text" id="fbConductor" list="conductorsList" placeholder="Введите или выберите">
-                            <datalist id="conductorsList"></datalist>
-                        </div>
-                        <div class="filter-group" style="margin-bottom:0;">
-                            <label>Пулы с ошибками (необязательно)</label>
-                            <div class="multi-select" id="msFbFormPools">
-                                <div class="ms-header" onclick="toggleDropdown('msFbFormPools')">
-                                    <span class="ms-label empty" id="msFbFormPools_label">Выберите пулы</span>
-                                    <span class="ms-arrow">▼</span>
-                                </div>
-                                <div class="ms-dropdown" id="msFbFormPools_dropdown">
-                                    <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                    <label class="ms-item ms-all"><input type="checkbox" id="msFbFormPools_all" onchange="toggleAll('msFbFormPools', 'fbFormPools')"> Выбрать все</label>
-                                    <div id="msFbFormPools_options"></div>
-                                </div>
-                            </div>
-                        </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Календарь</h2>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="secondary" id="btnCalPrev" style="padding: 8px 15px;">&lt;</button>
+                        <button class="secondary" id="btnCalToday" style="padding: 8px 15px;">Сегодня</button>
+                        <button class="secondary" id="btnCalNext" style="padding: 8px 15px;">&gt;</button>
                     </div>
-                    <button id="btnAddFeedback" style="margin-top: 20px;">Добавить</button>
                 </div>
+                
+                <!-- Контейнер для ленты дат -->
+                <div id="calendarScroller" class="calendar-scroller">
+                    <!-- Сюда рендерятся карточки дней -->
+                </div>
+            </section>
 
+            <!-- ================= УВЕДОМЛЕНИЯ ================= -->
+            <section id="section-notifications" class="section">
+                <h2 style="margin-bottom: 20px;">Уведомления (Расхождения в качестве)</h2>
+                <p style="color: var(--muted); margin-bottom: 20px;">Показаны записи, где качество в суперсете отличается от факта более чем на 0.49%.</p>
                 <div class="table-card">
-                    <table id="fbTable">
+                    <table id="notificationsTable">
                         <thead>
                             <tr>
-                                <th>Дата</th><th>Разметчик</th><th>Тип ВКС</th><th>Провел</th>
-                                <th>Статус</th><th>Проект</th><th>Пулы с ошибками</th>
-                                <th>Ср. качество за период</th><th></th>
+                                <th>Почта</th>
+                                <th>Проект</th>
+                                <th>Пул</th>
+                                <th>Качество в суперсете</th>
+                                <th>Качество факт</th>
+                                <th>Разница</th>
                             </tr>
                         </thead>
-                        <tbody id="fbTableBody"></tbody>
+                        <tbody id="notificationsTableBody"></tbody>
                     </table>
-                    <div class="pagination-container" id="pagination-fbTable">
-                        <div class="pagination-info" id="pagination-fbTable-info">Показано 0-0 из 0</div>
-                        <div class="pagination-controls" id="pagination-fbTable-controls"></div>
-                    </div>
                 </div>
             </section>
 
@@ -466,7 +377,9 @@
     </div>
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО ЗАГРУЗКИ (НОВЫЙ СЦЕНАРИЙ) -->
+<!-- ================= МОДАЛЬНЫЕ ОКНА ================= -->
+
+<!-- 1. Окно загрузки -->
 <div class="modal-overlay" id="uploadModal">
     <div class="modal-content upload-modal-content">
         <button class="modal-close-x" id="btnCloseModalX">&times;</button>
@@ -475,13 +388,14 @@
         <div id="uploadViewSelect">
             <h2 class="modal-title">Что вы хотите загрузить?</h2>
             
+            <!-- ★ ИЗМЕНЕНО: Убрана кнопка "Применить", добавлен текст ошибки -->
             <div class="domain-input-section">
                 <label>Домен платформы (для ссылок «Перейти»)</label>
                 <div class="domain-input-group">
                     <input type="url" id="modalDomainInput" list="domainHistoryList" autocomplete="off">
                     <datalist id="domainHistoryList"></datalist>
-                    <button class="success" id="btnApplyDomain">Применить</button>
                 </div>
+                <div id="domainErrorMsg" class="domain-error-msg" style="display: none;">Обязательно укажите домен для создания ссылок на задания валидации!</div>
             </div>
 
             <div class="upload-cards">
@@ -502,7 +416,7 @@
             </div>
         </div>
 
-        <!-- ЭКРАН 2: Предпросмотр (Карточки файлов) -->
+        <!-- ЭКРАН 2: Предпросмотр -->
         <div id="uploadViewPreview" style="display: none;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
                 <h2 class="modal-title" style="color: var(--success); margin-bottom: 0; text-align: left;">Файлы готовы к загрузке</h2>
@@ -511,7 +425,7 @@
             <p style="text-align: left; color: var(--muted); margin-bottom: 20px;">Проверьте, что выбранные файлы верны</p>
             
             <div id="previewFilesContainer" class="preview-files-grid">
-                <!-- Сюда будут рендериться сгруппированные карточки -->
+                <!-- Сюда рендерятся карточки -->
             </div>
             
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
@@ -520,11 +434,9 @@
             </div>
         </div>
 
-        <!-- ЭКРАН 3: Прогресс и Логи -->
+        <!-- ЭКРАН 3: Прогресс -->
         <div id="uploadViewProgress" style="display: none;">
             <h2 class="modal-title" style="text-align: center;">Загрузка файлов...</h2>
-            
-            <!-- Прогресс-бар (как на странице управление) -->
             <div class="progress-wrap" style="margin-bottom: 20px;">
                 <div class="progress-header">
                     <span id="modalProgressTitle">Готово</span>
@@ -533,11 +445,7 @@
                 <div class="progress-bar-bg"><div class="progress-bar-fill" id="modalProgressFill"></div></div>
                 <div class="progress-stage" id="modalProgressStage" style="font-size:0.75rem; color:var(--muted); margin-top:4px;"></div>
             </div>
-
-            <!-- Карточка статуса файлов (сверху) -->
             <div id="markersStatusList" class="markers-status-list" style="display:none; max-height: 150px;"></div>
-
-            <!-- Лог (снизу) -->
             <div class="log" id="logBox" style="max-height: 150px; margin-top: 10px;"></div>
         </div>
 
@@ -562,19 +470,85 @@
     </div>
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО СКАЧИВАНИЯ -->
-<div class="modal-overlay" id="downloadModal">
+<!-- 2. Окно генерации файлов -->
+<div class="modal-overlay" id="generateModal">
     <div class="modal-content" style="max-width: 500px;">
-        <button class="modal-close-x" onclick="document.getElementById('downloadModal').classList.remove('active')">&times;</button>
-        <h2 class="modal-title">Скачать файлы</h2>
+        <button class="modal-close-x" onclick="document.getElementById('generateModal').classList.remove('active')">&times;</button>
+        <h2 class="modal-title">Сгенерировать файлы</h2>
         <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
             <button class="secondary" id="btnDownloadExcel" style="padding: 15px;">💾 Экспорт всей БД в Excel</button>
             <button class="success" id="btnDownloadReport" style="padding: 15px;">📄 Скачать HTML-отчет</button>
+            <button class="success" id="btnOpenFeedbackModal" style="padding: 15px;">📝 Сформировать фидбек</button>
+            <button class="success" id="btnOpenQualityModal" style="padding: 15px;">📊 Сформировать файлы с качеством</button>
         </div>
     </div>
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО КОНФЛИКТОВ (ДУБЛИКАТОВ) -->
+<!-- 3. Окно создания фидбека (Перенесено из страницы Проекты) -->
+<div class="modal-overlay" id="feedbackModal">
+    <div class="modal-content" style="max-width: 800px;">
+        <button class="modal-close-x" onclick="document.getElementById('feedbackModal').classList.remove('active')">&times;</button>
+        <h2 class="modal-title">Создание фидбека</h2>
+        <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+            <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
+                <label>Выберите пулы</label>
+                <div class="multi-select" id="msFbPool">
+                    <div class="ms-header" onclick="toggleDropdown('msFbPool')">
+                        <span class="ms-label empty" id="msFbPool_label">Все пулы</span>
+                        <span class="ms-arrow">▼</span>
+                    </div>
+                    <div class="ms-dropdown" id="msFbPool_dropdown">
+                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                        <label class="ms-item ms-all"><input type="checkbox" id="msFbPool_all" onchange="toggleAll('msFbPool', 'feedbackPool')"> Выбрать все</label>
+                        <div id="msFbPool_options"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
+                <label>Выберите группу разметчиков</label>
+                <div class="multi-select" id="msFbGroup">
+                    <div class="ms-header" onclick="toggleDropdown('msFbGroup')">
+                        <span class="ms-label empty" id="msFbGroup_label">Все группы</span>
+                        <span class="ms-arrow">▼</span>
+                    </div>
+                    <div class="ms-dropdown" id="msFbGroup_dropdown">
+                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                        <label class="ms-item ms-all"><input type="checkbox" id="msFbGroup_all" onchange="toggleAll('msFbGroup', 'feedbackGroup')"> Выбрать все</label>
+                        <div id="msFbGroup_options"></div>
+                        <div class="ms-apply-container">
+                            <button id="btnApplyGroup" style="padding: 6px 16px; font-size: 0.8rem; height: auto;">Применить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button class="success" id="btnGenerateFeedback" style="height: 40px;">Создать</button>
+        </div>
+        <div id="feedbackGenerationBlocks" style="margin-top: 20px; max-height: 400px; overflow-y: auto;"></div>
+    </div>
+</div>
+
+<!-- 4. Окно генерации файла с качеством -->
+<div class="modal-overlay" id="qualityModal">
+    <div class="modal-content" style="max-width: 500px;">
+        <button class="modal-close-x" onclick="document.getElementById('qualityModal').classList.remove('active')">&times;</button>
+        <h2 class="modal-title">Файл с качеством</h2>
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div class="form-group">
+                <label>Проект</label>
+                <input type="text" id="qualProjectInput" list="qualProjectList" placeholder="Введите или выберите проект">
+                <datalist id="qualProjectList"></datalist>
+            </div>
+            <div class="form-group">
+                <label>Пул</label>
+                <input type="text" id="qualPoolInput" list="qualPoolList" placeholder="Введите или выберите пул">
+                <datalist id="qualPoolList"></datalist>
+            </div>
+            <button class="success" id="btnGenerateQualityExcel" style="margin-top: 10px;">Скачать Excel (email + quality)</button>
+        </div>
+    </div>
+</div>
+
+<!-- 5. Окно конфликтов -->
 <div class="modal-overlay" id="conflictModal">
     <div class="modal-content" style="max-width: 800px;">
         <h2 class="modal-title" style="color: var(--danger);">Найдены дубликаты или обновления</h2>
@@ -591,7 +565,75 @@
     </div>
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ НОРМЫ -->
+<!-- 6. Окно добавления записи в Календарь -->
+<div class="modal-overlay" id="addFeedbackModal">
+    <div class="modal-content" style="max-width: 600px;">
+        <button class="modal-close-x" onclick="document.getElementById('addFeedbackModal').classList.remove('active')">&times;</button>
+        <h2 class="modal-title">Добавить запись</h2>
+        <input type="hidden" id="fbModalDate">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Проект</label>
+                <input type="text" id="fbModalProject" list="qualProjectList" placeholder="Проект">
+            </div>
+            <div class="filter-group" style="margin-bottom:0; grid-column: 1 / -1;">
+                <label>Разметчики (можно несколько)</label>
+                <div class="multi-select" id="msFbRecordMarkers">
+                    <div class="ms-header" onclick="toggleDropdown('msFbRecordMarkers')">
+                        <span class="ms-label empty" id="msFbRecordMarkers_label">Выберите разметчиков</span>
+                        <span class="ms-arrow">▼</span>
+                    </div>
+                    <div class="ms-dropdown" id="msFbRecordMarkers_dropdown">
+                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                        <label class="ms-item ms-all"><input type="checkbox" id="msFbRecordMarkers_all" onchange="toggleAll('msFbRecordMarkers', 'fbRecordMarkers')"> Выбрать все</label>
+                        <div id="msFbRecordMarkers_options"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Статус</label>
+                <select id="fbModalStatus">
+                    <option value="Запланирована">Запланирована</option>
+                    <option value="Отменена">Отменена</option>
+                    <option value="Перенесена">Перенесена</option>
+                    <option value="Проведена">Проведена</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Тип ВКС</label>
+                <select id="fbModalType">
+                    <option value="Общее обучение">Общее обучение</option>
+                    <option value="Индивидуальное обучение">Индивидуальное обучение</option>
+                    <option value="Обучение">Обучение</option>
+                    <option value="Общая ОС">Общая ОС</option>
+                    <option value="Индивидуальная ОС">Индивидуальная ОС</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Организатор</label>
+                <input type="text" id="fbModalConductor" list="conductorsList" placeholder="Введите или выберите">
+                <datalist id="conductorsList"></datalist>
+            </div>
+            <div class="filter-group" style="margin-bottom:0; grid-column: 1 / -1;">
+                <label>Пулы с ошибками (необязательно)</label>
+                <div class="multi-select" id="msFbFormPools">
+                    <div class="ms-header" onclick="toggleDropdown('msFbFormPools')">
+                        <span class="ms-label empty" id="msFbFormPools_label">Выберите пулы</span>
+                        <span class="ms-arrow">▼</span>
+                    </div>
+                    <div class="ms-dropdown" id="msFbFormPools_dropdown">
+                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                        <label class="ms-item ms-all"><input type="checkbox" id="msFbFormPools_all" onchange="toggleAll('msFbFormPools', 'fbFormPools')"> Выбрать все</label>
+                        <div id="msFbFormPools_options"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <button id="btnSaveFeedback" style="margin-top: 20px; width: 100%;">Добавить</button>
+    </div>
+</div>
+
+<!-- 7. Окно редактирования нормы -->
 <div class="modal-overlay" id="normModal">
     <div class="modal-content" style="max-width: 400px;">
         <h3 class="modal-title" style="font-size: 1.5rem; margin-bottom: 20px;">Изменить норму</h3>
