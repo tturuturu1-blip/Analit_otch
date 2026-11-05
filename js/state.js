@@ -1,6 +1,6 @@
 // js/state.js — ДОБАВЛЕНА КОНСТАНТА MAIN_ITEMS_PER_PAGE = 8
 // ★ ДОБАВЛЕНО: rawRecommendationsManual (ручные рекомендации), validationBaseUrl (домен платформы),
-//    domainHistory (история доменов для выпадающего списка).
+//    domainHistory (история доменов), pendingNewData и pendingConflicts (для проверки дубликатов).
 
 export const STORAGE_KEY = 'validation_dashboard_data_v3';
 export const FB_STORAGE_KEY = 'validation_feedback_data_v1';
@@ -21,6 +21,11 @@ export const state = {
     rawSuperset2: [],
     rawSuperset3: [],
     rawEmployeeMap: [],
+    
+    // ★ Временные хранилища для логики дубликатов при загрузке
+    pendingNewData: null,           // Сюда складываются распарсенные новые данные до подтверждения
+    pendingConflicts: [],           // Сюда складываются найденные конфликты (старое vs новое)
+    
     processedData: [],
     filteredData: [],
     feedbackData: [],
@@ -103,15 +108,15 @@ export function saveToStorage() {
             m: state.rawMarkers,
             v: state.rawValidation,
             r: state.rawRecommendations,
-            rm: state.rawRecommendationsManual,   // ★ НОВОЕ
+            rm: state.rawRecommendationsManual,
             f: state.rawFlatValidations,
             s1: state.rawSuperset1,
             s2: state.rawSuperset2,
             s3: state.rawSuperset3,
             emp: state.rawEmployeeMap,
             normHistory: state.superset.normHistory,
-            baseUrl: state.validationBaseUrl,     // ★ НОВОЕ
-            domainHistory: state.domainHistory    // ★ НОВОЕ
+            baseUrl: state.validationBaseUrl,
+            domainHistory: state.domainHistory
         }));
     } catch (e) {
         console.error('Ошибка сохранения:', e.message);
@@ -127,15 +132,15 @@ export function loadFromStorage() {
                 state.rawMarkers = Array.isArray(parsed.m) ? parsed.m : [];
                 state.rawValidation = Array.isArray(parsed.v) ? parsed.v : [];
                 state.rawRecommendations = Array.isArray(parsed.r) ? parsed.r : [];
-                state.rawRecommendationsManual = Array.isArray(parsed.rm) ? parsed.rm : [];   // ★ НОВОЕ
+                state.rawRecommendationsManual = Array.isArray(parsed.rm) ? parsed.rm : [];
                 state.rawFlatValidations = Array.isArray(parsed.f) ? parsed.f : [];
                 state.rawSuperset1 = Array.isArray(parsed.s1) ? parsed.s1 : [];
                 state.rawSuperset2 = Array.isArray(parsed.s2) ? parsed.s2 : [];
                 state.rawSuperset3 = Array.isArray(parsed.s3) ? parsed.s3 : [];
                 state.rawEmployeeMap = Array.isArray(parsed.emp) ? parsed.emp : [];
                 
-                state.validationBaseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl : '';   // ★ НОВОЕ
-                state.domainHistory = Array.isArray(parsed.domainHistory) ? parsed.domainHistory : []; // ★ НОВОЕ
+                state.validationBaseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl : '';
+                state.domainHistory = Array.isArray(parsed.domainHistory) ? parsed.domainHistory : [];
                 
                 state.superset.normHistory = Array.isArray(parsed.normHistory) && parsed.normHistory.length > 0
                     ? parsed.normHistory
@@ -146,14 +151,14 @@ export function loadFromStorage() {
         state.rawMarkers = [];
         state.rawValidation = [];
         state.rawRecommendations = [];
-        state.rawRecommendationsManual = [];   // ★ НОВОЕ
+        state.rawRecommendationsManual = [];
         state.rawFlatValidations = [];
         state.rawSuperset1 = [];
         state.rawSuperset2 = [];
         state.rawSuperset3 = [];
         state.rawEmployeeMap = [];
-        state.validationBaseUrl = '';          // ★ НОВОЕ
-        state.domainHistory = [];              // ★ НОВОЕ
+        state.validationBaseUrl = '';
+        state.domainHistory = [];
         state.superset.normHistory = DEFAULT_NORM_HISTORY.slice();
     }
 }
