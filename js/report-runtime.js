@@ -1,6 +1,7 @@
 // js/report-runtime.js — ФИНАЛЬНАЯ ВЕРСИЯ (9 KPI, правильные графики, 8 строк)
-// ★ ДОБАВЛЕНО: fix падения updateKPI (from/to), ISO-сравнение дат, _domain в ссылках,
-//    getNormsForPeriod для KPI «Норма», ISO-сортировка в buildDayQualityChart
+// ★ ИЗМЕНЕНО: Все проценты (KPI, графики, таблицы) приведены к формату .toFixed(2).
+// Ранее добавленное: fix падения updateKPI (from/to), ISO-сравнение дат, _domain в ссылках,
+// getNormsForPeriod для KPI «Норма», ISO-сортировка в buildDayQualityChart.
 
 (function () {
     'use strict';
@@ -10,7 +11,7 @@
     var feedbackData = REPORT_DATA.feedbackData || [];
     var targetQualityGlobal = REPORT_DATA.targetQuality || null;
     var supersetTable1 = REPORT_DATA.supersetTable1 || [];
-    var normHistory = REPORT_DATA.normHistory || [{ date: '2000-01-01', value: 580 }];   // ★ НОВОЕ
+    var normHistory = REPORT_DATA.normHistory || [{ date: '2000-01-01', value: 580 }];
 
     var ITEMS_PER_PAGE = 10;
     var MAIN_ITEMS_PER_PAGE = 8;
@@ -43,7 +44,8 @@
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'middle';
                             
-                            var displayVal = dataset.isPercentage ? Number(val).toFixed(1) + '%' : val;
+                            // ★ ИЗМЕНЕНО: .toFixed(2)
+                            var displayVal = dataset.isPercentage ? Number(val).toFixed(2) + '%' : val;
                             ctx.fillText(displayVal, element.x, element.y + (height / 2));
                         }
                     });
@@ -65,7 +67,6 @@
                String(dt.getMonth() + 1).padStart(2, '0') + '.' + String(dt.getFullYear()).slice(-2);
     }
 
-    // ★ НОВОЕ: ISO-хелпер (без TZ-сдвига)
     function toISODate(v) {
         if (!v) return null;
         var d = parseDate(v);
@@ -75,7 +76,6 @@
             String(d.getDate()).padStart(2, '0');
     }
 
-    // ★ НОВОЕ: норма у.е./час — история (аналог superset.js)
     function getNormForDate(dateISO) {
         var d = dateISO || new Date().toISOString().slice(0, 10);
         var history = normHistory.slice().sort(function(a, b) { return a.date.localeCompare(b.date); });
@@ -154,7 +154,6 @@
             .replace(/'/g, '&#39;');
     }
 
-    // ★ ИЗМЕНЕНО: используем r._domain вместо хардкода tagme.sberdevices.ru
     function getValidationLink(r) {
         if (r.url) {
             return '<a href="' + escapeHtml(r.url) + '" target="_blank" class="badge-link">Перейти</a>';
@@ -175,7 +174,6 @@
         return project === currentTab;
     }
 
-    // ★ ИЗМЕНЕНО: ISO-сравнение дат (без TZ-сдвига)
     function applyFilters() {
         var from = document.getElementById('filterDateFrom').value;
         var to = document.getElementById('filterDateTo').value;
@@ -189,7 +187,7 @@
             if (!poolEmpty && !filterState.pool.has(r.pool || '')) return false;
             if (!markerEmpty && !filterState.marker.has(r.marker || '')) return false;
             if (!resultEmpty && !filterState.result.has(r.result || '')) return false;
-            // ★ ISO-сравнение
+            
             if (r.date) {
                 var iso = toISODate(r.date);
                 if (iso) {
@@ -270,7 +268,6 @@
         if (isRed) { qColorClass = 'val-red'; errColorClass = 'val-red'; }
         else if (isGreen) { qColorClass = 'val-green'; errColorClass = 'val-green'; }
 
-        // ★ ИЗМЕНЕНО: объявляем from/to + ISO-сравнение supersetTable1
         var activeTasks = supersetTable1 || [];
         if (currentTab !== 'all') activeTasks = activeTasks.filter(function(t) { return t.project === currentTab; });
         if (filterState.pool.size > 0) activeTasks = activeTasks.filter(function(t) { return filterState.pool.has(t.task); });
@@ -327,7 +324,6 @@
         var container = document.getElementById('mainKpisContainer');
         if (!container) return;
 
-        // ★ НОВОЕ: Норма с учётом истории и выбранного периода
         var norms = getNormsForPeriod(from, to);
         var normValuesHtml;
         if (norms.length === 1) {
@@ -345,8 +341,8 @@
         }
 
         container.innerHTML = 
-            '<div class="kpi-card"><div class="label">Целевое качество</div><div class="value val-brown">' + (targetQualityGlobal != null ? targetQualityGlobal.toFixed(1) + '%' : '—') + '</div></div>' +
-            '<div class="kpi-card"><div class="label">Качество</div><div class="value ' + qColorClass + '">' + (avgQ !== null ? avgQPct.toFixed(1) + '%' : '—') + '</div></div>' +
+            '<div class="kpi-card"><div class="label">Целевое качество</div><div class="value val-brown">' + (targetQualityGlobal != null ? targetQualityGlobal.toFixed(2) + '%' : '—') + '</div></div>' +
+            '<div class="kpi-card"><div class="label">Качество</div><div class="value ' + qColorClass + '">' + (avgQ !== null ? avgQPct.toFixed(2) + '%' : '—') + '</div></div>' +
             '<div class="kpi-card"><div class="label">Ошибок</div><div class="value ' + errColorClass + '">' + errorPercent.toFixed(2) + '%</div></div>' +
             '<div class="kpi-card"><div class="label">Разметчиков</div><div class="value val-brown">' + uniqueMarkers.size + '</div></div>' +
             '<div class="kpi-card"><div class="label">Норма, у.е./час</div>' + normValuesHtml + '</div>' +
@@ -469,10 +465,9 @@
         });
     }
 
-    // ★ ИЗМЕНЕНО: ISO-сортировка (без проблем на границе веков)
     function buildDayQualityChart() {
         destroyChart('dayQuality');
-        var byDate = {};   // label → { iso, values: [] }
+        var byDate = {};
         var qualityKeys = new Set();
         
         for (var i = 0; i < filteredData.length; i++) {
@@ -607,7 +602,7 @@
                 groups[key] = {
                     date: r.date, project: r.project, pool: r.pool, marker: r.marker, fileName: r.fileName,
                     quality: r.quality, fragments: r.fragments, url: r.url, orgId: r.orgId, assignmentId: r.assignmentId, itemId: r.itemId,
-                    _type: r._type, _linked: r._linked, items: []
+                    _type: r._type, _linked: r._linked, _domain: r._domain, items: []
                 };
             }
             if (r.result === 'Ошибка' || r.result === 'Рекомендация') {
@@ -638,7 +633,9 @@
             var valLink = getValidationLink(g);
             var fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
             var fileNameTitle = escapeHtml(g.fileName || '');
-            var quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(1) + '%' : '';
+            
+            // ★ ИЗМЕНЕНО: .toFixed(2)
+            var quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(2) + '%' : '';
 
             var itemsHtml = '<div class="items-grid">';
             for (var m = 0; m < g.items.length; m++) {
@@ -688,7 +685,10 @@
         for (var j = 0; j < rows.length; j++) {
             var f = rows[j];
             var statusColor = f.status === 'Проведена' ? '#85c4ae' : f.status === 'Отменена' ? '#e55555' : f.status === 'Перенесена' ? '#f2c94c' : '#7a95b8';
-            var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null) ? (f.avgQuality * 100).toFixed(1) + '%' : '—';
+            
+            // ★ ИЗМЕНЕНО: .toFixed(2)
+            var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null) ? (f.avgQuality * 100).toFixed(2) + '%' : '—';
+            
             var displayProject = f.project || '—';
             html += '<tr>' +
                 '<td>' + escapeHtml(formatDate(f.date)) + '</td>' +
