@@ -1,5 +1,5 @@
-// js/report.js — ОБНОВЛЕНО: Передача данных для новых 9 карточек KPI
-// ★ ДОБАВЛЕНО: Вариант А — рекомендации в отчёт не попадают + normHistory
+// js/report.js — ОБНОВЛЕНО: Выравнивание табов по правому краю
+// Ранее добавленное: Вариант А (без рекомендаций) + normHistory
 
 import { state } from './state.js';
 import { escapeHtml, formatDate, parseExcelDate } from './utils.js';
@@ -49,7 +49,8 @@ export async function generateHtmlReport() {
 
     let tabsHtml = '';
     if (showTabs) {
-        tabsHtml = '<div class="tabs" id="projectTabs">';
+        // ★ ИЗМЕНЕНО: Добавлен style="margin-left: auto;" для выравнивания по правому краю
+        tabsHtml = '<div class="tabs" id="projectTabs" style="margin-left: auto;">';
         tabsHtml += '<div class="tab active" data-tab="all">Все</div>';
         for (const p of projects) {
             const safe = escapeHtml(p);
@@ -64,8 +65,7 @@ export async function generateHtmlReport() {
 
     const targetQuality = state.superset.norms.globalAvg;
 
-    // === Нормализация дат в dd.mm.yy (TZ-фикс) ===
-    // ★ ИЗМЕНЕНО (Вариант А): рекомендации в отчёт не попадают
+    // ★ Вариант А: рекомендации в отчёт не попадают
     const serializedProcessedData = state.processedData
         .filter(r => r._type !== 'recommendations')
         .map(r => {
@@ -84,12 +84,11 @@ export async function generateHtmlReport() {
         return copy;
     });
 
-    // ★ ИЗМЕНЕНО: передаём normHistory для KPI «Норма, у.е./час» на Главной в отчёте
     const reportData = {
         processedData: serializedProcessedData,
         feedbackData: serializedFeedbackData,
         targetQuality: targetQuality,
-        supersetTable1: state.superset.table1 || [], // для расчета KPI на главной
+        supersetTable1: state.superset.table1 || [],
         norms: state.superset.norms || { byProjectPool: {}, byProject: {}, globalAvg: null },
         normHistory: state.superset.normHistory || [{ date: '2000-01-01', value: 580 }]
     };
@@ -106,8 +105,8 @@ export async function generateHtmlReport() {
 </head>
 <body>
 
-<header class="top-bar" id="topBar">
-    <div class="brand">
+<header class="top-bar" id="topBar" style="justify-content: space-between;">
+    <div class="brand" style="font-weight: 700;">
         <span class="brand-accent">Валидатор</span>
         <span class="brand-pro">PRO</span>
     </div>
@@ -166,7 +165,6 @@ export async function generateHtmlReport() {
                 <button id="btnResetFilters" style="height:40px;">Сбросить</button>
             </div>
 
-            <!-- Контейнер для 9 карточек KPI -->
             <div class="kpi-row" id="mainKpisContainer"></div>
 
             <div class="table-card">
@@ -260,7 +258,6 @@ export async function generateHtmlReport() {
 </body>
 </html>`;
 
-    // === Формируем имя файла по проектам ===
     const projectNames = [];
     const seen = new Set();
     for (const r of state.processedData) {
