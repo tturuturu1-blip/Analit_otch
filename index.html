@@ -28,31 +28,42 @@
 
         <button class="sidebar-add-btn" id="btnSidebarAdd" title="Добавить">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-            <span class="nav-label">Добавить</span>
+            <span class="nav-label">Загрузить</span>
         </button>
 
         <nav class="sidebar-nav">
-            <button class="nav-icon active" onclick="switchMenu('main', this)" title="Главная">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
-                <span class="nav-label">Главная</span>
-            </button>
-            <button class="nav-icon" onclick="switchMenu('errors', this)" title="Топ ошибок">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-                <span class="nav-label">Топ ошибок</span>
-            </button>
-            <button class="nav-icon" onclick="switchMenu('feedback', this)" title="Обратная связь">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
-                <span class="nav-label">Обратная связь</span>
-            </button>
-            <button class="nav-icon" onclick="switchMenu('superset', this)" title="Суперсет">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-                <span class="nav-label">Суперсет</span>
-            </button>
-            <button class="nav-icon" onclick="switchMenu('data', this)" title="Управление данными">
+            <!-- Проекты (вместо Главной) -->
+            <button class="nav-icon active" onclick="switchMenu('main', this)" title="Проекты">
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
-                <span class="nav-label">Управление</span>
+                <span class="nav-label">Проекты</span>
+            </button>
+            <!-- Разметчики (вместо Топ ошибок) -->
+            <button class="nav-icon" onclick="switchMenu('errors', this)" title="Разметчики">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                <span class="nav-label">Разметчики</span>
+            </button>
+            <!-- Календарь (вместо Обратной связи) -->
+            <button class="nav-icon" onclick="switchMenu('feedback', this)" title="Календарь">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+                <span class="nav-label">Календарь</span>
             </button>
         </nav>
+
+        <!-- Нижние утилиты -->
+        <div class="sidebar-utils">
+            <button class="nav-icon" id="btnSidebarDownload" title="Скачать">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                <span class="nav-label">Скачать</span>
+            </button>
+            <button class="nav-icon" id="btnSidebarRelink" title="Пересчитать">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                <span class="nav-label">Пересчитать</span>
+            </button>
+            <button class="nav-icon" id="btnSidebarClear" title="Очистить всё">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                <span class="nav-label">Очистить</span>
+            </button>
+        </div>
     </aside>
 
     <!-- ОСНОВНОЙ КОНТЕНТ -->
@@ -63,76 +74,9 @@
 
         <main class="content">
 
-            <!-- ================= УПРАВЛЕНИЕ ДАННЫМИ ================= -->
-            <section id="section-data" class="section">
-                <h2 style="margin-bottom: 20px;">Управление данными</h2>
-                <p style="color: var(--muted); margin-bottom: 20px;">Загружайте исходные файлы, импортируйте резервные копии или выгружайте результаты.</p>
-
-                <div class="card">
-                    <h3 style="margin-bottom: 15px;">Загрузка исходных файлов</h3>
-                    <div class="toolbar">
-                        <label class="file-btn" for="fileInput">📂 Загрузить Excel (исходники)</label>
-                        <input type="file" id="fileInput" accept=".xlsx,.xls" multiple>
-                    </div>
-                    <div id="markersStatusList" class="markers-status-list" style="display:none;"></div>
-                </div>
-
-                <div class="card">
-                    <h3 style="margin-bottom: 15px;">Добавить рекомендации</h3>
-                    <div class="table-card" style="margin-bottom: 15px; background: #fff; box-shadow: none;">
-                        <table id="recTable">
-                            <thead>
-                                <tr>
-                                    <th style="min-width: 120px;">Дата валидации</th>
-                                    <th style="min-width: 140px;">Проект</th>
-                                    <th style="min-width: 140px;">Пул</th>
-                                    <th style="min-width: 180px;">Почта разметчика</th>
-                                    <th style="min-width: 100px;">item_id</th>
-                                    <th style="min-width: 140px;">Интервал</th>
-                                    <th style="min-width: 180px;">Комментарий</th>
-                                    <th style="min-width: 180px;">Почта валидатора</th>
-                                    <th style="width: 50px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="recTableBody"></tbody>
-                        </table>
-                    </div>
-                    <div style="display:flex; gap:10px; flex-wrap: wrap;">
-                        <button class="secondary" id="btnAddRecRow">+ Добавить строку</button>
-                        <button class="success" id="btnSaveRecommendations">Добавить</button>
-                        <button class="secondary" id="btnExportRecommendations">📥 Скачать Excel</button>
-                    </div>
-                    <datalist id="recProjectsList"></datalist>
-                    <datalist id="recPoolsList"></datalist>
-                    <datalist id="recMarkersList"></datalist>
-                    <datalist id="recValidatorsList"></datalist>
-                </div>
-
-                <div class="card">
-                    <h3 style="margin-bottom: 15px;">Управление данными</h3>
-                    <div class="toolbar">
-                        <button class="secondary" id="btnExport">💾 Экспорт в Excel</button>
-                        <label class="file-btn secondary" for="importInput">📥 Импорт из Excel</label>
-                        <input type="file" id="importInput" accept=".xlsx,.xls">
-                        <button class="success" id="btnGenerateReport">📄 Скачать HTML-отчет</button>
-                        <button class="secondary" id="btnRelink">🔄 Пересчитать</button>
-                        <button class="danger" id="btnClear">🗑 Очистить всё</button>
-                    </div>
-                    <div class="progress-wrap">
-                        <div class="progress-header">
-                            <span id="progressTitle">Готово</span>
-                            <span class="pct" id="progressPct">0%</span>
-                        </div>
-                        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
-                        <div class="progress-stage" id="progressStage" style="font-size:0.75rem; color:var(--muted); margin-top:4px;"></div>
-                    </div>
-                </div>
-
-                <div class="log" id="logBox"></div>
-            </section>
-
-            <!-- ================= ГЛАВНАЯ ================= -->
+            <!-- ================= ПРОЕКТЫ ================= -->
             <section id="section-main" class="section active">
+                <!-- Фильтры (относятся к статистике и валидации) -->
                 <div class="filters">
                     <div class="filter-group">
                         <label>Пул</label>
@@ -181,89 +125,250 @@
                     <button id="btnResetFilters" style="height:40px;">Сбросить</button>
                 </div>
 
-                <div class="kpi-row" id="mainKpisContainer"></div>
-
-                <div class="table-card">
-                    <div class="table-header">
-                        <h3>Результаты валидации</h3>
+                <!-- 1. СТАТИСТИКА И ГРАФИКИ -->
+                <div class="project-block">
+                    <h2 class="block-title">Статистика и графики</h2>
+                    <div class="kpi-row" id="mainKpisContainer"></div>
+                    
+                    <div class="charts-grid">
+                        <div class="chart-card">
+                            <h3>Качество по разметчикам</h3>
+                            <canvas id="chartQuality"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Распределение типов ошибок</h3>
+                            <canvas id="chartErrors"></canvas>
+                        </div>
                     </div>
-                    <table id="dataTable">
-                        <thead>
-                            <tr>
-                                <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
-                                <th colspan="4" style="padding: 0;">
-                                    <div class="th-grid">
-                                        <div>Итог</div>
-                                        <div>Тип ошибки</div>
-                                        <div>Комментарий</div>
-                                        <div>Интервал</div>
+                    <div class="charts-grid full-width">
+                        <div class="chart-card">
+                            <h3>Качество по пулам</h3>
+                            <canvas id="chartPoolQuality"></canvas>
+                        </div>
+                    </div>
+                    <div class="charts-grid">
+                        <div class="chart-card">
+                            <h3>Качество по дням</h3>
+                            <canvas id="chartDayQuality"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Типы ошибок по разметчикам</h3>
+                            <canvas id="chartErrorsByMarker"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. ВАЛИДАЦИЯ -->
+                <div class="project-block">
+                    <h2 class="block-title">Валидация</h2>
+                    
+                    <!-- Создание фидбека (перенесено) -->
+                    <div class="card" style="margin-bottom: 20px;">
+                        <h3 style="margin-bottom: 15px;">Создание фидбека</h3>
+                        <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                            <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
+                                <label>Выберите пулы</label>
+                                <div class="multi-select" id="msFbPool">
+                                    <div class="ms-header" onclick="toggleDropdown('msFbPool')">
+                                        <span class="ms-label empty" id="msFbPool_label">Все пулы</span>
+                                        <span class="ms-arrow">▼</span>
                                     </div>
-                                </th>
-                                <th>Качество</th><th>Ссылка</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableBody"></tbody>
-                    </table>
-                    <div class="pagination-container" id="pagination-data">
-                        <div class="pagination-info" id="pagination-data-info">Показано 0-0 из 0</div>
-                        <div class="pagination-controls" id="pagination-data-controls"></div>
+                                    <div class="ms-dropdown" id="msFbPool_dropdown">
+                                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                        <label class="ms-item ms-all"><input type="checkbox" id="msFbPool_all" onchange="toggleAll('msFbPool', 'feedbackPool')"> Выбрать все</label>
+                                        <div id="msFbPool_options"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
+                                <label>Выберите группу разметчиков</label>
+                                <div class="multi-select" id="msFbGroup">
+                                    <div class="ms-header" onclick="toggleDropdown('msFbGroup')">
+                                        <span class="ms-label empty" id="msFbGroup_label">Все группы</span>
+                                        <span class="ms-arrow">▼</span>
+                                    </div>
+                                    <div class="ms-dropdown" id="msFbGroup_dropdown">
+                                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                        <label class="ms-item ms-all"><input type="checkbox" id="msFbGroup_all" onchange="toggleAll('msFbGroup', 'feedbackGroup')"> Выбрать все</label>
+                                        <div id="msFbGroup_options"></div>
+                                        <div class="ms-apply-container">
+                                            <button id="btnApplyGroup" style="padding: 6px 16px; font-size: 0.8rem; height: auto;">Применить</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="success" id="btnGenerateFeedback" style="height: 40px;">Создать</button>
+                        </div>
+                        <div id="feedbackGenerationBlocks" style="margin-top: 20px;"></div>
+                    </div>
+
+                    <!-- Добавить рекомендации (перенесено) -->
+                    <div class="card" style="margin-bottom: 20px;">
+                        <h3 style="margin-bottom: 15px;">Добавить рекомендации</h3>
+                        <div class="table-card" style="margin-bottom: 15px; background: #fff; box-shadow: none;">
+                            <table id="recTable">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width: 120px;">Дата валидации</th>
+                                        <th style="min-width: 140px;">Проект</th>
+                                        <th style="min-width: 140px;">Пул</th>
+                                        <th style="min-width: 180px;">Почта разметчика</th>
+                                        <th style="min-width: 100px;">item_id</th>
+                                        <th style="min-width: 140px;">Интервал</th>
+                                        <th style="min-width: 180px;">Комментарий</th>
+                                        <th style="min-width: 180px;">Почта валидатора</th>
+                                        <th style="width: 50px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div style="display:flex; gap:10px; flex-wrap: wrap;">
+                            <button class="secondary" id="btnAddRecRow">+ Добавить строку</button>
+                            <button class="success" id="btnSaveRecommendations">Добавить</button>
+                            <button class="secondary" id="btnExportRecommendations">📥 Скачать Excel</button>
+                        </div>
+                        <datalist id="recProjectsList"></datalist>
+                        <datalist id="recPoolsList"></datalist>
+                        <datalist id="recMarkersList"></datalist>
+                        <datalist id="recValidatorsList"></datalist>
+                    </div>
+
+                    <!-- Результаты валидации -->
+                    <div class="table-card">
+                        <div class="table-header">
+                            <h3>Результаты валидации</h3>
+                        </div>
+                        <table id="dataTable">
+                            <thead>
+                                <tr>
+                                    <th>Дата</th><th>Проект</th><th>Пул</th><th>Разметчик</th><th>Файл</th>
+                                    <th colspan="4" style="padding: 0;">
+                                        <div class="th-grid">
+                                            <div>Итог</div>
+                                            <div>Тип ошибки</div>
+                                            <div>Комментарий</div>
+                                            <div>Интервал</div>
+                                        </div>
+                                    </th>
+                                    <th>Качество</th><th>Ссылка</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                        <div class="pagination-container" id="pagination-data">
+                            <div class="pagination-info" id="pagination-data-info">Показано 0-0 из 0</div>
+                            <div class="pagination-controls" id="pagination-data-controls"></div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="charts-grid">
-                    <div class="chart-card">
-                        <h3>Качество по разметчикам</h3>
-                        <canvas id="chartQuality"></canvas>
+                <!-- 3. СУПЕРСЕТ -->
+                <div class="project-block">
+                    <h2 class="block-title">Суперсет</h2>
+                    
+                    <div class="superset-sticky">
+                        <div class="filters superset-filters">
+                            <div class="filter-group"><label>Дата с</label><input type="date" id="supersetDateFrom"></div>
+                            <div class="filter-group"><label>Дата по</label><input type="date" id="supersetDateTo"></div>
+                            <div class="filter-group">
+                                <label>Задача (пул)</label>
+                                <div class="multi-select" id="msSupersetTask">
+                                    <div class="ms-header" onclick="toggleDropdown('msSupersetTask')">
+                                        <span class="ms-label empty" id="msSupersetTask_label">Все задачи</span>
+                                        <span class="ms-arrow">▼</span>
+                                    </div>
+                                    <div class="ms-dropdown" id="msSupersetTask_dropdown">
+                                        <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                                        <label class="ms-item ms-all"><input type="checkbox" id="msSupersetTask_all" onchange="toggleAll('msSupersetTask', 'tasks')"> Выбрать все</label>
+                                        <div id="msSupersetTask_options"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button id="btnResetSupersetFilters" style="height:40px;" onclick="resetSupersetFilters()">Сбросить</button>
+                        </div>
                     </div>
                     
-                    <div class="chart-card">
-                        <h3>Распределение типов ошибок</h3>
-                        <canvas id="chartErrors"></canvas>
+                    <h3 style="margin-bottom: 15px;">Сводная таблица (проект + задача)</h3>
+                    <div class="table-card">
+                        <table id="supersetTable1">
+                            <thead>
+                                <tr>
+                                    <th>Проект</th><th>Задача</th><th>Размечено, шт</th><th>Норма качества</th>
+                                    <th>Качество</th><th>Комментарий</th><th>Без качества, шт</th>
+                                    <th>Факт баллов/час</th><th>Кпроизв в час</th><th>Цена</th>
+                                    <th>Период разметки</th>
+                                </tr>
+                                <tr id="supersetTable1Filters"></tr>
+                            </thead>
+                            <tbody id="supersetTable1Body"></tbody>
+                        </table>
+                        <div class="pagination-container" id="pagination-superset1">
+                            <div class="pagination-info" id="pagination-superset1-info">Показано 0-0 из 0</div>
+                            <div class="pagination-controls" id="pagination-superset1-controls"></div>
+                        </div>
                     </div>
-                </div>
 
-                <div class="charts-grid full-width">
-                    <div class="chart-card">
-                        <h3>Качество по пулам</h3>
-                        <canvas id="chartPoolQuality"></canvas>
+                    <h3 style="margin-bottom: 15px; margin-top: 20px;">Качество по дням / ФИО</h3>
+                    <div class="table-card">
+                        <table id="supersetTable2">
+                            <thead>
+                                <tr>
+                                    <th>Дата</th><th>ФИО</th><th>Проект</th><th>Задача</th>
+                                    <th>Размечено, шт</th><th>Размечено, б</th>
+                                    <th>Качество в суперсете</th><th>Качество факт.</th>
+                                    <th>Норматив</th><th>Без качества, шт</th>
+                                </tr>
+                                <tr id="supersetTable2Filters"></tr>
+                            </thead>
+                            <tbody id="supersetTable2Body"></tbody>
+                        </table>
+                        <div class="pagination-container" id="pagination-superset2">
+                            <div class="pagination-info" id="pagination-superset2-info">Показано 0-0 из 0</div>
+                            <div class="pagination-controls" id="pagination-superset2-controls"></div>
+                        </div>
                     </div>
-                </div>
 
-                <div class="charts-grid">
-                    <div class="chart-card">
-                        <h3>Качество по дням</h3>
-                        <canvas id="chartDayQuality"></canvas>
-                    </div>
-                    
-                    <div class="chart-card">
-                        <h3>Типы ошибок по разметчикам</h3>
-                        <canvas id="chartErrorsByMarker"></canvas>
-                    </div>
-                </div>
-
-                <div class="table-card">
-                    <div class="table-header">
-                        <h3>Обратные связи</h3>
-                    </div>
-                    <table id="fbTableHome">
-                        <thead>
-                            <tr>
-                                <th>Дата</th><th>Разметчик</th><th>Тип ВКС</th><th>Провел</th>
-                                <th>Статус</th><th>Проект</th><th>Пулы с ошибками</th><th>Ср. качество за период</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fbTableBodyHome"></tbody>
-                    </table>
-                    <div class="pagination-container" id="pagination-fbHome">
-                        <div class="pagination-info" id="pagination-fbHome-info">Показано 0-0 из 0</div>
-                        <div class="pagination-controls" id="pagination-fbHome-controls"></div>
+                    <div class="superset-tables-row" style="margin-top: 20px;">
+                        <div>
+                            <h3 style="margin-bottom: 15px;">Цены по проектам</h3>
+                            <div class="table-card">
+                                <table id="supersetTable3">
+                                    <thead>
+                                        <tr><th>Дата</th><th>Проект</th><th>Цена</th></tr>
+                                        <tr id="supersetTable3Filters"></tr>
+                                    </thead>
+                                    <tbody id="supersetTable3Body"></tbody>
+                                </table>
+                                <div class="pagination-container" id="pagination-superset3">
+                                    <div class="pagination-info" id="pagination-superset3-info">Показано 0-0 из 0</div>
+                                    <div class="pagination-controls" id="pagination-superset3-controls"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 style="margin-bottom: 15px;">Факт/план по сотрудникам</h3>
+                            <div class="table-card">
+                                <table id="supersetTable4">
+                                    <thead>
+                                        <tr><th>ФИО</th><th>Качество</th><th>Норматив</th></tr>
+                                        <tr id="supersetTable4Filters"></tr>
+                                    </thead>
+                                    <tbody id="supersetTable4Body"></tbody>
+                                </table>
+                                <div class="pagination-container" id="pagination-superset4">
+                                    <div class="pagination-info" id="pagination-superset4-info">Показано 0-0 из 0</div>
+                                    <div class="pagination-controls" id="pagination-superset4-controls"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- ================= ТОП ОШИБОК ================= -->
+            <!-- ================= РАЗМЕТЧИКИ (ТОП ОШИБОК) ================= -->
             <section id="section-errors" class="section">
-                <h2 style="margin-bottom: 20px;">Топ ошибок разметчиков</h2>
+                <h2 style="margin-bottom: 20px;">Разметчики</h2>
                 <div class="filters" style="margin-bottom: 15px;">
                     <div class="filter-group"><label>Дата с</label><input type="date" id="errFilterDateFrom" onchange="renderErrorsTable()"></div>
                     <div class="filter-group"><label>Дата по</label><input type="date" id="errFilterDateTo" onchange="renderErrorsTable()"></div>
@@ -272,48 +377,10 @@
                 <div id="errorsCardsContainer" class="errors-cards-grid"></div>
             </section>
 
-            <!-- ================= ОБРАТНАЯ СВЯЗЬ ================= -->
+            <!-- ================= КАЛЕНДАРЬ (ОБРАТНАЯ СВЯЗЬ) ================= -->
             <section id="section-feedback" class="section">
-                <h2 style="margin-bottom: 20px;">Обратная связь</h2>
-                <div class="card" style="margin-bottom: 20px;">
-                    <h3 style="margin-bottom: 15px;">Создание фидбека</h3>
-                    <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
-                        <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
-                            <label>Выберите пулы</label>
-                            <div class="multi-select" id="msFbPool">
-                                <div class="ms-header" onclick="toggleDropdown('msFbPool')">
-                                    <span class="ms-label empty" id="msFbPool_label">Все пулы</span>
-                                    <span class="ms-arrow">▼</span>
-                                </div>
-                                <div class="ms-dropdown" id="msFbPool_dropdown">
-                                    <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                    <label class="ms-item ms-all"><input type="checkbox" id="msFbPool_all" onchange="toggleAll('msFbPool', 'feedbackPool')"> Выбрать все</label>
-                                    <div id="msFbPool_options"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
-                            <label>Выберите группу разметчиков</label>
-                            <div class="multi-select" id="msFbGroup">
-                                <div class="ms-header" onclick="toggleDropdown('msFbGroup')">
-                                    <span class="ms-label empty" id="msFbGroup_label">Все группы</span>
-                                    <span class="ms-arrow">▼</span>
-                                </div>
-                                <div class="ms-dropdown" id="msFbGroup_dropdown">
-                                    <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                    <label class="ms-item ms-all"><input type="checkbox" id="msFbGroup_all" onchange="toggleAll('msFbGroup', 'feedbackGroup')"> Выбрать все</label>
-                                    <div id="msFbGroup_options"></div>
-                                    <div class="ms-apply-container">
-                                        <button id="btnApplyGroup" style="padding: 6px 16px; font-size: 0.8rem; height: auto;">Применить</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <button class="success" id="btnGenerateFeedback" style="height: 40px;">Создать</button>
-                    </div>
-                    <div id="feedbackGenerationBlocks" style="margin-top: 20px;"></div>
-                </div>
-
+                <h2 style="margin-bottom: 20px;">Календарь</h2>
+                
                 <div class="card" style="margin-bottom: 20px;">
                     <h3 style="margin-bottom: 15px;">Добавить запись</h3>
                     <div class="form-grid">
@@ -392,106 +459,6 @@
                 </div>
             </section>
 
-            <!-- ================= СУПЕРСЕТ ================= -->
-            <section id="section-superset" class="section">
-                <h2 style="margin-bottom: 20px;">Суперсет</h2>
-                <div class="superset-sticky">
-                    <div class="filters superset-filters">
-                        <div class="filter-group"><label>Дата с</label><input type="date" id="supersetDateFrom"></div>
-                        <div class="filter-group"><label>Дата по</label><input type="date" id="supersetDateTo"></div>
-                        <div class="filter-group">
-                            <label>Задача (пул)</label>
-                            <div class="multi-select" id="msSupersetTask">
-                                <div class="ms-header" onclick="toggleDropdown('msSupersetTask')">
-                                    <span class="ms-label empty" id="msSupersetTask_label">Все задачи</span>
-                                    <span class="ms-arrow">▼</span>
-                                </div>
-                                <div class="ms-dropdown" id="msSupersetTask_dropdown">
-                                    <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                                    <label class="ms-item ms-all"><input type="checkbox" id="msSupersetTask_all" onchange="toggleAll('msSupersetTask', 'tasks')"> Выбрать все</label>
-                                    <div id="msSupersetTask_options"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <button id="btnResetSupersetFilters" style="height:40px;" onclick="resetSupersetFilters()">Сбросить</button>
-                    </div>
-                </div>
-                
-                <h3 style="margin-bottom: 15px;">Сводная таблица (проект + задача)</h3>
-                <div class="table-card">
-                    <table id="supersetTable1">
-                        <thead>
-                            <tr>
-                                <th>Проект</th><th>Задача</th><th>Размечено, шт</th><th>Норма качества</th>
-                                <th>Качество</th><th>Комментарий</th><th>Без качества, шт</th>
-                                <th>Факт баллов/час</th><th>Кпроизв в час</th><th>Цена</th>
-                                <!-- ★ УДАЛЕНО: <th>Тип задания</th> -->
-                                <th>Период разметки</th>
-                            </tr>
-                            <tr id="supersetTable1Filters"></tr>
-                        </thead>
-                        <tbody id="supersetTable1Body"></tbody>
-                    </table>
-                    <div class="pagination-container" id="pagination-superset1">
-                        <div class="pagination-info" id="pagination-superset1-info">Показано 0-0 из 0</div>
-                        <div class="pagination-controls" id="pagination-superset1-controls"></div>
-                    </div>
-                </div>
-                <h3 style="margin-bottom: 15px;">Качество по дням / ФИО</h3>
-                <div class="table-card">
-                    <table id="supersetTable2">
-                        <thead>
-                            <tr>
-                                <th>Дата</th><th>ФИО</th><th>Проект</th><th>Задача</th>
-                                <th>Размечено, шт</th><th>Размечено, б</th>
-                                <th>Качество в суперсете</th><th>Качество факт.</th>
-                                <th>Норматив</th><th>Без качества, шт</th>
-                            </tr>
-                            <tr id="supersetTable2Filters"></tr>
-                        </thead>
-                        <tbody id="supersetTable2Body"></tbody>
-                    </table>
-                    <div class="pagination-container" id="pagination-superset2">
-                        <div class="pagination-info" id="pagination-superset2-info">Показано 0-0 из 0</div>
-                        <div class="pagination-controls" id="pagination-superset2-controls"></div>
-                    </div>
-                </div>
-                <div class="superset-tables-row">
-                    <div>
-                        <h3 style="margin-bottom: 15px;">Цены по проектам</h3>
-                        <div class="table-card">
-                            <table id="supersetTable3">
-                                <thead>
-                                    <tr><th>Дата</th><th>Проект</th><th>Цена</th></tr>
-                                    <tr id="supersetTable3Filters"></tr>
-                                </thead>
-                                <tbody id="supersetTable3Body"></tbody>
-                            </table>
-                            <div class="pagination-container" id="pagination-superset3">
-                                <div class="pagination-info" id="pagination-superset3-info">Показано 0-0 из 0</div>
-                                <div class="pagination-controls" id="pagination-superset3-controls"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <h3 style="margin-bottom: 15px;">Факт/план по сотрудникам</h3>
-                        <div class="table-card">
-                            <table id="supersetTable4">
-                                <thead>
-                                    <tr><th>ФИО</th><th>Качество</th><th>Норматив</th></tr>
-                                    <tr id="supersetTable4Filters"></tr>
-                                </thead>
-                                <tbody id="supersetTable4Body"></tbody>
-                            </table>
-                            <div class="pagination-container" id="pagination-superset4">
-                                <div class="pagination-info" id="pagination-superset4-info">Показано 0-0 из 0</div>
-                                <div class="pagination-controls" id="pagination-superset4-controls"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <footer class="page-footer">
                 <a href="https://www.flaticon.com/ru/free-icons/" title="статистика иконки" target="_blank" rel="noopener noreferrer">Статистика иконки от Flat-icons-com - Flaticon</a>
             </footer>
@@ -535,32 +502,54 @@
             </div>
         </div>
 
-        <!-- ЭКРАН 2: Прогресс -->
-        <div id="uploadViewProgress" style="display: none; text-align: center; padding: 40px 0;">
-            <h2 class="modal-title">Загрузка файлов...</h2>
-            <div class="progress-bar-bg" style="margin: 40px 0; height: 12px;">
-                <div class="progress-bar-fill" id="modalProgressFill" style="width: 0%;"></div>
-            </div>
-            <div id="modalProgressText" style="color: var(--muted); font-weight: 500;">Чтение файла...</div>
-        </div>
-
-        <!-- ЭКРАН 3: Предпросмотр -->
+        <!-- ЭКРАН 2: Предпросмотр (Карточки файлов) -->
         <div id="uploadViewPreview" style="display: none;">
-            <h2 class="modal-title" style="color: var(--success);">Файлы готовы к загрузке</h2>
-            <p style="text-align: center; color: var(--muted); margin-bottom: 20px;">Проверьте, что выбранные файлы верны</p>
-            <div id="previewFilesList" class="preview-files-list"></div>
-            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <h2 class="modal-title" style="color: var(--success); margin-bottom: 0; text-align: left;">Файлы готовы к загрузке</h2>
+                <button id="btnAddMoreFiles" style="width: 40px; height: 40px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; line-height: 1;" title="Добавить файлы">+</button>
+            </div>
+            <p style="text-align: left; color: var(--muted); margin-bottom: 20px;">Проверьте, что выбранные файлы верны</p>
+            
+            <div id="previewFilesContainer" class="preview-files-grid">
+                <!-- Сюда будут рендериться сгруппированные карточки -->
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button class="secondary" id="btnPreviewCancel">Отмена</button>
                 <button class="success" id="btnPreviewContinue">Продолжить</button>
             </div>
         </div>
 
+        <!-- ЭКРАН 3: Прогресс и Логи -->
+        <div id="uploadViewProgress" style="display: none;">
+            <h2 class="modal-title" style="text-align: center;">Загрузка файлов...</h2>
+            
+            <!-- Прогресс-бар (как на странице управление) -->
+            <div class="progress-wrap" style="margin-bottom: 20px;">
+                <div class="progress-header">
+                    <span id="modalProgressTitle">Готово</span>
+                    <span class="pct" id="modalProgressPct">0%</span>
+                </div>
+                <div class="progress-bar-bg"><div class="progress-bar-fill" id="modalProgressFill"></div></div>
+                <div class="progress-stage" id="modalProgressStage" style="font-size:0.75rem; color:var(--muted); margin-top:4px;"></div>
+            </div>
+
+            <!-- Карточка статуса файлов (сверху) -->
+            <div id="markersStatusList" class="markers-status-list" style="display:none; max-height: 150px;"></div>
+
+            <!-- Лог (снизу) -->
+            <div class="log" id="logBox" style="max-height: 150px; margin-top: 10px;"></div>
+        </div>
+
         <!-- ЭКРАН 4: Успех -->
         <div id="uploadViewDone" style="display: none; text-align: center; padding: 20px 0;">
             <div class="success-icon">✔</div>
-            <h2 class="modal-title" style="color: var(--success);">Файл успешно загружен</h2>
+            <h2 class="modal-title" style="color: var(--success);">Файлы загружены успешно</h2>
             <p id="doneMessage" style="color: var(--muted); margin-bottom: 20px;"></p>
-            <button class="success" id="btnDoneClose">Продолжить</button>
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button class="secondary" id="btnUploadMore">Загрузить доп. файлы</button>
+                <button class="success" id="btnDoneClose">Готово</button>
+            </div>
         </div>
 
         <!-- ЭКРАН 5: Ошибка -->
@@ -570,7 +559,35 @@
             <p id="errorMessage" style="color: var(--muted); margin-bottom: 20px;"></p>
             <button class="secondary" id="btnErrorClose">Выбрать другой файл</button>
         </div>
+    </div>
+</div>
 
+<!-- МОДАЛЬНОЕ ОКНО СКАЧИВАНИЯ -->
+<div class="modal-overlay" id="downloadModal">
+    <div class="modal-content" style="max-width: 500px;">
+        <button class="modal-close-x" onclick="document.getElementById('downloadModal').classList.remove('active')">&times;</button>
+        <h2 class="modal-title">Скачать файлы</h2>
+        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
+            <button class="secondary" id="btnDownloadExcel" style="padding: 15px;">💾 Экспорт всей БД в Excel</button>
+            <button class="success" id="btnDownloadReport" style="padding: 15px;">📄 Скачать HTML-отчет</button>
+        </div>
+    </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО КОНФЛИКТОВ (ДУБЛИКАТОВ) -->
+<div class="modal-overlay" id="conflictModal">
+    <div class="modal-content" style="max-width: 800px;">
+        <h2 class="modal-title" style="color: var(--danger);">Найдены дубликаты или обновления</h2>
+        <p style="text-align: center; color: var(--muted); margin-bottom: 20px;">Выберите, какие данные оставить (старые или новые)</p>
+        
+        <div id="conflictList" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;">
+            <!-- Сюда рендерятся карточки конфликтов -->
+        </div>
+        
+        <div style="display: flex; gap: 15px; justify-content: center; margin-top: 25px;">
+            <button class="secondary" id="btnConflictKeepOld">Оставить всё старое</button>
+            <button class="success" id="btnConflictApplyAll">Сохранить все изменения</button>
+        </div>
     </div>
 </div>
 
@@ -585,6 +602,9 @@
         </div>
     </div>
 </div>
+
+<input type="file" id="fileInput" accept=".xlsx,.xls" multiple style="display:none;">
+<input type="file" id="importInput" accept=".xlsx,.xls" style="display:none;">
 
 <script src="./xlsx.full.min.js" onerror="console.error('❌ xlsx.full.min.js не найден.')"></script>
 <script src="./chart.umd.min.js" onerror="console.error('❌ chart.umd.min.js не найден.')"></script>
