@@ -1,7 +1,6 @@
-// js/data.js — ДОБАВЛЕНА ЛОГИКА ПРОВЕРКИ НА ДУБЛИКАТЫ И КОНФЛИКТЫ
-// ★ ИЗМЕНЕНО: processNewRows теперь не сохраняет данные сразу, а ищет дубликаты и конфликты.
-// ★ ДОБАВЛЕНО: commitNewData — применяет новые данные и разрешает конфликты.
-// Ранее добавленное: полное название пула (без обрезания проекта), _domain, пропуск 0 фрагментов.
+// js/data.js — ИСПРАВЛЕНА ОШИБКА "TRIM IS NOT A FUNCTION"
+// ★ ИЗМЕНЕНО: Все вызовы getVal обернуты в String(...) перед .trim() и .replace(), чтобы избежать падения при чтении чисел из Excel.
+// Ранее добавленное: поиск дубликатов/конфликтов, полное название пула, _domain, пропуск 0 фрагментов.
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -75,12 +74,14 @@ function getRowKey(type, row) {
     if (!row) return null;
     if (type === 'validation') return normalizeId(getVal(row, 'assignment_id'));
     if (type === 'markers') return normalizeId(getVal(row, 'ID задачи')) + '|' + normalizeId(getVal(row, 'ID разметчика'));
-    if (type === 'recommendations') return normalizeId(getVal(row, 'item_id')) + '|' + (getVal(row, 'Почта разметчика') || '').trim();
-    if (type === 'employee_map') return (getVal(row, 'ФИО') || '').trim() + '|' + (getVal(row, 'Почта') || '').trim();
-    if (type === 'validation_flat') return (getVal(row, 'url задания') || '') + '|' + (getVal(row, 'email') || '');
-    if (type === 'superset1') return (getVal(row, 'Проект') || '').trim() + '|' + (getVal(row, 'Задача') || '').trim();
-    if (type === 'superset2') return (getVal(row, 'Проект') || '').trim() + '|' + (getVal(row, 'Задача') || '').trim() + '|' + (getVal(row, 'Дата начала') || '') + '|' + (getVal(row, 'Дата окончания') || '');
-    if (type === 'superset3') return (getVal(row, 'ФИО') || '').trim() + '|' + (getVal(row, 'Дата') || '') + '|' + (getVal(row, 'Проект') || '').trim() + '|' + (getVal(row, 'Задача') || '').trim();
+    
+    // ★ ИСПРАВЛЕНО: оборачиваем в String() перед .trim()
+    if (type === 'recommendations') return normalizeId(getVal(row, 'item_id')) + '|' + String(getVal(row, 'Почта разметчика') || '').trim();
+    if (type === 'employee_map') return String(getVal(row, 'ФИО') || '').trim() + '|' + String(getVal(row, 'Почта') || '').trim();
+    if (type === 'validation_flat') return String(getVal(row, 'url задания') || '').trim() + '|' + String(getVal(row, 'email') || '').trim();
+    if (type === 'superset1') return String(getVal(row, 'Проект') || '').trim() + '|' + String(getVal(row, 'Задача') || '').trim();
+    if (type === 'superset2') return String(getVal(row, 'Проект') || '').trim() + '|' + String(getVal(row, 'Задача') || '').trim() + '|' + String(getVal(row, 'Дата начала') || '').trim() + '|' + String(getVal(row, 'Дата окончания') || '').trim();
+    if (type === 'superset3') return String(getVal(row, 'ФИО') || '').trim() + '|' + String(getVal(row, 'Дата') || '').trim() + '|' + String(getVal(row, 'Проект') || '').trim() + '|' + String(getVal(row, 'Задача') || '').trim();
     return JSON.stringify(row);
 }
 
@@ -89,7 +90,7 @@ function normalizeForCompare(obj) {
     const cleanObj = {};
     const keys = Object.keys(obj).sort();
     for (const k of keys) {
-        if (k.startsWith('_')) continue; // Игнорируем служебные поля (например, _domain)
+        if (k.startsWith('_')) continue;
         let val = obj[k];
         if (val === null || val === undefined) val = '';
         cleanObj[k] = String(val).trim();
@@ -128,7 +129,6 @@ export async function processNewRows(results) {
 
             if (!rawArray) continue;
 
-            // Для плоской валидации добавляем мета-данные
             let processedRow = Object.assign({}, row);
             if (type === 'validation') processedRow._domain = currentDomain;
             if (type === 'validation_flat') {
@@ -149,30 +149,20 @@ export async function processNewRows(results) {
             const existingRow = rawArray.find(r => getRowKey(type, r) === newKey);
 
             if (!existingRow) {
-                // Данных нет — добавляем в список на сохранение
                 state.pendingNewData[pendingKey].push(processedRow);
             } else if (!isRowEqual(existingRow, processedRow)) {
-                // Данные есть, но они ОТЛИЧАЮТСЯ (конфликт / обновление)
                 state.pendingConflicts.push({
-                    type,
-                    pendingKey,
-                    key: newKey,
-                    oldRow: existingRow,
-                    newRow: processedRow,
-                    fileName: file
+                    type, pendingKey, key: newKey, oldRow: existingRow, newRow: processedRow, fileName: file
                 });
             }
-            // Если isRowEqual === true, значит данные полностью идентичны — просто игнорируем (защита от дублей)
         }
     }
 
-    // Если есть конфликты — возвращаем их, чтобы app.js показал модальное окно
     const totalNew = Object.values(state.pendingNewData).reduce((a, b) => a + b.length, 0);
     if (state.pendingConflicts.length > 0) {
         return { hasConflicts: true, newCount: totalNew, conflictsCount: state.pendingConflicts.length };
     }
 
-    // Если конфликтов нет — сохраняем всё сразу
     if (totalNew > 0) {
         commitNewData();
         log(`Добавлено новых записей: ${totalNew}`, false);
@@ -183,11 +173,10 @@ export async function processNewRows(results) {
     return { hasConflicts: false };
 }
 
-// ★ Функция применения данных (вызывается либо сразу, либо после выбора в модалке)
+// ★ Функция применения данных
 export function commitNewData(resolvedConflicts = []) {
     if (!state.pendingNewData) return;
 
-    // 1. Добавляем новые данные
     state.rawMarkers.push(...state.pendingNewData.markers);
     state.rawValidation.push(...state.pendingNewData.validation);
     state.rawRecommendations.push(...state.pendingNewData.recommendations);
@@ -197,7 +186,6 @@ export function commitNewData(resolvedConflicts = []) {
     state.rawSuperset2.push(...state.pendingNewData.superset2);
     state.rawSuperset3.push(...state.pendingNewData.superset3);
 
-    // 2. Применяем разрешенные конфликты (где выбрали "Новое")
     const arrays = {
         markers: state.rawMarkers, validation: state.rawValidation, recommendations: state.rawRecommendations,
         employee: state.rawEmployeeMap, flat: state.rawFlatValidations, superset1: state.rawSuperset1,
@@ -219,7 +207,7 @@ export function commitNewData(resolvedConflicts = []) {
     state.pendingNewData = null;
     state.pendingConflicts = [];
     saveToStorage();
-    recomputeDashboard(); // Пересчитываем дашборд после обновления
+    recomputeDashboard();
 }
 
 // ===== Стандартные функции парсинга =====
@@ -258,8 +246,10 @@ function processFlatValidations() {
         const first = rows[0];
         processedTasks++;
 
-        const project = (getVal(first, 'Проект') || '').replace(/_validate$/, '').trim() || null;
-        const pool = (getVal(first, 'Пул') || '').trim() || null;
+        // ★ ИСПРАВЛЕНО: оборачиваем в String() перед replace/trim
+        const project = String(getVal(first, 'Проект') || '').replace(/_validate$/, '').trim() || null;
+        const pool = String(getVal(first, 'Пул') || '').trim() || null;
+        
         const fileName = stripJson(getVal(first, 'file_name'));
         const date = parseExcelDate(getVal(first, 'дата разметки'));
         const marker = getVal(first, 'email');
@@ -347,17 +337,18 @@ export async function recomputeDashboard() {
         let pool = null, marker = null;
         
         if (taskStr) {
-            const idx = taskStr.lastIndexOf('_validate_');
+            const idx = String(taskStr).lastIndexOf('_validate_');
             if (idx !== -1) {
-                marker = taskStr.substring(idx + '_validate_'.length).trim();
-                // ★ ИЗМЕНЕНО: сохраняем полное название задачи (пула) без обрезания проекта
-                pool = taskStr.substring(0, idx).trim(); 
+                marker = String(taskStr).substring(idx + '_validate_'.length).trim();
+                pool = String(taskStr).substring(0, idx).trim(); 
             }
         }
         
         const taskId = normalizeId(getVal(m, 'ID задачи'));
         const markerId = normalizeId(getVal(m, 'ID разметчика'));
-        const project = (getVal(m, 'Проект') || '').replace(/_validate$/, '').trim() || null;
+        
+        // ★ ИСПРАВЛЕНО: оборачиваем в String()
+        const project = String(getVal(m, 'Проект') || '').replace(/_validate$/, '').trim() || null;
         
         if (taskId && markerId) {
             markerDict[`${taskId}|${markerId}`] = {
@@ -542,7 +533,7 @@ export async function recomputeDashboard() {
 
 export function matchesTab(r) {
     if (state.currentTab === 'all') return true;
-    const project = (r.project || '').trim();
+    const project = String(r.project || '').trim();
     return project === state.currentTab;
 }
 
