@@ -1,7 +1,7 @@
-// js/ui.js — ОБНОВЛЕННЫЙ КОД
-// ★ ИЗМЕНЕНО: renderSupersetTable1 (удален "Тип задания"), renderSupersetTable2 (формат % и красный цвет при расхождении).
-// ★ ИЗМЕНЕНО: Глобально во всем файле проценты приведены к формату .toFixed(2).
-// Ранее добавленное: _domain в buildTable, toggleAll для 'tasks', ISO-даты в renderErrorsTable и buildDayQualityChart.
+// js/ui.js — ОБНОВЛЕННЫЙ КОД (Объединение страниц и карточки разметчиков)
+// ★ ИЗМЕНЕНО: switchMenu и switchTab теперь вызывают renderSupersetPage для страницы 'main'.
+// ★ ИЗМЕНЕНО: В renderErrorsTable блок ошибок обернут в <details> (сворачивание).
+// Ранее добавленное: _domain в таблице, toggleAll для 'tasks', ISO-даты, красный цвет в Суперсете.
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -27,8 +27,6 @@ const dataLabelsPlugin = {
                     const val = dataset.data[index];
                     if (val != null && val !== 0 && typeof val === 'number') {
                         const height = element.base - element.y;
-                        
-                        // Если столбик слишком маленький (меньше 15px), не пишем текст, чтобы не было каши
                         if (height < 15) return;
 
                         ctx.fillStyle = '#1f1f1f';
@@ -36,10 +34,7 @@ const dataLabelsPlugin = {
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         
-                        // ★ ИЗМЕНЕНО: .toFixed(2) для процентов
                         let displayVal = dataset.isPercentage ? Number(val).toFixed(2) + '%' : val;
-                        
-                        // Центрируем текст посередине столбца
                         ctx.fillText(displayVal, element.x, element.y + (height / 2));
                     }
                 });
@@ -53,24 +48,27 @@ Chart.register(dataLabelsPlugin);
 export function switchMenu(menuId, btn) {
     state.currentMenu = menuId;
     document.querySelectorAll('.nav-icon').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    if (btn) btn.classList.add('active');
 
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     const sec = document.getElementById('section-' + menuId);
     if (sec) sec.classList.add('active');
 
     const topBar = document.getElementById('topBar');
-    topBar.style.display = (menuId === 'data') ? 'none' : 'flex';
+    if (topBar) {
+        // Скрываем табы только если это не главная страница (оставляем для проектов)
+        topBar.style.display = (menuId === 'main') ? 'flex' : 'none';
+    }
 
-    if (menuId === 'main') triggerFilterUpdate();
+    if (menuId === 'main') {
+        triggerFilterUpdate();
+        applySupersetFilters();
+        renderSupersetPage();
+    }
     if (menuId === 'errors') renderErrorsTable();
     if (menuId === 'feedback') {
         renderFeedbackTable();
         state.pagination.fbTable = 1;
-    }
-    if (menuId === 'superset') {
-        applySupersetFilters();
-        renderSupersetPage();
     }
 }
 
@@ -87,13 +85,13 @@ export function switchTab(tabId, btn) {
     state.pagination.superset3 = 1;
     state.pagination.superset4 = 1;
 
-    if (state.currentMenu === 'main') triggerFilterUpdate();
-    if (state.currentMenu === 'errors') renderErrorsTable();
-    if (state.currentMenu === 'feedback') renderFeedbackTable();
-    if (state.currentMenu === 'superset') {
+    if (state.currentMenu === 'main') {
+        triggerFilterUpdate();
         applySupersetFilters();
         renderSupersetPage();
     }
+    if (state.currentMenu === 'errors') renderErrorsTable();
+    if (state.currentMenu === 'feedback') renderFeedbackTable();
 }
 
 export function buildProjectTabs() {
@@ -248,9 +246,7 @@ export function toggleAll(containerId, stateKey) {
     const allCheckbox = document.getElementById(containerId + '_all');
     const checkboxes = document.querySelectorAll('#' + containerId + '_options input[type="checkbox"]');
 
-    const setRef = stateKey === 'tasks'
-        ? state.superset.filters.tasks
-        : state.filterState[stateKey];
+    const setRef = stateKey === 'tasks' ? state.superset.filters.tasks : state.filterState[stateKey];
     if (!setRef) return;
 
     setRef.clear();
@@ -468,24 +464,12 @@ export function updateKPI() {
     let qColorClass = 'val-brown';
     let errColorClass = 'val-brown';
 
-    if (isRed) {
-        qColorClass = 'val-red';
-        errColorClass = 'val-red';
-    } else if (isGreen) {
-        qColorClass = 'val-green';
-        errColorClass = 'val-green';
-    }
+    if (isRed) { qColorClass = 'val-red'; errColorClass = 'val-red'; }
+    else if (isGreen) { qColorClass = 'val-green'; errColorClass = 'val-green'; }
 
-    // Расчет Факт/Цена/Время/Коэффициент на основе фильтров Главной
     let activeTasks = state.superset.table1 || [];
-    
-    if (state.currentTab !== 'all') {
-        activeTasks = activeTasks.filter(r => r.project === state.currentTab);
-    }
-    
-    if (state.filterState.pool.size > 0) {
-        activeTasks = activeTasks.filter(r => state.filterState.pool.has(r.task));
-    }
+    if (state.currentTab !== 'all') activeTasks = activeTasks.filter(r => r.project === state.currentTab);
+    if (state.filterState.pool.size > 0) activeTasks = activeTasks.filter(r => state.filterState.pool.has(r.task));
 
     const filterFrom = document.getElementById('filterDateFrom')?.value;
     const filterTo = document.getElementById('filterDateTo')?.value;
@@ -636,8 +620,7 @@ export function buildQualityChart() {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 25 ? l.slice(0, 22) + '…' : l), datasets },
         options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
+            responsive: true, maintainAspectRatio: false, 
             plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
             scales: { 
                 y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
@@ -696,8 +679,7 @@ export function buildPoolQualityChart() {
         type: 'line',
         data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets },
         options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
+            responsive: true, maintainAspectRatio: false, 
             plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
             scales: { 
                 y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
@@ -709,7 +691,7 @@ export function buildPoolQualityChart() {
 
 export function buildDayQualityChart() {
     destroyChart(state.charts.dayQuality);
-    const byDate = {};   // label → { iso, values: [] }
+    const byDate = {};
     const qualityKeys = new Set();
     for (const r of state.filteredData) {
         if (r.date && r.quality != null && isFinite(r.quality)) {
@@ -745,8 +727,7 @@ export function buildDayQualityChart() {
         type: 'line',
         data: { labels, datasets },
         options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
+            responsive: true, maintainAspectRatio: false, 
             plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
             scales: { 
                 y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
@@ -758,7 +739,6 @@ export function buildDayQualityChart() {
 
 export function buildErrorsByMarkerChart() {
     destroyChart(state.charts.errorsByMarker);
-
     const markers = [...new Set(state.filteredData.map(r => r.marker).filter(Boolean))].sort();
     const errorTypes = [...new Set(state.filteredData.map(r => r.errorType).filter(Boolean))].sort();
     
@@ -776,8 +756,7 @@ export function buildErrorsByMarkerChart() {
         type: 'bar',
         data: { labels: markers.map(m => m.length > 20 ? m.slice(0, 18) + '…' : m), datasets },
         options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
+            responsive: true, maintainAspectRatio: false, 
             plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
             scales: { 
                 x: { stacked: true, grid: { display: false }, ticks: { color: '#7a7a7a' } }, 
@@ -1028,14 +1007,15 @@ export function renderErrorsTable() {
             }
             poolListHtml += '</ul>';
 
+            // ★ ИЗМЕНЕНО: обернуто в details для сворачивания
             typesHtml += `
-                <div class="error-type-block">
-                    <div class="error-type-header">
+                <details class="error-type-block">
+                    <summary class="error-type-header">
                         <span>${escapeHtml(type)}</span>
-                    </div>
+                    </summary>
                     <div class="error-type-rate">${typeRate.toFixed(2)}% от всех ошибок</div>
                     ${poolListHtml}
-                </div>
+                </details>
             `;
         }
 
@@ -1074,6 +1054,8 @@ export function renderErrorsTable() {
 
     container.innerHTML = html;
 }
+
+// ===== ФУНКЦИИ СУПЕРСЕТА (без изменений в логике, просто рендер на странице main) =====
 
 export function renderSupersetPage() {
     renderSupersetFilters();
@@ -1301,16 +1283,13 @@ function renderSupersetTable2() {
         tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
     } else {
         tbody.innerHTML = rows.map(r => {
-            // ★ ИЗМЕНЕНО: Форматирование "Качества в суперсете" и добавление красного цвета
             let qsHtml = '—';
             const qsNum = parseFloat(String(r.qualitySuperset).replace(',', '.'));
             if (!isNaN(qsNum)) {
                 let qsPct = qsNum <= 1 ? qsNum * 100 : qsNum;
                 let style = '';
-                // Сравниваем со значением факт, если оно есть
                 if (r.qualityFact != null) {
                     let qfPct = r.qualityFact * 100;
-                    // Допуск 0.01, чтобы не подсвечивать из-за микропогрешностей округления
                     if (Math.abs(qsPct - qfPct) > 0.01) {
                         style = 'style="color: var(--danger); font-weight: bold;"';
                     }
