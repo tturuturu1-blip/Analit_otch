@@ -1,6 +1,8 @@
 // js/data.js — ИСПРАВЛЕНИЕ СВЯЗЫВАНИЯ ID И ПРОЕКТОВ
-// ★ ДОБАВЛЕНО: _domain на записях валидации, объединение rawRecommendationsManual,
-//    пропуск заданий с 0 фрагментов (аномалия выгрузки)
+// ★ ИЗМЕНЕНО: В recomputeDashboard (markerDict) убрано обрезание названия проекта от названия пула.
+//    Теперь "Гимнастки_пул_01" сохраняется целиком.
+// Ранее добавленное: _domain на записях валидации, объединение rawRecommendationsManual,
+//    пропуск заданий с 0 фрагментов (аномалия выгрузки).
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -8,11 +10,10 @@ import {
     detectTableType, updateProgress, log, yieldToUI
 } from './utils.js';
 
-// ★ НОВАЯ ФУНКЦИЯ: Приводит ID (task_id, marker_id и т.д.) к единому виду, убирая .0
+// ★ ФУНКЦИЯ: Приводит ID (task_id, marker_id и т.д.) к единому виду, убирая .0
 function normalizeId(id) {
     if (id == null) return '';
     const s = String(id).trim();
-    // Если это число с плавающей точкой (например, 123.0), отрезаем .0
     if (/^\d+\.0+$/.test(s)) {
         return s.split('.')[0];
     }
@@ -74,7 +75,6 @@ export async function processNewRows(results) {
     let addedM = 0, addedV = 0, addedR = 0, addedF = 0;
     let addedS1 = 0, addedS2 = 0, addedS3 = 0, addedEmp = 0;
 
-    // ★ НОВОЕ: домен на момент загрузки — привязываем к каждой записи валидации
     const currentDomain = state.validationBaseUrl || '';
 
     for (const { file, rows } of results) {
@@ -86,7 +86,6 @@ export async function processNewRows(results) {
 
             if (type === 'markers') { state.rawMarkers.push(row); addedM++; }
             else if (type === 'validation') {
-                // ★ НОВОЕ: сохраняем домен в записи
                 state.rawValidation.push(Object.assign({}, row, { _domain: currentDomain }));
                 addedV++;
             }
@@ -147,7 +146,7 @@ function processFlatValidations() {
 
     let addedRows = 0;
     let processedTasks = 0;
-    let skippedFlat = 0;   // ★ НОВОЕ: счётчик пропущенных
+    let skippedFlat = 0;
 
     for (const key in groups) {
         const rows = groups[key];
@@ -164,7 +163,7 @@ function processFlatValidations() {
         const declaredErrors = Number(getVal(first, 'некорректных меток')) || 0;
         const taskUrl = getVal(first, 'url задания');
 
-        // ★ НОВОЕ: 0 фрагментов = аномалия выгрузки → пропускаем
+        // 0 фрагментов = аномалия выгрузки → пропускаем
         if (totalFragments === 0) {
             log(`⚠️ Плоский формат: пропущено задание ${fileName || '(без имени)'} — 0 фрагментов.`, true);
             skippedFlat++;
@@ -233,7 +232,7 @@ function processFlatValidations() {
 
 export async function recomputeDashboard() {
     state.processedData = [];
-    const skippedFragments = [];   // ★ НОВОЕ: список пропущенных заданий (0 фрагментов)
+    const skippedFragments = [];
     updateProgress(10, 'Построение словаря разметчиков...', 'Пересчет');
     await yieldToUI();
 
@@ -247,19 +246,11 @@ export async function recomputeDashboard() {
             const idx = taskStr.lastIndexOf('_validate_');
             if (idx !== -1) {
                 marker = taskStr.substring(idx + '_validate_'.length).trim();
-                const beforeValidate = taskStr.substring(0, idx).trim();
-                const projectStr = (getVal(m, 'Проект') || '').replace(/_validate$/, '').trim();
-                
-                if (projectStr && beforeValidate.startsWith(projectStr + '_')) {
-                    pool = beforeValidate.substring(projectStr.length + 1).trim();
-                } else {
-                    const firstUnderscore = beforeValidate.indexOf('_');
-                    pool = firstUnderscore >= 0 ? beforeValidate.substring(firstUnderscore + 1).trim() : beforeValidate;
-                }
+                // ★ ИЗМЕНЕНО: сохраняем полное название задачи (пула) без обрезания проекта
+                pool = taskStr.substring(0, idx).trim(); 
             }
         }
         
-        // ★ ИЗМЕНЕНО: Применяем normalizeId
         const taskId = normalizeId(getVal(m, 'ID задачи'));
         const markerId = normalizeId(getVal(m, 'ID разметчика'));
         const project = (getVal(m, 'Проект') || '').replace(/_validate$/, '').trim() || null;
@@ -296,7 +287,6 @@ export async function recomputeDashboard() {
     await yieldToUI();
 
     for (const v of validValidations) {
-        // ★ ИЗМЕНЕНО: Применяем normalizeId
         const taskId = normalizeId(getVal(v, 'task_id'));
         const markerId = normalizeId(getVal(v, 'marker_id'));
         const fileName = stripJson(getVal(v, 'file_name', 'Наименование файла'));
@@ -327,7 +317,6 @@ export async function recomputeDashboard() {
             } catch (e) { /* ignore */ }
         }
 
-        // ★ НОВОЕ: 0 фрагментов = аномалия выгрузки → пропускаем, копим для лога
         if (totalFragments === 0) {
             skippedFragments.push({
                 fileName,
@@ -340,7 +329,7 @@ export async function recomputeDashboard() {
 
         const sumWeights = mistakes.reduce((a, b) => a + b.weight, 0);
         const quality = computeQuality(sumWeights, totalFragments, mistakes.length);
-        const domain = v._domain || '';   // ★ НОВОЕ: домен на момент загрузки
+        const domain = v._domain || '';
 
         if (mistakes.length === 0) {
             state.processedData.push({
@@ -374,7 +363,6 @@ export async function recomputeDashboard() {
     updateProgress(80, 'Обработка рекомендаций...', 'Пересчет');
     await yieldToUI();
 
-    // ★ НОВОЕ: объединяем рекомендации из Excel и введённые вручную через #recTable
     const allRecommendations = [
         ...state.rawRecommendations,
         ...(state.rawRecommendationsManual || [])
@@ -436,7 +424,6 @@ export async function recomputeDashboard() {
         }
     }
 
-    // ★ НОВОЕ: логируем пропущенные задания (0 фрагментов)
     if (skippedFragments.length > 0) {
         log(`⚠️ Пропущено ${skippedFragments.length} заданий — 0 фрагментов (аномалия выгрузки). Загружены только корректные данные.`, true);
         const examples = skippedFragments.slice(0, 5).map(s =>
@@ -470,7 +457,6 @@ export function applyFilters() {
         if (!markerEmpty && !marker.has(r.marker || '')) return false;
         if (!resultEmpty && !result.has(r.result || '')) return false;
         
-        // Сравниваем даты как строки YYYY-MM-DD, чтобы избежать проблем с часовыми поясами
         if (r.date) {
             const d = new Date(r.date);
             if (!isNaN(d.getTime())) {
