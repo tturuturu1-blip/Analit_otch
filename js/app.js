@@ -1,4 +1,4 @@
-// js/app.js — ЛОГИКА МОДАЛЬНОГО ОКНА НОРМЫ (БЕЗ СТРЕЛОК ГРАФИКОВ)
+// js/app.js — НОВАЯ ЛОГИКА МОДАЛЬНОГО ОКНА ЗАГРУЗКИ И ДОМЕНОВ
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows } from './data.js';
@@ -84,51 +84,277 @@ if (btnSidebarToggle) {
     });
 }
 
-// ===== Модальное окно загрузки =====
+// ===== НОВАЯ ЛОГИКА МОДАЛЬНОГО ОКНА ЗАГРУЗКИ =====
 const uploadModal = document.getElementById('uploadModal');
 const btnSidebarAdd = document.getElementById('btnSidebarAdd');
-const btnCloseModal = document.getElementById('btnCloseModal');
-const btnUploadDB = document.getElementById('btnUploadDB');
-const btnUploadSource = document.getElementById('btnUploadSource');
+const btnCloseModalX = document.getElementById('btnCloseModalX');
+
+const viewSelect = document.getElementById('uploadViewSelect');
+const viewProgress = document.getElementById('uploadViewProgress');
+const viewPreview = document.getElementById('uploadViewPreview');
+const viewDone = document.getElementById('uploadViewDone');
+const viewError = document.getElementById('uploadViewError');
+
+const modalProgressFill = document.getElementById('modalProgressFill');
+const modalProgressText = document.getElementById('modalProgressText');
+const previewFilesList = document.getElementById('previewFilesList');
+const errorMessage = document.getElementById('errorMessage');
+const doneMessage = document.getElementById('doneMessage');
+
+const modalDomainInput = document.getElementById('modalDomainInput');
+const domainHistoryList = document.getElementById('domainHistoryList');
+const btnApplyDomain = document.getElementById('btnApplyDomain');
+
+let pendingFiles = []; // Временное хранение файлов для предпросмотра
+let uploadMode = 'source'; // 'source' или 'db'
+
+function showModalView(view) {
+    viewSelect.style.display = view === 'select' ? 'block' : 'none';
+    viewProgress.style.display = view === 'progress' ? 'block' : 'none';
+    viewPreview.style.display = view === 'preview' ? 'block' : 'none';
+    viewDone.style.display = view === 'done' ? 'block' : 'none';
+    viewError.style.display = view === 'error' ? 'block' : 'none';
+}
+
+function resetUploadModal() {
+    showModalView('select');
+    pendingFiles = [];
+    uploadModal.classList.remove('active');
+    
+    // Заполняем историю доменов
+    if (modalDomainInput) {
+        modalDomainInput.value = state.validationBaseUrl || '';
+    }
+    if (domainHistoryList) {
+        domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
+    }
+}
 
 if (btnSidebarAdd) {
     btnSidebarAdd.addEventListener('click', () => {
+        resetUploadModal();
         uploadModal.classList.add('active');
     });
 }
 
-const closeModal = () => uploadModal.classList.remove('active');
+if (btnCloseModalX) {
+    btnCloseModalX.addEventListener('click', resetUploadModal);
+}
 
-if (btnCloseModal) btnCloseModal.addEventListener('click', closeModal);
-if (uploadModal) {
-    uploadModal.addEventListener('click', (e) => {
-        if (e.target === uploadModal) closeModal();
+// Применение домена
+if (btnApplyDomain) {
+    btnApplyDomain.addEventListener('click', () => {
+        const val = modalDomainInput.value.trim();
+        state.validationBaseUrl = val;
+        
+        if (val) {
+            // Добавляем в историю, если такого еще нет
+            if (!state.domainHistory.includes(val)) {
+                state.domainHistory.push(val);
+                // Ограничиваем историю 10 записями
+                if (state.domainHistory.length > 10) state.domainHistory.shift();
+            }
+        }
+        saveToStorage();
+        
+        // Обновляем datalist
+        if (domainHistoryList) {
+            domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
+        }
+        
+        // Показываем быстрый фидбек
+        const oldText = btnApplyDomain.textContent;
+        btnApplyDomain.textContent = '✓ Сохранено';
+        btnApplyDomain.style.background = 'var(--success)';
+        setTimeout(() => {
+            btnApplyDomain.textContent = oldText;
+            btnApplyDomain.style.background = '';
+        }, 1500);
     });
 }
 
+// Выбор файлов
+const btnUploadDB = document.getElementById('btnUploadDB');
+const btnUploadSource = document.getElementById('btnUploadSource');
+const fileInput = document.getElementById('fileInput');
+const importInput = document.getElementById('importInput');
+
 if (btnUploadDB) {
     btnUploadDB.addEventListener('click', () => {
-        closeModal();
-        document.getElementById('importInput').click();
+        uploadMode = 'db';
+        importInput.click();
     });
 }
 
 if (btnUploadSource) {
     btnUploadSource.addEventListener('click', () => {
-        closeModal();
-        document.getElementById('fileInput').click();
+        uploadMode = 'source';
+        fileInput.click();
     });
 }
 
-// ===== ★ НОВОЕ: Поле домена платформы =====
-const validationBaseUrlInput = document.getElementById('validationBaseUrlInput');
-if (validationBaseUrlInput) {
-    validationBaseUrlInput.value = state.validationBaseUrl || '';
-    validationBaseUrlInput.addEventListener('change', () => {
-        state.validationBaseUrl = validationBaseUrlInput.value.trim();
-        saveToStorage();
+// Обработка выбора файлов (Предпросмотр)
+function handleFileSelection(files) {
+    if (!files.length) return;
+    pendingFiles = Array.from(files);
+    
+    previewFilesList.innerHTML = pendingFiles.map(f => {
+        const sizeMb = (f.size / (1024 * 1024)).toFixed(2);
+        return `
+            <div class="preview-file-item">
+                <div class="preview-file-info">
+                    <span class="preview-file-name">📄 ${escapeHtml(f.name)}</span>
+                    <span class="preview-file-size">${sizeMb} МБ</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    showModalView('preview');
+}
+
+// Обработчик инпута источников
+if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        e.target.value = '';
+        if (files.length > 0) handleFileSelection(files);
     });
 }
+
+// Обработчик инпута БД
+if (importInput) {
+    importInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        e.target.value = '';
+        if (files.length > 0) handleFileSelection(files);
+    });
+}
+
+// Кнопки на экране Предпросмотра
+document.getElementById('btnPreviewCancel').addEventListener('click', () => {
+    resetUploadModal();
+});
+
+document.getElementById('btnPreviewContinue').addEventListener('click', async () => {
+    if (pendingFiles.length === 0) return;
+    
+    showModalView('progress');
+    modalProgressFill.style.width = '10%';
+    modalProgressText.textContent = 'Чтение файлов...';
+    await yieldToUI();
+    
+    try {
+        if (uploadMode === 'source') {
+            // Логика для источников
+            const results = await readExcelFiles(pendingFiles);
+            modalProgressFill.style.width = '50%';
+            modalProgressText.textContent = 'Обработка данных...';
+            await yieldToUI();
+            
+            if (results.length === 0) throw new Error('Файлы не прочитаны или имеют неверный формат.');
+            
+            await processNewRows(results);
+            
+            if (!state.validationBaseUrl) {
+                log('⚠️ Домен платформы не указан. Ссылки «Перейти» у загруженных данных не сформируются.', true);
+            }
+            
+            modalProgressFill.style.width = '100%';
+            doneMessage.textContent = `Успешно обработано файлов: ${results.length}`;
+            showModalView('done');
+            
+        } else {
+            // Логика для БД (Импорт)
+            const file = pendingFiles[0];
+            const reader = new FileReader();
+            
+            reader.onload = async (ev) => {
+                try {
+                    modalProgressFill.style.width = '40%';
+                    modalProgressText.textContent = 'Разбор структуры Excel...';
+                    await yieldToUI();
+                    
+                    const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
+                    let parsedM = [], parsedV = [], parsedR = [], parsedF = [], parsedEmp = [];
+                    let parsedS1 = [], parsedS2 = [], parsedS3 = [], parsedFb = [];
+                    
+                    for (const name of wb.SheetNames) {
+                        const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
+                        const lower = name.toLowerCase();
+                        if (lower.includes('свод')) continue;
+                        if (lower.includes('обратн') || lower.includes('feedback')) parsedFb = json;
+                        else if (lower.includes('сотрудник') || lower.includes('employee')) parsedEmp = json;
+                        else if (lower.includes('суперсет 1') || lower.includes('superset 1')) parsedS1 = json;
+                        else if (lower.includes('суперсет 2') || lower.includes('superset 2')) parsedS2 = json;
+                        else if (lower.includes('суперсет 3') || lower.includes('superset 3')) parsedS3 = json;
+                        else if (lower.includes('flat') || lower.includes('плоск')) parsedF = json;
+                        else if (lower.includes('marker') || lower.includes('разметчик')) parsedM = json;
+                        else if (lower.includes('валидац') || lower.includes('valid')) parsedV = json;
+                        else if (lower.includes('рекоменд') || lower.includes('recommend')) parsedR = json;
+                    }
+                    
+                    state.rawMarkers = parsedM;
+                    state.rawValidation = parsedV;
+                    state.rawRecommendations = parsedR;
+                    state.rawFlatValidations = parsedF;
+                    state.rawSuperset1 = parsedS1;
+                    state.rawSuperset2 = parsedS2;
+                    state.rawSuperset3 = parsedS3;
+                    state.rawEmployeeMap = parsedEmp;
+                    
+                    if (parsedFb.length > 0) {
+                        state.feedbackData = parsedFb.map(row => {
+                            let dateStr = row['Дата'];
+                            if (dateStr) {
+                                const d = parseExcelDate(dateStr);
+                                if (d && !isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
+                            }
+                            let avgQ = row['Ср. качество за период'];
+                            if (avgQ === '' || avgQ === undefined) avgQ = null;
+                            else if (typeof avgQ === 'string') avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
+                            return {
+                                date: dateStr || '', marker: row['Разметчик'] || '', status: row['Статус'] || '',
+                                typeVKS: row['Тип ВКС'] || '', conductor: row['Провел'] || '',
+                                project: row['Проект'] || '', pools: row['Пулы с ошибками'] || '', avgQuality: avgQ
+                            };
+                        });
+                        saveFeedbackToStorage();
+                    }
+                    
+                    modalProgressFill.style.width = '80%';
+                    modalProgressText.textContent = 'Сохранение в базу...';
+                    await yieldToUI();
+                    
+                    saveToStorage();
+                    await recomputeDashboard();
+                    
+                    modalProgressFill.style.width = '100%';
+                    doneMessage.textContent = 'База данных успешно восстановлена.';
+                    showModalView('done');
+                    
+                } catch (err) {
+                    errorMessage.textContent = err.message;
+                    showModalView('error');
+                }
+            };
+            reader.onerror = () => {
+                errorMessage.textContent = 'Не удалось прочитать файл. Проверьте его целостность.';
+                showModalView('error');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    } catch (err) {
+        errorMessage.textContent = err.message;
+        showModalView('error');
+    }
+});
+
+// Кнопки на экранах Успех / Ошибка
+document.getElementById('btnDoneClose').addEventListener('click', resetUploadModal);
+document.getElementById('btnErrorClose').addEventListener('click', () => {
+    showModalView('select'); // Возвращаем на первый экран
+});
 
 // ===== Делегирование кликов по табам =====
 const projectTabsContainer = document.getElementById('projectTabs');
@@ -214,24 +440,6 @@ if (btnResetFilters) {
     });
 }
 
-// ===== Загрузка Excel =====
-const fileInput = document.getElementById('fileInput');
-if (fileInput) {
-    fileInput.addEventListener('change', async (e) => {
-        const files = Array.from(e.target.files);
-        if (!files.length) return;
-        updateProgress(0, 'Подготовка...', 'Чтение файлов');
-        await yieldToUI();
-        const results = await readExcelFiles(files);
-        if (results.length > 0) await processNewRows(results);
-        // ★ НОВОЕ: предупреждение, если домен не задан
-        if (!state.validationBaseUrl) {
-            log('⚠️ Домен платформы не указан. Ссылки «Перейти» у загруженных данных не сформируются. Введите домен в поле «Укажите домен в формате…» выше.', true);
-        }
-        e.target.value = '';
-    });
-}
-
 // ===== ТАБЛИЦА РЕКОМЕНДАЦИЙ =====
 function getRecRowsData() {
     const rows = [];
@@ -261,13 +469,13 @@ if (btnSaveRecommendations) {
     btnSaveRecommendations.addEventListener('click', async () => {
         const rows = getRecRowsData();
         if (rows.length === 0) { alert('Заполните хотя бы одну строку'); return; }
-        // ★ НОВОЕ: проверка обязательных полей: дата + почта разметчика
+        // Проверка обязательных полей: дата + почта разметчика
         const invalid = rows.find(r => !r['Дата валидации'] || !r['Почта разметчика']);
         if (invalid) {
             alert('В каждой строке должны быть заполнены «Дата валидации» и «Почта разметчика»');
             return;
         }
-        // ★ НОВОЕ: сохраняем в отдельный массив — не смешиваем с Excel-ными рекомендациями
+        // Сохраняем в отдельный массив
         state.rawRecommendationsManual.push(...rows);
         saveToStorage();
         await recomputeDashboard();
@@ -280,7 +488,6 @@ if (btnSaveRecommendations) {
 const btnExportRecommendations = document.getElementById('btnExportRecommendations');
 if (btnExportRecommendations) {
     btnExportRecommendations.addEventListener('click', () => {
-        // ★ НОВОЕ: берём сохранённые ручные + несохранённые строки из формы
         const unsaved = getRecRowsData();
         const saved = state.rawRecommendationsManual || [];
         const rows = saved.concat(unsaved);
@@ -343,7 +550,7 @@ if (btnExport) {
             if (state.rawMarkers.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawMarkers), "Markers (сырые)");
             if (state.rawValidation.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawValidation), "Валидация (сырые)");
 
-            // ★ НОВОЕ: объединяем Excel-ные и ручные рекомендации
+            // Объединяем Excel-ные и ручные рекомендации
             const allRecommendationsForExport = (state.rawRecommendations || []).concat(state.rawRecommendationsManual || []);
             if (allRecommendationsForExport.length > 0) {
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRecommendationsForExport), "Рекомендации (сырые)");
@@ -364,85 +571,18 @@ if (btnExport) {
     });
 }
 
-// ===== Импорт =====
-const importInput = document.getElementById('importInput');
-if (importInput) {
-    importInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            try {
-                const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
-                let parsedM = [], parsedV = [], parsedR = [], parsedF = [], parsedEmp = [];
-                let parsedS1 = [], parsedS2 = [], parsedS3 = [], parsedFb = [];
-                
-                for (const name of wb.SheetNames) {
-                    const json = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: null });
-                    const lower = name.toLowerCase();
-                    if (lower.includes('свод')) continue;
-                    if (lower.includes('обратн') || lower.includes('feedback')) parsedFb = json;
-                    else if (lower.includes('сотрудник') || lower.includes('employee')) parsedEmp = json;
-                    else if (lower.includes('суперсет 1') || lower.includes('superset 1')) parsedS1 = json;
-                    else if (lower.includes('суперсет 2') || lower.includes('superset 2')) parsedS2 = json;
-                    else if (lower.includes('суперсет 3') || lower.includes('superset 3')) parsedS3 = json;
-                    else if (lower.includes('flat') || lower.includes('плоск')) parsedF = json;
-                    else if (lower.includes('marker') || lower.includes('разметчик')) parsedM = json;
-                    else if (lower.includes('валидац') || lower.includes('valid')) parsedV = json;
-                    else if (lower.includes('рекоменд') || lower.includes('recommend')) parsedR = json;
-                }
-                state.rawMarkers = parsedM;
-                state.rawValidation = parsedV;
-                state.rawRecommendations = parsedR;
-                state.rawFlatValidations = parsedF;
-                state.rawSuperset1 = parsedS1;
-                state.rawSuperset2 = parsedS2;
-                state.rawSuperset3 = parsedS3;
-                state.rawEmployeeMap = parsedEmp;
-                
-                if (parsedFb.length > 0) {
-                    state.feedbackData = parsedFb.map(row => {
-                        let dateStr = row['Дата'];
-                        if (dateStr) {
-                            const d = parseExcelDate(dateStr);
-                            if (d && !isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
-                        }
-                        let avgQ = row['Ср. качество за период'];
-                        if (avgQ === '' || avgQ === undefined) avgQ = null;
-                        else if (typeof avgQ === 'string') avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
-                        return {
-                            date: dateStr || '', marker: row['Разметчик'] || '', status: row['Статус'] || '',
-                            typeVKS: row['Тип ВКС'] || '', conductor: row['Провел'] || '',
-                            project: row['Проект'] || '', pools: row['Пулы с ошибками'] || '', avgQuality: avgQ
-                        };
-                    });
-                    saveFeedbackToStorage();
-                }
-                saveToStorage();
-                await recomputeDashboard();
-                log('Импорт завершён', false);
-            } catch (err) {
-                alert('Ошибка импорта: ' + err.message);
-            }
-        };
-        reader.readAsArrayBuffer(file);
-        e.target.value = '';
-    });
-}
-
 // ===== Очистка =====
 const btnClear = document.getElementById('btnClear');
 if (btnClear) {
     btnClear.addEventListener('click', () => {
         if (!confirm('Удалить все данные?')) return;
         state.rawMarkers = []; state.rawValidation = []; state.rawRecommendations = [];
-        state.rawRecommendationsManual = [];   // ★ НОВОЕ
+        state.rawRecommendationsManual = [];
         state.rawFlatValidations = []; state.rawSuperset1 = []; state.rawSuperset2 = [];
         state.rawSuperset3 = []; state.rawEmployeeMap = []; state.processedData = [];
         state.feedbackData = [];
-        state.validationBaseUrl = '';          // ★ НОВОЕ
-        const baseUrlInput = document.getElementById('validationBaseUrlInput');
-        if (baseUrlInput) baseUrlInput.value = '';   // ★ НОВОЕ
+        state.validationBaseUrl = '';
+        state.domainHistory = [];
         state.superset.table1 = []; state.superset.table2 = []; state.superset.table3 = []; state.superset.table4 = [];
         state.superset.filteredTable1 = []; state.superset.filteredTable2 = []; state.superset.filteredTable3 = []; state.superset.filteredTable4 = [];
         state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null, avgPrice: null };
@@ -452,9 +592,11 @@ if (btnClear) {
         state.superset.filters = { dateFrom: '', dateTo: '', tasks: new Set() };
         state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
         state.feedbackGeneration.appliedPools.clear(); state.feedbackGeneration.appliedGroups.clear(); state.feedbackGeneration.videoLinks = {};
+        
         const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
         if (fbGenContainer) fbGenContainer.innerHTML = '';
         for (const key in state.pagination) state.pagination[key] = 1;
+        
         try { 
             localStorage.removeItem('validation_dashboard_data_v3'); 
             localStorage.removeItem('validation_feedback_data_v1');
@@ -463,7 +605,11 @@ if (btnClear) {
         const recBody = document.getElementById('recTableBody');
         if (recBody) { recBody.innerHTML = ''; addRecRow(); }
         
-        buildSuperset();   // ★ НОВОЕ: пересчёт norms/employeeMap/table1/table3
+        // Очищаем поле домена в модалке
+        if (modalDomainInput) modalDomainInput.value = '';
+        if (domainHistoryList) domainHistoryList.innerHTML = '';
+        
+        buildSuperset(); // Пересчет norms/employeeMap/table1/table3
         buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
         if (state.currentMenu === 'superset') renderSupersetPage();
         if (state.currentMenu === 'feedback') renderFeedbackTable();
