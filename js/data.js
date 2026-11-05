@@ -1,8 +1,7 @@
-// js/data.js — ИСПРАВЛЕНИЕ СВЯЗЫВАНИЯ ID И ПРОЕКТОВ
-// ★ ИЗМЕНЕНО: В recomputeDashboard (markerDict) убрано обрезание названия проекта от названия пула.
-//    Теперь "Гимнастки_пул_01" сохраняется целиком.
-// Ранее добавленное: _domain на записях валидации, объединение rawRecommendationsManual,
-//    пропуск заданий с 0 фрагментов (аномалия выгрузки).
+// js/data.js — ДОБАВЛЕНА ЛОГИКА ПРОВЕРКИ НА ДУБЛИКАТЫ И КОНФЛИКТЫ
+// ★ ИЗМЕНЕНО: processNewRows теперь не сохраняет данные сразу, а ищет дубликаты и конфликты.
+// ★ ДОБАВЛЕНО: commitNewData — применяет новые данные и разрешает конфликты.
+// Ранее добавленное: полное название пула (без обрезания проекта), _domain, пропуск 0 фрагментов.
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -71,9 +70,41 @@ function detectRadioColumn(rows) {
     return false;
 }
 
+// ===== ЛОГИКА ПОИСКА КОНФЛИКТОВ =====
+function getRowKey(type, row) {
+    if (!row) return null;
+    if (type === 'validation') return normalizeId(getVal(row, 'assignment_id'));
+    if (type === 'markers') return normalizeId(getVal(row, 'ID задачи')) + '|' + normalizeId(getVal(row, 'ID разметчика'));
+    if (type === 'recommendations') return normalizeId(getVal(row, 'item_id')) + '|' + (getVal(row, 'Почта разметчика') || '').trim();
+    if (type === 'employee_map') return (getVal(row, 'ФИО') || '').trim() + '|' + (getVal(row, 'Почта') || '').trim();
+    if (type === 'validation_flat') return (getVal(row, 'url задания') || '') + '|' + (getVal(row, 'email') || '');
+    if (type === 'superset1') return (getVal(row, 'Проект') || '').trim() + '|' + (getVal(row, 'Задача') || '').trim();
+    if (type === 'superset2') return (getVal(row, 'Проект') || '').trim() + '|' + (getVal(row, 'Задача') || '').trim() + '|' + (getVal(row, 'Дата начала') || '') + '|' + (getVal(row, 'Дата окончания') || '');
+    if (type === 'superset3') return (getVal(row, 'ФИО') || '').trim() + '|' + (getVal(row, 'Дата') || '') + '|' + (getVal(row, 'Проект') || '').trim() + '|' + (getVal(row, 'Задача') || '').trim();
+    return JSON.stringify(row);
+}
+
+function normalizeForCompare(obj) {
+    if (!obj) return '';
+    const cleanObj = {};
+    const keys = Object.keys(obj).sort();
+    for (const k of keys) {
+        if (k.startsWith('_')) continue; // Игнорируем служебные поля (например, _domain)
+        let val = obj[k];
+        if (val === null || val === undefined) val = '';
+        cleanObj[k] = String(val).trim();
+    }
+    return JSON.stringify(cleanObj);
+}
+
+function isRowEqual(rowA, rowB) {
+    return normalizeForCompare(rowA) === normalizeForCompare(rowB);
+}
+
+// ★ Обновленная функция обработки новых данных
 export async function processNewRows(results) {
-    let addedM = 0, addedV = 0, addedR = 0, addedF = 0;
-    let addedS1 = 0, addedS2 = 0, addedS3 = 0, addedEmp = 0;
+    state.pendingNewData = { markers: [], validation: [], recommendations: [], flat: [], superset1: [], superset2: [], superset3: [], employee: [] };
+    state.pendingConflicts = [];
 
     const currentDomain = state.validationBaseUrl || '';
 
@@ -84,40 +115,114 @@ export async function processNewRows(results) {
             if (Object.values(row).filter(v => v !== null && v !== '').length < 2) continue;
             const type = detectTableType(row);
 
-            if (type === 'markers') { state.rawMarkers.push(row); addedM++; }
-            else if (type === 'validation') {
-                state.rawValidation.push(Object.assign({}, row, { _domain: currentDomain }));
-                addedV++;
-            }
-            else if (type === 'recommendations') { state.rawRecommendations.push(row); addedR++; }
-            else if (type === 'employee_map') { 
-                state.rawEmployeeMap.push(row); 
-                addedEmp++; 
-            }
-            else if (type === 'validation_flat') {
-                const rowWithMeta = Object.assign({}, row);
-                if (getVal(rowWithMeta, 'Проект') == null) {
+            let rawArray = [];
+            let pendingKey = '';
+            if (type === 'markers') { rawArray = state.rawMarkers; pendingKey = 'markers'; }
+            else if (type === 'validation') { rawArray = state.rawValidation; pendingKey = 'validation'; }
+            else if (type === 'recommendations') { rawArray = state.rawRecommendations; pendingKey = 'recommendations'; }
+            else if (type === 'employee_map') { rawArray = state.rawEmployeeMap; pendingKey = 'employee'; }
+            else if (type === 'validation_flat') { rawArray = state.rawFlatValidations; pendingKey = 'flat'; }
+            else if (type === 'superset1') { rawArray = state.rawSuperset1; pendingKey = 'superset1'; }
+            else if (type === 'superset2') { rawArray = state.rawSuperset2; pendingKey = 'superset2'; }
+            else if (type === 'superset3') { rawArray = state.rawSuperset3; pendingKey = 'superset3'; }
+
+            if (!rawArray) continue;
+
+            // Для плоской валидации добавляем мета-данные
+            let processedRow = Object.assign({}, row);
+            if (type === 'validation') processedRow._domain = currentDomain;
+            if (type === 'validation_flat') {
+                if (getVal(processedRow, 'Проект') == null) {
                     const meta = parseFileProjectPool(file);
-                    if (meta.project) rowWithMeta['Проект'] = meta.project;
-                    if (meta.pool) rowWithMeta['Пул'] = meta.pool;
-                } else if (getVal(rowWithMeta, 'Пул') == null) {
+                    if (meta.project) processedRow['Проект'] = meta.project;
+                    if (meta.pool) processedRow['Пул'] = meta.pool;
+                } else if (getVal(processedRow, 'Пул') == null) {
                     const meta = parseFileProjectPool(file);
-                    if (meta.pool) rowWithMeta['Пул'] = meta.pool;
+                    if (meta.pool) processedRow['Пул'] = meta.pool;
                 }
-                rowWithMeta._hasRadio = hasRadioColumn;
-                state.rawFlatValidations.push(rowWithMeta);
-                addedF++;
+                processedRow._hasRadio = hasRadioColumn;
             }
-            else if (type === 'superset1') { state.rawSuperset1.push(row); addedS1++; }
-            else if (type === 'superset2') { state.rawSuperset2.push(row); addedS2++; }
-            else if (type === 'superset3') { state.rawSuperset3.push(row); addedS3++; }
+
+            const newKey = getRowKey(type, processedRow);
+            if (!newKey) continue;
+
+            const existingRow = rawArray.find(r => getRowKey(type, r) === newKey);
+
+            if (!existingRow) {
+                // Данных нет — добавляем в список на сохранение
+                state.pendingNewData[pendingKey].push(processedRow);
+            } else if (!isRowEqual(existingRow, processedRow)) {
+                // Данные есть, но они ОТЛИЧАЮТСЯ (конфликт / обновление)
+                state.pendingConflicts.push({
+                    type,
+                    pendingKey,
+                    key: newKey,
+                    oldRow: existingRow,
+                    newRow: processedRow,
+                    fileName: file
+                });
+            }
+            // Если isRowEqual === true, значит данные полностью идентичны — просто игнорируем (защита от дублей)
         }
     }
 
-    log(`Добавлено: Markers (${addedM}), Валидация (${addedV}), Рекомендации (${addedR}), Плоская (${addedF}), Сотрудники (${addedEmp}), Сет1 (${addedS1}), Сет2 (${addedS2}), Сет3 (${addedS3})`);
-    saveToStorage();
-    await recomputeDashboard();
+    // Если есть конфликты — возвращаем их, чтобы app.js показал модальное окно
+    const totalNew = Object.values(state.pendingNewData).reduce((a, b) => a + b.length, 0);
+    if (state.pendingConflicts.length > 0) {
+        return { hasConflicts: true, newCount: totalNew, conflictsCount: state.pendingConflicts.length };
+    }
+
+    // Если конфликтов нет — сохраняем всё сразу
+    if (totalNew > 0) {
+        commitNewData();
+        log(`Добавлено новых записей: ${totalNew}`, false);
+    } else {
+        log(`Все загруженные данные уже есть в базе (дубликаты).`, false);
+        state.pendingNewData = null;
+    }
+    return { hasConflicts: false };
 }
+
+// ★ Функция применения данных (вызывается либо сразу, либо после выбора в модалке)
+export function commitNewData(resolvedConflicts = []) {
+    if (!state.pendingNewData) return;
+
+    // 1. Добавляем новые данные
+    state.rawMarkers.push(...state.pendingNewData.markers);
+    state.rawValidation.push(...state.pendingNewData.validation);
+    state.rawRecommendations.push(...state.pendingNewData.recommendations);
+    state.rawEmployeeMap.push(...state.pendingNewData.employee);
+    state.rawFlatValidations.push(...state.pendingNewData.flat);
+    state.rawSuperset1.push(...state.pendingNewData.superset1);
+    state.rawSuperset2.push(...state.pendingNewData.superset2);
+    state.rawSuperset3.push(...state.pendingNewData.superset3);
+
+    // 2. Применяем разрешенные конфликты (где выбрали "Новое")
+    const arrays = {
+        markers: state.rawMarkers, validation: state.rawValidation, recommendations: state.rawRecommendations,
+        employee: state.rawEmployeeMap, flat: state.rawFlatValidations, superset1: state.rawSuperset1,
+        superset2: state.rawSuperset2, superset3: state.rawSuperset3
+    };
+
+    for (const conflict of resolvedConflicts) {
+        if (conflict.choice === 'new') {
+            const arr = arrays[conflict.pendingKey];
+            if (arr) {
+                const idx = arr.findIndex(r => getRowKey(conflict.type, r) === conflict.key);
+                if (idx !== -1) {
+                    arr[idx] = conflict.newRow;
+                }
+            }
+        }
+    }
+
+    state.pendingNewData = null;
+    state.pendingConflicts = [];
+    saveToStorage();
+    recomputeDashboard(); // Пересчитываем дашборд после обновления
+}
+
+// ===== Стандартные функции парсинга =====
 
 function computeQuality(sumWeights, totalFragments, mistakesCount) {
     if (mistakesCount === 0) return 1;
@@ -163,7 +268,6 @@ function processFlatValidations() {
         const declaredErrors = Number(getVal(first, 'некорректных меток')) || 0;
         const taskUrl = getVal(first, 'url задания');
 
-        // 0 фрагментов = аномалия выгрузки → пропускаем
         if (totalFragments === 0) {
             log(`⚠️ Плоский формат: пропущено задание ${fileName || '(без имени)'} — 0 фрагментов.`, true);
             skippedFlat++;
