@@ -1,7 +1,7 @@
 // js/ui.js — ОБНОВЛЕННЫЙ КОД
-// ★ ДОБАВЛЕНО: _domain в buildTable (группа + передача в getValidationUrl),
-//    toggleAll поддерживает 'tasks', ISO-сравнение дат в renderErrorsTable,
-//    ISO-сортировка в buildDayQualityChart
+// ★ ИЗМЕНЕНО: renderSupersetTable1 (удален "Тип задания"), renderSupersetTable2 (формат % и красный цвет при расхождении).
+// ★ ИЗМЕНЕНО: Глобально во всем файле проценты приведены к формату .toFixed(2).
+// Ранее добавленное: _domain в buildTable, toggleAll для 'tasks', ISO-даты в renderErrorsTable и buildDayQualityChart.
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -36,7 +36,8 @@ const dataLabelsPlugin = {
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         
-                        let displayVal = dataset.isPercentage ? Number(val).toFixed(1) + '%' : val;
+                        // ★ ИЗМЕНЕНО: .toFixed(2) для процентов
+                        let displayVal = dataset.isPercentage ? Number(val).toFixed(2) + '%' : val;
                         
                         // Центрируем текст посередине столбца
                         ctx.fillText(displayVal, element.x, element.y + (height / 2));
@@ -243,7 +244,6 @@ export function filterMsOptions(inputEl) {
     }
 }
 
-// ★ ИЗМЕНЕНО: поддержка 'tasks' (для галочки «Выбрать все» в #msSupersetTask)
 export function toggleAll(containerId, stateKey) {
     const allCheckbox = document.getElementById(containerId + '_all');
     const checkboxes = document.querySelectorAll('#' + containerId + '_options input[type="checkbox"]');
@@ -476,7 +476,7 @@ export function updateKPI() {
         errColorClass = 'val-green';
     }
 
-    // ★ ИЗМЕНЕНО: Расчет Факт/Цена/Время/Коэффициент на основе фильтров Главной
+    // Расчет Факт/Цена/Время/Коэффициент на основе фильтров Главной
     let activeTasks = state.superset.table1 || [];
     
     if (state.currentTab !== 'all') {
@@ -561,11 +561,11 @@ export function updateKPI() {
     container.innerHTML = `
         <div class="kpi-card">
             <div class="label">Целевое качество</div>
-            <div class="value val-brown">${target != null ? target.toFixed(1) + '%' : '—'}</div>
+            <div class="value val-brown">${target != null ? target.toFixed(2) + '%' : '—'}</div>
         </div>
         <div class="kpi-card">
             <div class="label">Качество</div>
-            <div class="value ${qColorClass}">${avgQ !== null ? avgQPct.toFixed(1) + '%' : '—'}</div>
+            <div class="value ${qColorClass}">${avgQ !== null ? avgQPct.toFixed(2) + '%' : '—'}</div>
         </div>
         <div class="kpi-card">
             <div class="label">Ошибок</div>
@@ -707,7 +707,6 @@ export function buildPoolQualityChart() {
     });
 }
 
-// ★ ИЗМЕНЕНО: ISO-сортировка (без проблем на границе веков)
 export function buildDayQualityChart() {
     destroyChart(state.charts.dayQuality);
     const byDate = {};   // label → { iso, values: [] }
@@ -788,7 +787,6 @@ export function buildErrorsByMarkerChart() {
     });
 }
 
-// ★ ИЗМЕНЕНО: _domain в группе (2 места) + передача в getValidationUrl
 export function buildTable() {
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
@@ -855,7 +853,7 @@ export function buildTable() {
         const fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
         const fileNameTitle = escapeHtml(g.fileName || '');
         
-        const quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(1) + '%' : '';
+        const quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(2) + '%' : '';
 
         let itemsHtml = '<div class="items-grid">';
         for (const item of g.items) {
@@ -892,7 +890,6 @@ export function buildTable() {
     renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, 'mainData');
 }
 
-// ★ ИЗМЕНЕНО: ISO-строки для сравнения дат (без TZ-сдвига)
 export function renderErrorsTable() {
     const container = document.getElementById('errorsCardsContainer');
     if (!container) return;
@@ -998,7 +995,7 @@ export function renderErrorsTable() {
                 }
             }
             if (cntQ > 0) {
-                qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${((sumQ/cntQ)*100).toFixed(1)}%</strong></li>`;
+                qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${((sumQ/cntQ)*100).toFixed(2)}%</strong></li>`;
             }
         }
         qualityHtml += '</ul>';
@@ -1024,7 +1021,7 @@ export function renderErrorsTable() {
                 poolListHtml += `<li class="pool-item">
                     <div class="pool-header">
                         <span>${escapeHtml(pool)}</span>
-                        <span>${poolRate.toFixed(1)}% (${poolData.count})</span>
+                        <span>${poolRate.toFixed(2)}% (${poolData.count})</span>
                     </div>
                     ${comments}
                 </li>`;
@@ -1036,7 +1033,7 @@ export function renderErrorsTable() {
                     <div class="error-type-header">
                         <span>${escapeHtml(type)}</span>
                     </div>
-                    <div class="error-type-rate">${typeRate.toFixed(1)}% от всех ошибок</div>
+                    <div class="error-type-rate">${typeRate.toFixed(2)}% от всех ошибок</div>
                     ${poolListHtml}
                 </div>
             `;
@@ -1263,7 +1260,7 @@ function renderSupersetTable1() {
     const rows = allRows.slice(startIndex, endIndex);
 
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
     } else {
         tbody.innerHTML = rows.map(r => `<tr>
             <td>${escapeHtml(r.project)}</td>
@@ -1276,7 +1273,6 @@ function renderSupersetTable1() {
             <td>${escapeHtml(String(r.ballsPerHour))}</td>
             <td>${escapeHtml(String(r.prodPerHour))}</td>
             <td>${escapeHtml(String(r.price))}</td>
-            <td>${escapeHtml(String(r.taskType))}</td>
             <td>${escapeHtml(formatPeriod(r.dateStart, r.dateEnd))}</td>
         </tr>`).join('');
     }
@@ -1304,18 +1300,37 @@ function renderSupersetTable2() {
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
     } else {
-        tbody.innerHTML = rows.map(r => `<tr>
-            <td>${r.date ? formatDate(r.date) : ''}</td>
-            <td>${escapeHtml(r.fio)}</td>
-            <td>${escapeHtml(r.project)}</td>
-            <td>${escapeHtml(r.task)}</td>
-            <td>${escapeHtml(String(r.fragments))}</td>
-            <td>${escapeHtml(String(r.balls))}</td>
-            <td>${escapeHtml(String(r.qualitySuperset))}</td>
-            <td>${r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '—'}</td>
-            <td>${escapeHtml(String(r.norm))}</td>
-            <td>${escapeHtml(String(r.withoutQuality))}</td>
-        </tr>`).join('');
+        tbody.innerHTML = rows.map(r => {
+            // ★ ИЗМЕНЕНО: Форматирование "Качества в суперсете" и добавление красного цвета
+            let qsHtml = '—';
+            const qsNum = parseFloat(String(r.qualitySuperset).replace(',', '.'));
+            if (!isNaN(qsNum)) {
+                let qsPct = qsNum <= 1 ? qsNum * 100 : qsNum;
+                let style = '';
+                // Сравниваем со значением факт, если оно есть
+                if (r.qualityFact != null) {
+                    let qfPct = r.qualityFact * 100;
+                    // Допуск 0.01, чтобы не подсвечивать из-за микропогрешностей округления
+                    if (Math.abs(qsPct - qfPct) > 0.01) {
+                        style = 'style="color: var(--danger); font-weight: bold;"';
+                    }
+                }
+                qsHtml = `<span ${style}>${qsPct.toFixed(2)}%</span>`;
+            }
+
+            return `<tr>
+                <td>${r.date ? formatDate(r.date) : ''}</td>
+                <td>${escapeHtml(r.fio)}</td>
+                <td>${escapeHtml(r.project)}</td>
+                <td>${escapeHtml(r.task)}</td>
+                <td>${escapeHtml(String(r.fragments))}</td>
+                <td>${escapeHtml(String(r.balls))}</td>
+                <td>${qsHtml}</td>
+                <td>${r.qualityFact != null ? (r.qualityFact * 100).toFixed(2) + '%' : '—'}</td>
+                <td>${escapeHtml(String(r.norm))}</td>
+                <td>${escapeHtml(String(r.withoutQuality))}</td>
+            </tr>`;
+        }).join('');
     }
 
     renderPaginationControls('pagination-superset2-controls', 'pagination-superset2-info', totalItems, 'superset2');
@@ -1373,8 +1388,8 @@ function renderSupersetTable4() {
     } else {
         tbody.innerHTML = rows.map(r => `<tr>
             <td>${escapeHtml(r.fio)}</td>
-            <td>${r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '—'}</td>
-            <td>${r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '—'}</td>
+            <td>${r.factQuality != null ? (r.factQuality * 100).toFixed(2) + '%' : '—'}</td>
+            <td>${r.normQuality != null ? r.normQuality.toFixed(2) + '%' : '—'}</td>
         </tr>`).join('');
     }
 
