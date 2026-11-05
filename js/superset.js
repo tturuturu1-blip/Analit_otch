@@ -1,6 +1,7 @@
-// js/superset.js — ЧИСТКА КОДА
-// Удалено: calcFactQuality (не используется), buildKPIs (мёртвый код — никем не читался)
-// ★ ИЗМЕНЕНО: buildNorms и buildTable3 — выбор по самой свежей дате
+// js/superset.js — ИСПРАВЛЕНИЕ ЛОГИКИ КАЧЕСТВА И УДАЛЕНИЕ ТИПА ЗАДАНИЯ
+// ★ ИЗМЕНЕНО: rebuildTable2 — убран fallback, теперь качество факт считается строго по пулу (Задаче).
+// ★ ИЗМЕНЕНО: из getTable1Config и buildTable1 удалена колонка "Тип задания".
+// Ранее добавленное: buildNorms и buildTable3 — выбор по самой свежей дате, buildKPIs удален.
 
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
@@ -166,8 +167,6 @@ export function addNormEntry(dateISO, value) {
 }
 
 // ===== Нормативы качества =====
-// ★ ИЗМЕНЕНО: для каждого project|task берём норму с самой свежей датой
-//              При равной дате — приоритет rawSuperset2
 function buildNorms() {
     const byProjectPool = {};
     const byProjectSets = {};
@@ -179,8 +178,7 @@ function buildNorms() {
         return mainSet.has(project);
     };
 
-    // ★ Для каждого project|task храним самую свежую норму (по дате)
-    const normCandidates = {};   // project|task → { norm, date, source }
+    const normCandidates = {}; 
     const considerNorm = (project, task, norm, date, source) => {
         if (!task) return;
         const key = project + '|' + task;
@@ -194,7 +192,6 @@ function buildNorms() {
         if (newTime !== null && (exTime === null || newTime > exTime)) {
             normCandidates[key] = { norm, date, source };
         } else if (newTime !== null && exTime !== null && newTime === exTime && source === 's2' && existing.source !== 's2') {
-            // равная дата — приоритет rawSuperset2
             normCandidates[key] = { norm, date, source };
         }
     };
@@ -377,7 +374,7 @@ export function getTable1Config() {
         { key: 'ballsPerHour', label: 'Факт баллов/час', get: r => String(r.ballsPerHour || '') },
         { key: 'prodPerHour', label: 'Кпроизв в час', get: r => String(r.prodPerHour || '') },
         { key: 'price', label: 'Цена', get: r => String(r.price || '') },
-        { key: 'taskType', label: 'Тип задания', get: r => String(r.taskType || '') },
+        // ★ УДАЛЕНО: { key: 'taskType', label: 'Тип задания', get: r => String(r.taskType || '') },
         { key: 'period', label: 'Период разметки', get: r => formatPeriod(r.dateStart, r.dateEnd) }
     ];
 }
@@ -390,7 +387,7 @@ export function getTable2Config() {
         { key: 'fragments', label: 'Размечено, шт', get: r => String(r.fragments || '') },
         { key: 'balls', label: 'Размечено, б', get: r => String(r.balls || '') },
         { key: 'qualitySuperset', label: 'Качество в суперсете', get: r => String(r.qualitySuperset || '') },
-        { key: 'qualityFact', label: 'Качество факт.', get: r => r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '' },
+        { key: 'qualityFact', label: 'Качество факт.', get: r => r.qualityFact != null ? (r.qualityFact * 100).toFixed(2) + '%' : '' },
         { key: 'norm', label: 'Норматив', get: r => String(r.norm || '') },
         { key: 'withoutQuality', label: 'Без качества, шт', get: r => String(r.withoutQuality || '') }
     ];
@@ -406,8 +403,8 @@ export function getTable3Config() {
 export function getTable4Config() {
     return [
         { key: 'fio', label: 'ФИО', get: r => r.fio || '' },
-        { key: 'factQuality', label: 'Качество', get: r => r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '' },
-        { key: 'normQuality', label: 'Норматив', get: r => r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '' }
+        { key: 'factQuality', label: 'Качество', get: r => r.factQuality != null ? (r.factQuality * 100).toFixed(2) + '%' : '' },
+        { key: 'normQuality', label: 'Норматив', get: r => r.normQuality != null ? r.normQuality.toFixed(2) + '%' : '' }
     ];
 }
 
@@ -449,8 +446,8 @@ function buildTable1() {
             withoutQuality: isValidate ? '' : (getVal(r, 'Без качества, шт', 'Без качества шт') || ''),
             ballsPerHour: parseHtmlNumber(getVal(perf, 'Факт баллов/час')),
             prodPerHour: parseHtmlNumber(getVal(perf, 'Кпроизв в час')),
-            price: getVal(perf, 'Цена') || '',
-            taskType: getVal(perf, 'Тип задания') || ''
+            price: getVal(perf, 'Цена') || ''
+            // ★ УДАЛЕНО: taskType: getVal(perf, 'Тип задания') || ''
         });
     }
 
@@ -469,8 +466,8 @@ function buildTable1() {
             normQuality: '', quality: '', comment: '', withoutQuality: '',
             ballsPerHour: parseHtmlNumber(getVal(r, 'Факт баллов/час')),
             prodPerHour: parseHtmlNumber(getVal(r, 'Кпроизв в час')),
-            price: getVal(r, 'Цена') || '',
-            taskType: getVal(r, 'Тип задания') || ''
+            price: getVal(r, 'Цена') || ''
+            // ★ УДАЛЕНО: taskType: getVal(r, 'Тип задания') || ''
         });
     }
 
@@ -498,16 +495,13 @@ function rebuildTable2() {
 
         const email = fioToEmail[fio.trim()];
         let factQuality = null;
+        
+        // ★ ИЗМЕНЕНО: считаем качество строго по пулу (задаче). Без fallback на проект или всё.
         if (email) {
             const em = email.toLowerCase();
             const ptKey = em + '|' + project + '|' + task;
-            const pKey = em + '|' + project;
             if (qualityIdx.byEmailProjectTask[ptKey]) {
                 factQuality = avg(qualityIdx.byEmailProjectTask[ptKey]);
-            } else if (qualityIdx.byEmailProject[pKey]) {
-                factQuality = avg(qualityIdx.byEmailProject[pKey]);
-            } else if (qualityIdx.byEmailOnly[em]) {
-                factQuality = avg(qualityIdx.byEmailOnly[em]);
             }
         }
 
@@ -517,7 +511,7 @@ function rebuildTable2() {
             date, fio, project, task,
             fragments: getVal(r, 'Размечено, шт', 'Размечено шт') || '',
             balls: getVal(r, 'Размечено, б', 'Размечено б') || '',
-            qualitySuperset: getVal(r, 'Качество') || '',
+            qualitySuperset: getVal(r, 'Качество в суперсете') || getVal(r, 'Качество') || '',
             qualityFact: factQuality,
             norm: isValidate ? '' : (getVal(r, 'Норматив') || ''),
             withoutQuality: isValidate ? '' : (getVal(r, 'Без качества, шт', 'Без качества шт') || '')
@@ -527,13 +521,10 @@ function rebuildTable2() {
     state.superset.table2 = rows;
 }
 
-// ★ ИЗМЕНЕНО: цена за самую свежую дату (fallback: last wins, если даты нет)
 function buildTable3() {
     const mainSet = getMainProjects();
     const useMainSet = mainSet.size > 0;
 
-    // Для каждого проекта собираем (price, date), берём самую свежую.
-    // Если даты нет — сохраняем порядок загрузки и берём последнюю.
     const byProject = {};
     for (const r of state.rawSuperset1) {
         const project = normalizeProject(getVal(r, 'Проект'));
@@ -551,7 +542,6 @@ function buildTable3() {
                 existing.price = price;
                 existing.date = date;
             } else if (newTime === null && exTime === null) {
-                // нет дат — last wins (последняя загруженная цена)
                 existing.price = price;
             }
         }
@@ -635,10 +625,6 @@ function rebuildTable4() {
     state.superset.table4 = rows;
 }
 
-// ★ УДАЛЕНО: buildKPIs() — мёртвый код, никем не читался.
-//            KPI на Главной считаются в updateKPI (ui.js),
-//            KPI на Суперсете отсутствуют по требованию.
-
 export function applySupersetFilters() {
     state.superset._mainProjects = computeMainProjectsSet();
 
@@ -673,8 +659,6 @@ export function applySupersetFilters() {
     state.superset.filteredTable4 = (state.superset.table4 || []).filter(r =>
         matchesColumnFilters('t4', r, t4Config)
     );
-
-    // ★ УДАЛЕНО: buildKPIs() — не вызываем (мёртвый код)
 }
 
 export function buildSuperset() {
