@@ -1,7 +1,7 @@
-// js/app.js — ПОЛНАЯ СБОРКА (Обновлено для Календаря и новых модалок)
-// ★ ИЗМЕНЕНО: Добавлены импорты и экспорты для openAddTypeModal и openEventModal.
-// ★ ИЗМЕНЕНО: В экспорт Excel добавлены поля времени (Время с, Время по).
-// ★ ИЗМЕНЕНО: В handleClearAll сбрасывается calendarDayOffset.
+// js/app.js — ФИНАЛЬНАЯ ВЕРСИЯ (Календарь, Модалки, Экспорт)
+// ★ ДОБАВЛЕНО: Обработчики для новых модалок (openAddTypeModal, openEventModal).
+// ★ ИЗМЕНЕНО: В экспорте Excel колонка "Провел" заменена на "Организатор", добавлены поля времени.
+// ★ ИЗМЕНЕНО: Импорт Excel теперь корректно восстанавливает массивы markers, pools и время.
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
@@ -75,8 +75,8 @@ Object.assign(window, {
     handleVideoLinkInput,
     changePage,
     openAddFeedbackModal,
-    openAddTypeModal,      // ★ НОВОЕ
-    openEventModal,        // ★ НОВОЕ
+    openAddTypeModal,
+    openEventModal,
     deleteFeedbackFromCalendar,
     editFeedbackFromCalendar: (idx) => {
         const fb = state.feedbackData[idx];
@@ -135,13 +135,12 @@ document.getElementById('btnDownloadExcel').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
         }
         if (state.feedbackData.length > 0) {
-            // ★ ИЗМЕНЕНО: Добавлены поля для времени
             const cleanFeedback = state.feedbackData.map(f => ({
                 "Дата": f.date, 
                 "Разметчик": (f.markers || [f.marker]).join(', '), 
                 "Статус": f.status || "",
                 "Тип ВКС": f.typeVKS || "", 
-                "Провел": f.conductor || "",
+                "Организатор": f.conductor || "",
                 "Проект": f.project || "", 
                 "Пулы с ошибками": (f.pools || []).join(', '),
                 "Время с": f.timeFrom || "",
@@ -249,6 +248,9 @@ document.getElementById('btnGenerateQualityExcel').addEventListener('click', () 
 });
 
 // ===== МОДАЛЬНОЕ ОКНО КАЛЕНДАРЯ =====
+document.getElementById('btnSaveFeedback').addEventListener('click', handleSaveFeedback);
+document.getElementById('btnSaveEvent').addEventListener('click', handleSaveEvent);
+
 document.getElementById('btnCalPrev').addEventListener('click', () => {
     state.calendarDayOffset -= 7;
     renderCalendar();
@@ -468,16 +470,25 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                                 const d = parseExcelDate(dateStr);
                                 if (d && !isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
                             }
+                            
+                            let avgQ = row['Ср. качество за период'];
+                            if (avgQ === '' || avgQ === undefined) avgQ = null;
+                            else if (typeof avgQ === 'string') {
+                                avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
+                            }
+
                             return {
                                 date: dateStr || '', 
-                                markers: (row['Разметчик'] || '').split(', '), 
+                                markers: (row['Разметчик'] || '').split(',').map(s=>s.trim()).filter(Boolean), 
                                 status: row['Статус'] || '',
                                 typeVKS: row['Тип ВКС'] || '', 
-                                conductor: row['Провел'] || '',
+                                conductor: row['Организатор'] || '',
                                 project: row['Проект'] || '', 
-                                pools: (row['Пулы с ошибками'] || '').split(', '),
+                                pools: (row['Пулы с ошибками'] || '').split(',').map(s=>s.trim()).filter(Boolean),
                                 timeFrom: row['Время с'] || '',
-                                timeTo: row['Время по'] || ''
+                                timeTo: row['Время по'] || '',
+                                avgQuality: avgQ,
+                                eventType: 'oc'
                             };
                         });
                         saveFeedbackToStorage();
