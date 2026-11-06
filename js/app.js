@@ -1,5 +1,7 @@
-// js/app.js — ПОЛНАЯ СБОРКА (Добавлена логика объединения данных в конфликтах)
-// ★ ИЗМЕНЕНО: Функции openConflictModal и toggleConflictChoice переписаны под выбор "Старого", "Нового" или "Объединения".
+// js/app.js — ПОЛНАЯ СБОРКА (Обновлено для Календаря и новых модалок)
+// ★ ИЗМЕНЕНО: Добавлены импорты и экспорты для openAddTypeModal и openEventModal.
+// ★ ИЗМЕНЕНО: В экспорт Excel добавлены поля времени (Время с, Время по).
+// ★ ИЗМЕНЕНО: В handleClearAll сбрасывается calendarDayOffset.
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
@@ -18,7 +20,10 @@ import {
     handleVideoLinkInput,
     renderCalendar,
     openAddFeedbackModal,
+    openAddTypeModal,
+    openEventModal,
     handleSaveFeedback,
+    handleSaveEvent,
     deleteFeedbackFromCalendar
 } from './feedback.js';
 import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw, addNormEntry, getNormForDate } from './superset.js';
@@ -70,6 +75,8 @@ Object.assign(window, {
     handleVideoLinkInput,
     changePage,
     openAddFeedbackModal,
+    openAddTypeModal,      // ★ НОВОЕ
+    openEventModal,        // ★ НОВОЕ
     deleteFeedbackFromCalendar,
     editFeedbackFromCalendar: (idx) => {
         const fb = state.feedbackData[idx];
@@ -128,10 +135,17 @@ document.getElementById('btnDownloadExcel').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
         }
         if (state.feedbackData.length > 0) {
+            // ★ ИЗМЕНЕНО: Добавлены поля для времени
             const cleanFeedback = state.feedbackData.map(f => ({
-                "Дата": f.date, "Разметчик": (f.markers || []).join(', '), "Статус": f.status || "",
-                "Тип ВКС": f.typeVKS || "", "Провел": f.conductor || "",
-                "Проект": f.project || "", "Пулы с ошибками": (f.pools || []).join(', ')
+                "Дата": f.date, 
+                "Разметчик": (f.markers || [f.marker]).join(', '), 
+                "Статус": f.status || "",
+                "Тип ВКС": f.typeVKS || "", 
+                "Провел": f.conductor || "",
+                "Проект": f.project || "", 
+                "Пулы с ошибками": (f.pools || []).join(', '),
+                "Время с": f.timeFrom || "",
+                "Время по": f.timeTo || ""
             }));
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanFeedback), "Обратная связь");
         }
@@ -235,10 +249,6 @@ document.getElementById('btnGenerateQualityExcel').addEventListener('click', () 
 });
 
 // ===== МОДАЛЬНОЕ ОКНО КАЛЕНДАРЯ =====
-document.getElementById('btnSaveFeedback').addEventListener('click', () => {
-    handleSaveFeedback();
-});
-
 document.getElementById('btnCalPrev').addEventListener('click', () => {
     state.calendarDayOffset -= 7;
     renderCalendar();
@@ -459,9 +469,15 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                                 if (d && !isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
                             }
                             return {
-                                date: dateStr || '', markers: (row['Разметчик'] || '').split(', '), status: row['Статус'] || '',
-                                typeVKS: row['Тип ВКС'] || '', conductor: row['Провел'] || '',
-                                project: row['Проект'] || '', pools: (row['Пулы с ошибками'] || '').split(', ')
+                                date: dateStr || '', 
+                                markers: (row['Разметчик'] || '').split(', '), 
+                                status: row['Статус'] || '',
+                                typeVKS: row['Тип ВКС'] || '', 
+                                conductor: row['Провел'] || '',
+                                project: row['Проект'] || '', 
+                                pools: (row['Пулы с ошибками'] || '').split(', '),
+                                timeFrom: row['Время с'] || '',
+                                timeTo: row['Время по'] || ''
                             };
                         });
                         saveFeedbackToStorage();
@@ -505,9 +521,7 @@ function openConflictModal(procRes) {
                 const oldVal = String(c.oldRow[k] || '').trim();
                 const newVal = String(c.newRow[k] || '').trim();
                 if (oldVal !== newVal) {
-                    // Старое значение (красное, без зачеркивания)
                     oldDiffs += `<div class="conflict-diff" style="margin-bottom: 6px;"><span style="font-weight:700;">${escapeHtml(k)}:</span><br><span style="color:var(--danger);">${escapeHtml(oldVal)}</span></div>`;
-                    // Новое значение (зеленое)
                     newDiffs += `<div class="conflict-diff" style="margin-bottom: 6px;"><span style="font-weight:700;">${escapeHtml(k)}:</span><br><span style="color:var(--success);">${escapeHtml(newVal)}</span></div>`;
                 }
             }
@@ -536,7 +550,6 @@ function openConflictModal(procRes) {
         `;
     }).join('');
     
-    // Инициализируем состояние (по умолчанию выбрано "Старое")
     state.pendingConflicts.forEach((c, idx) => {
         c.selOld = true;
         c.selNew = false;
@@ -588,7 +601,6 @@ document.getElementById('btnConflictKeepOld').addEventListener('click', () => {
 });
 
 document.getElementById('btnConflictApplyAll').addEventListener('click', () => {
-    // Если пользователь ничего не менял, применится choice, который был установлен при инициализации ('old' или 'merge')
     commitNewData(state.pendingConflicts);
     conflictModal.classList.remove('active');
     showModalView('done');
@@ -646,6 +658,7 @@ function handleClearAll() {
     if (domainHistoryList) domainHistoryList.innerHTML = '';
     
     buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
+    renderSupersetPage();
     renderCalendar();
     updateProgress(0, '', 'Готово');
 }
@@ -685,6 +698,10 @@ window.addEventListener('app:data-updated', () => {
     buildProjectTabs();
     renderMarkersTasksStatus();
     triggerFilterUpdate();
+    if (state.currentMenu === 'main') {
+        applySupersetFilters();
+        renderSupersetPage();
+    }
     renderCalendar();
     renderNotificationsTable();
 });
@@ -791,9 +808,10 @@ if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommenda
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
         buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus();
-        try { triggerFilterUpdate(); renderCalendar(); renderNotificationsTable(); } catch (e2) { }
+        try { triggerFilterUpdate(); renderSupersetPage(); renderCalendar(); renderNotificationsTable(); } catch (e2) { }
     });
 } else {
     buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
+    renderSupersetPage();
     renderCalendar(); renderNotificationsTable();
 }
