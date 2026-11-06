@@ -1,8 +1,8 @@
-// js/app.js — ПОЛНАЯ ПЕРЕРАБОТКА ЛОГИКИ ИНТЕРФЕЙСА
-// ★ ДОБАВЛЕНО: логика новых кнопок сайдбара (скачать, пересчитать, очистить).
-// ★ ДОБАВЛЕНО: сценарий загрузки файлов (карточки, группировка, крестики, добавление).
-// ★ ДОБАВЛЕНО: модальное окно разрешения конфликтов (дубликатов).
-// ★ ДОБАВЛЕНО: экспорт и генерация отчета перенесены в модалку скачивания.
+// js/app.js — ПОЛНАЯ СБОРКА ЛОГИКИ ИНТЕРФЕЙСА (Календарь, Генерация, Скролл)
+// ★ ДОБАВЛЕНО: Скролл-эффект для смены панелей фильтров.
+// ★ ДОБАВЛЕНО: Логика валидации домена (красный/зеленый).
+// ★ ДОБАВЛЕНО: Генерация Excel-файла с качеством (email + quality).
+// ★ ДОБАВЛЕНО: Логика календаря и открытия модалки добавления записи.
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
@@ -13,7 +13,7 @@ import {
     populateRecDatalists, addRecRow,
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, onSupersetTableFilterChange,
-    changePage
+    changePage, renderNotificationsTable
 } from './ui.js';
 import { 
     renderFeedbackTable, 
@@ -21,7 +21,11 @@ import {
     deleteFeedback, 
     initFeedbackForm, 
     applyFeedbackFilters, 
-    handleVideoLinkInput 
+    handleVideoLinkInput,
+    renderCalendar,
+    openAddFeedbackModal,
+    handleSaveFeedback,
+    deleteFeedbackFromCalendar
 } from './feedback.js';
 import { buildSuperset, applySupersetFilters, getFilteredSupersetRaw, addNormEntry, getNormForDate } from './superset.js';
 import {
@@ -53,7 +57,10 @@ if (document.getElementById('btnSaveNorm')) {
         if (addNormEntry(today, val)) {
             if (normModal) normModal.classList.remove('active');
             triggerFilterUpdate();
-            if (state.currentMenu === 'superset') renderSupersetPage();
+            if (state.currentMenu === 'main') {
+                applySupersetFilters();
+                renderSupersetPage();
+            }
         } else {
             alert('Введите корректное положительное число');
         }
@@ -68,7 +75,13 @@ Object.assign(window, {
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
     handleVideoLinkInput,
-    changePage
+    changePage,
+    openAddFeedbackModal,
+    deleteFeedbackFromCalendar,
+    editFeedbackFromCalendar: (idx) => {
+        const fb = state.feedbackData[idx];
+        if (fb) openAddFeedbackModal(fb.date, idx);
+    }
 });
 
 // ===== Боковая панель =====
@@ -85,9 +98,9 @@ if (btnSidebarToggle) {
 
 // ===== УТИЛИТЫ САЙДБАРА =====
 const btnSidebarDownload = document.getElementById('btnSidebarDownload');
-const downloadModal = document.getElementById('downloadModal');
+const generateModal = document.getElementById('generateModal');
 if (btnSidebarDownload) {
-    btnSidebarDownload.addEventListener('click', () => downloadModal.classList.add('active'));
+    btnSidebarDownload.addEventListener('click', () => generateModal.classList.add('active'));
 }
 
 const btnSidebarRelink = document.getElementById('btnSidebarRelink');
@@ -96,7 +109,7 @@ if (btnSidebarRelink) btnSidebarRelink.addEventListener('click', () => recompute
 const btnSidebarClear = document.getElementById('btnSidebarClear');
 if (btnSidebarClear) btnSidebarClear.addEventListener('click', handleClearAll);
 
-// ===== МОДАЛЬНОЕ ОКНО СКАЧИВАНИЯ =====
+// ===== МОДАЛЬНОЕ ОКНО "СГЕНЕРИРОВАТЬ ФАЙЛЫ" =====
 document.getElementById('btnDownloadExcel').addEventListener('click', () => {
     if (!state.processedData.length && !state.feedbackData.length) {
         alert('Нет данных для экспорта');
@@ -122,19 +135,11 @@ document.getElementById('btnDownloadExcel').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
         }
         if (state.feedbackData.length > 0) {
-            const cleanFeedback = state.feedbackData.map(f => {
-                let formattedDate = f.date;
-                if (f.date) {
-                    const d = new Date(f.date);
-                    if (!isNaN(d.getTime())) formattedDate = formatDate(d);
-                }
-                return {
-                    "Дата": formattedDate, "Разметчик": f.marker || "", "Статус": f.status || "",
-                    "Тип ВКС": f.typeVKS || "", "Провел": f.conductor || "",
-                    "Проект": f.project || "", "Пулы с ошибками": f.pools || "",
-                    "Ср. качество за период": f.avgQuality ?? ""
-                };
-            });
+            const cleanFeedback = state.feedbackData.map(f => ({
+                "Дата": f.date, "Разметчик": (f.markers || []).join(', '), "Статус": f.status || "",
+                "Тип ВКС": f.typeVKS || "", "Провел": f.conductor || "",
+                "Проект": f.project || "", "Пулы с ошибками": (f.pools || []).join(', ')
+            }));
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanFeedback), "Обратная связь");
         }
         if (state.rawEmployeeMap.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawEmployeeMap), "Сотрудники");
@@ -155,7 +160,7 @@ document.getElementById('btnDownloadExcel').addEventListener('click', () => {
 
         XLSX.writeFile(wb, `full_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
         log('Полный экспорт выполнен', false);
-        downloadModal.classList.remove('active');
+        generateModal.classList.remove('active');
     } catch (err) {
         alert('Ошибка экспорта: ' + err.message);
     }
@@ -164,10 +169,97 @@ document.getElementById('btnDownloadExcel').addEventListener('click', () => {
 document.getElementById('btnDownloadReport').addEventListener('click', async () => {
     try {
         await generateHtmlReport();
-        downloadModal.classList.remove('active');
+        generateModal.classList.remove('active');
     } catch (err) {
         alert('Ошибка генерации отчёта: ' + err.message);
     }
+});
+
+document.getElementById('btnOpenFeedbackModal').addEventListener('click', () => {
+    generateModal.classList.remove('active');
+    document.getElementById('feedbackModal').classList.add('active');
+});
+
+document.getElementById('btnOpenQualityModal').addEventListener('click', () => {
+    generateModal.classList.remove('active');
+    document.getElementById('qualityModal').classList.add('active');
+});
+
+// ===== МОДАЛЬНОЕ ОКНО "ФАЙЛ С КАЧЕСТВОМ" =====
+document.getElementById('btnGenerateQualityExcel').addEventListener('click', () => {
+    const proj = document.getElementById('qualProjectInput').value.trim();
+    const pool = document.getElementById('qualPoolInput').value.trim();
+    
+    if (!proj || !pool) {
+        alert('Выберите проект и пул для генерации файла.');
+        return;
+    }
+
+    // Собираем уникальные файлы по маркеру для выбранного пула
+    const qualityMap = {}; // email -> { uniqueFiles: Set, qualities: [] }
+    
+    for (const r of state.processedData) {
+        if (r._type !== 'validation') continue;
+        const rProj = (r.project || '').replace(/_validate$/, '').trim();
+        if (rProj !== proj) continue;
+        if (r.pool !== pool) continue;
+        if (!r.marker || r.quality == null) continue;
+
+        const fileKey = (r.marker || '') + '|' + r.fileName + '|' + r.fragments;
+        if (!qualityMap[r.marker]) qualityMap[r.marker] = { files: new Set(), qualities: [] };
+        
+        if (!qualityMap[r.marker].files.has(fileKey)) {
+            qualityMap[r.marker].files.add(fileKey);
+            qualityMap[r.marker].qualities.push(r.quality);
+        }
+    }
+
+    const rows = [];
+    for (const email in qualityMap) {
+        const qArr = qualityMap[email].qualities;
+        if (qArr.length === 0) continue;
+        
+        const avgQ = qArr.reduce((a, b) => a + b, 0) / qArr.length;
+        
+        // Форматируем: округляем до 3 знаков, убираем лишние нули
+        let formattedQ = Number(avgQ).toFixed(3);
+        formattedQ = formattedQ.replace(/\.?0+$/, ''); // Убираем .000, .500 -> 1, 0.5
+
+        rows.push({
+            "email": email,
+            "quality": Number(formattedQ)
+        });
+    }
+
+    if (rows.length === 0) {
+        alert('Нет данных о качестве для выбранного проекта и пула.');
+        return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Качество");
+    XLSX.writeFile(wb, `Quality_${proj}_${pool}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    
+    document.getElementById('qualityModal').classList.remove('active');
+});
+
+// ===== МОДАЛЬНОЕ ОКНО КАЛЕНДАРЯ =====
+document.getElementById('btnSaveFeedback').addEventListener('click', () => {
+    // Логика сохранения находится в feedback.js (handleSaveFeedback)
+    handleSaveFeedback();
+});
+
+document.getElementById('btnCalPrev').addEventListener('click', () => {
+    state.calendarDayOffset -= 7;
+    renderCalendar();
+});
+document.getElementById('btnCalNext').addEventListener('click', () => {
+    state.calendarDayOffset += 7;
+    renderCalendar();
+});
+document.getElementById('btnCalToday').addEventListener('click', () => {
+    state.calendarDayOffset = 0;
+    renderCalendar();
 });
 
 // ===== МОДАЛЬНОЕ ОКНО ЗАГРУЗКИ =====
@@ -189,7 +281,7 @@ const modalProgressTitle = document.getElementById('modalProgressTitle');
 
 const modalDomainInput = document.getElementById('modalDomainInput');
 const domainHistoryList = document.getElementById('domainHistoryList');
-const btnApplyDomain = document.getElementById('btnApplyDomain');
+const domainErrorMsg = document.getElementById('domainErrorMsg');
 
 let pendingFiles = [];
 let uploadMode = 'source';
@@ -210,28 +302,39 @@ function resetUploadModal() {
     
     if (modalDomainInput) modalDomainInput.value = state.validationBaseUrl || '';
     if (domainHistoryList) domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
+    
+    validateDomainInput();
 }
 
 if (btnSidebarAdd) btnSidebarAdd.addEventListener('click', () => { resetUploadModal(); uploadModal.classList.add('active'); });
 if (btnCloseModalX) btnCloseModalX.addEventListener('click', resetUploadModal);
 
-// Применение домена
-if (btnApplyDomain) {
-    btnApplyDomain.addEventListener('click', () => {
-        const val = modalDomainInput.value.trim();
+// ★ Валидация домена
+function validateDomainInput() {
+    const val = modalDomainInput.value.trim();
+    if (!val) {
+        modalDomainInput.classList.add('error');
+        modalDomainInput.classList.remove('success');
+        domainErrorMsg.style.display = 'block';
+    } else {
+        modalDomainInput.classList.remove('error');
+        modalDomainInput.classList.add('success');
+        domainErrorMsg.style.display = 'none';
+        
+        // Сохраняем в историю
         state.validationBaseUrl = val;
-        if (val && !state.domainHistory.includes(val)) {
+        if (!state.domainHistory.includes(val)) {
             state.domainHistory.push(val);
             if (state.domainHistory.length > 10) state.domainHistory.shift();
+            saveToStorage();
+            if (domainHistoryList) domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
         }
-        saveToStorage();
-        if (domainHistoryList) domainHistoryList.innerHTML = state.domainHistory.map(d => `<option value="${escapeHtml(d)}">`).join('');
-        
-        const oldText = btnApplyDomain.textContent;
-        btnApplyDomain.textContent = '✓';
-        btnApplyDomain.style.background = 'var(--success)';
-        setTimeout(() => { btnApplyDomain.textContent = oldText; btnApplyDomain.style.background = ''; }, 1500);
-    });
+    }
+}
+
+if (modalDomainInput) {
+    modalDomainInput.addEventListener('input', validateDomainInput);
+    modalDomainInput.addEventListener('change', validateDomainInput);
 }
 
 // Выбор файлов
@@ -293,7 +396,6 @@ function handleFileSelection(files) {
     } else {
         pendingFiles.push(...Array.from(files));
     }
-    
     renderPreviewFiles();
     showModalView('preview');
 }
@@ -305,6 +407,11 @@ document.getElementById('btnPreviewCancel').addEventListener('click', resetUploa
 
 document.getElementById('btnPreviewContinue').addEventListener('click', async () => {
     if (pendingFiles.length === 0) return;
+    if (!state.validationBaseUrl) {
+        alert('Обязательно укажите домен для создания ссылок!');
+        showModalView('select');
+        return;
+    }
     
     showModalView('progress');
     modalProgressFill.style.width = '10%';
@@ -329,16 +436,11 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                 document.getElementById('doneMessage').textContent = `Успешно обработано файлов: ${results.length}`;
             }
         } else {
-            // Импорт БД
+            // Логика импорта БД (упрощена для читаемости)
             const file = pendingFiles[0];
             const reader = new FileReader();
             reader.onload = async (ev) => {
                 try {
-                    modalProgressFill.style.width = '40%';
-                    modalProgressPct.textContent = '40%';
-                    modalProgressStage.textContent = 'Разбор структуры Excel...';
-                    await yieldToUI();
-                    
                     const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
                     let parsedM = [], parsedV = [], parsedR = [], parsedF = [], parsedEmp = [];
                     let parsedS1 = [], parsedS2 = [], parsedS3 = [], parsedFb = [];
@@ -357,15 +459,9 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                         else if (lower.includes('валидац') || lower.includes('valid')) parsedV = json;
                         else if (lower.includes('рекоменд') || lower.includes('recommend')) parsedR = json;
                     }
-                    
-                    state.rawMarkers = parsedM;
-                    state.rawValidation = parsedV;
-                    state.rawRecommendations = parsedR;
-                    state.rawFlatValidations = parsedF;
-                    state.rawSuperset1 = parsedS1;
-                    state.rawSuperset2 = parsedS2;
-                    state.rawSuperset3 = parsedS3;
-                    state.rawEmployeeMap = parsedEmp;
+                    state.rawMarkers = parsedM; state.rawValidation = parsedV; state.rawRecommendations = parsedR;
+                    state.rawFlatValidations = parsedF; state.rawSuperset1 = parsedS1;
+                    state.rawSuperset2 = parsedS2; state.rawSuperset3 = parsedS3; state.rawEmployeeMap = parsedEmp;
                     
                     if (parsedFb.length > 0) {
                         state.feedbackData = parsedFb.map(row => {
@@ -374,18 +470,14 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                                 const d = parseExcelDate(dateStr);
                                 if (d && !isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
                             }
-                            let avgQ = row['Ср. качество за период'];
-                            if (avgQ === '' || avgQ === undefined) avgQ = null;
-                            else if (typeof avgQ === 'string') avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
                             return {
-                                date: dateStr || '', marker: row['Разметчик'] || '', status: row['Статус'] || '',
+                                date: dateStr || '', markers: (row['Разметчик'] || '').split(', '), status: row['Статус'] || '',
                                 typeVKS: row['Тип ВКС'] || '', conductor: row['Провел'] || '',
-                                project: row['Проект'] || '', pools: row['Пулы с ошибками'] || '', avgQuality: avgQ
+                                project: row['Проект'] || '', pools: (row['Пулы с ошибками'] || '').split(', ')
                             };
                         });
                         saveFeedbackToStorage();
                     }
-                    
                     saveToStorage();
                     await recomputeDashboard();
                     showModalView('done');
@@ -404,13 +496,8 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
 });
 
 document.getElementById('btnDoneClose').addEventListener('click', resetUploadModal);
-document.getElementById('btnUploadMore').addEventListener('click', () => {
-    pendingFiles = [];
-    showModalView('select');
-});
-document.getElementById('btnErrorClose').addEventListener('click', () => {
-    showModalView('select');
-});
+document.getElementById('btnUploadMore').addEventListener('click', () => { pendingFiles = []; showModalView('select'); });
+document.getElementById('btnErrorClose').addEventListener('click', () => showModalView('select'));
 
 // ===== МОДАЛЬНОЕ ОКНО КОНФЛИКТОВ =====
 const conflictModal = document.getElementById('conflictModal');
@@ -420,36 +507,58 @@ function openConflictModal(procRes) {
     document.getElementById('doneMessage').textContent = `Добавлено новых записей: ${procRes.newCount}. Найдено конфликтов: ${procRes.conflictsCount}.`;
     
     conflictList.innerHTML = state.pendingConflicts.map((c, idx) => {
+        // Вычисляем отличия
+        let diffsHtml = '';
+        const keys = Object.keys(c.newRow);
+        for (const k of keys) {
+            if (k.startsWith('_')) continue;
+            const oldVal = String(c.oldRow[k] || '').trim();
+            const newVal = String(c.newRow[k] || '').trim();
+            if (oldVal !== newVal) {
+                diffsHtml += `<div class="conflict-diff"><span>${escapeHtml(k)}:</span> <del style="color:var(--danger); font-size:0.75rem;">${escapeHtml(oldVal)}</del> <span style="color:var(--success);">${escapeHtml(newVal)}</span></div>`;
+            }
+        }
+        
+        // Извлекаем проект и пул
+        const proj = c.newRow['Проект'] || c.newRow['project'] || '—';
+        const pool = c.newRow['Задача'] || c.newRow['Пул'] || c.newRow['pool'] || '—';
+
         return `
             <div class="conflict-card" id="conflict-${idx}">
-                <div class="conflict-col selected-old" onclick="selectConflict(${idx}, 'old')">
-                    <h4>Старые данные (в базе)</h4>
-                    <div class="conflict-data-row">Файл: <span>${escapeHtml(c.fileName)}</span></div>
-                    <div class="conflict-data-row">Данные: <span>${escapeHtml(JSON.stringify(c.oldRow).slice(0, 100))}...</span></div>
+                <div class="conflict-col conflict-old selected" onclick="selectConflict(${idx}, 'old')">
+                    <h4>Старое</h4>
+                    <div class="conflict-diff"><span>Проект:</span> ${escapeHtml(proj)}</div>
+                    <div class="conflict-diff"><span>Пул:</span> ${escapeHtml(pool)}</div>
+                    <div style="margin-top:10px; font-size:0.8rem; color:var(--muted);">Файл: ${escapeHtml(c.fileName)}</div>
                 </div>
-                <div class="conflict-col" onclick="selectConflict(${idx}, 'new')">
-                    <h4 style="color: var(--success);">Новые данные (из файла)</h4>
-                    <div class="conflict-data-row">Файл: <span>${escapeHtml(c.fileName)}</span></div>
-                    <div class="conflict-data-row">Данные: <span>${escapeHtml(JSON.stringify(c.newRow).slice(0, 100))}...</span></div>
+                <div class="conflict-col conflict-new" onclick="selectConflict(${idx}, 'new')">
+                    <h4 style="color: var(--success);">Новое (изменения)</h4>
+                    <div class="conflict-diff"><span>Проект:</span> ${escapeHtml(proj)}</div>
+                    <div class="conflict-diff"><span>Пул:</span> ${escapeHtml(pool)}</div>
+                    <div style="margin-top:10px; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px;">
+                        ${diffsHtml || '<div style="font-size:0.8rem;">Нет явных отличий</div>'}
+                    </div>
                 </div>
             </div>
         `;
     }).join('');
 
-    state.pendingConflicts.forEach(c => c.choice = 'old'); // По умолчанию оставляем старое
+    state.pendingConflicts.forEach(c => c.choice = 'old');
     conflictModal.classList.add('active');
 }
 
 window.selectConflict = (idx, choice) => {
     state.pendingConflicts[idx].choice = choice;
     const card = document.getElementById(`conflict-${idx}`);
-    const cols = card.querySelectorAll('.conflict-col');
+    const oldCol = card.querySelector('.conflict-old');
+    const newCol = card.querySelector('.conflict-new');
+    
     if (choice === 'old') {
-        cols[0].className = 'conflict-col selected-old';
-        cols[1].className = 'conflict-col';
+        oldCol.classList.add('selected');
+        newCol.classList.remove('selected');
     } else {
-        cols[0].className = 'conflict-col';
-        cols[1].className = 'conflict-col selected-new';
+        oldCol.classList.remove('selected');
+        newCol.classList.add('selected');
     }
 };
 
@@ -467,27 +576,45 @@ document.getElementById('btnConflictApplyAll').addEventListener('click', () => {
     showModalView('done');
 });
 
+// ===== ★ СКРОЛЛ ФИЛЬТРОВ =====
+const contentScroll = document.getElementById('mainScrollContainer');
+const sectionSuperset = document.getElementById('section-superset-block');
+const filtersMain = document.getElementById('filters-main');
+const filtersSuperset = document.getElementById('filters-superset');
+
+if (contentScroll && sectionSuperset && filtersMain && filtersSuperset) {
+    contentScroll.addEventListener('scroll', () => {
+        if (state.currentMenu !== 'main') return;
+        
+        const rect = sectionSuperset.getBoundingClientRect();
+        // Если верх блока Суперсета поднялся выше верха области контента
+        if (rect.top <= 60) {
+            filtersMain.style.display = 'none';
+            filtersSuperset.style.display = 'flex';
+        } else {
+            filtersMain.style.display = 'flex';
+            filtersSuperset.style.display = 'none';
+        }
+    });
+}
+
 // ===== ОБЩАЯ ЛОГИКА =====
 function handleClearAll() {
     if (!confirm('Удалить все данные?')) return;
     
-    // Очистка raw данных
     state.rawMarkers = []; state.rawValidation = []; state.rawRecommendations = []; state.rawRecommendationsManual = [];
     state.rawFlatValidations = []; state.rawSuperset1 = []; state.rawSuperset2 = []; state.rawSuperset3 = [];
     state.rawEmployeeMap = []; state.processedData = []; state.feedbackData = [];
-    state.validationBaseUrl = ''; state.domainHistory = [];
+    state.validationBaseUrl = ''; state.domainHistory = []; state.calendarDayOffset = 0;
     
-    // Очистка суперсета
     state.superset.table1 = []; state.superset.table2 = []; state.superset.table3 = []; state.superset.table4 = [];
     state.superset.filteredTable1 = []; state.superset.filteredTable2 = []; state.superset.filteredTable3 = []; state.superset.filteredTable4 = [];
-    state.superset.kpis = { qualityFact: null, qualityPlan: null, ballsPerHour: null, prodPerHour: null, avgTime: null, avgPrice: null };
     state.superset.norms = { byProjectPool: {}, byProject: {}, globalAvg: null };
     state.superset.employeeMap = { fioToEmail: {}, emailToFio: {} };
     state.superset._mainProjects = null;
     state.superset.filters = { dateFrom: '', dateTo: '', tasks: new Set() };
     state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
     
-    // Очистка фидбека
     state.feedbackGeneration.appliedPools.clear(); state.feedbackGeneration.appliedGroups.clear(); state.feedbackGeneration.videoLinks = {};
     const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
     if (fbGenContainer) fbGenContainer.innerHTML = '';
@@ -502,8 +629,7 @@ function handleClearAll() {
     if (domainHistoryList) domainHistoryList.innerHTML = '';
     
     buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
-    if (state.currentMenu === 'superset') renderSupersetPage();
-    if (state.currentMenu === 'feedback') renderFeedbackTable();
+    renderCalendar();
     updateProgress(0, '', 'Готово');
 }
 
@@ -542,9 +668,8 @@ window.addEventListener('app:data-updated', () => {
     buildProjectTabs();
     renderMarkersTasksStatus();
     triggerFilterUpdate();
-    
-    if (state.currentMenu === 'superset') renderSupersetPage();
-    if (state.currentMenu === 'feedback') renderFeedbackTable();
+    renderCalendar();
+    renderNotificationsTable();
 });
 
 // Закрытие dropdown
@@ -649,8 +774,9 @@ if (state.rawMarkers.length || state.rawValidation.length || state.rawRecommenda
     recomputeDashboard().catch(err => {
         console.error('Recompute error:', err);
         buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus();
-        try { triggerFilterUpdate(); } catch (e2) { }
+        try { triggerFilterUpdate(); renderCalendar(); renderNotificationsTable(); } catch (e2) { }
     });
 } else {
     buildSuperset(); buildProjectTabs(); renderMarkersTasksStatus(); triggerFilterUpdate();
+    renderCalendar(); renderNotificationsTable();
 }
