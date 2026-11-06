@@ -1,6 +1,8 @@
-// js/data.js — ОБНОВЛЕНО: Добавлена логика объединения (merge) конфликтов
-// ★ ДОБАВЛЕНО: Функция mergeConflictingRows и обработка choice === 'merge' в commitNewData.
-// Ранее добавленное: Защита от ошибок trim(), поиск дубликатов, полное название пула, _domain.
+// js/data.js — ФИНАЛЬНАЯ ВЕРСИЯ
+// ★ ДОБАВЛЕНО: mergeConflictingRows — умное объединение данных (сумма шт, среднее для баллов/час).
+// ★ ДОБАВЛЕНО: processNewRows — поиск дубликатов и формирование списка конфликтов.
+// ★ ИСПРАВЛЕНО: Защита от ошибок trim() (все getVal обернуты в String).
+// ★ ИСПРАВЛЕНО: Сохранение полного названия пула (без обрезания проекта).
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -8,7 +10,7 @@ import {
     detectTableType, updateProgress, log, yieldToUI
 } from './utils.js';
 
-// ★ ФУНКЦИЯ: Приводит ID (task_id, marker_id и т.д.) к единому виду, убирая .0
+// ★ Приводит ID (task_id, marker_id и т.д.) к единому виду, убирая .0
 function normalizeId(id) {
     if (id == null) return '';
     const s = String(id).trim();
@@ -171,7 +173,7 @@ export async function processNewRows(results) {
     return { hasConflicts: false };
 }
 
-// ★ НОВАЯ ФУНКЦИЯ: Объединение данных
+// ★ УМНОЕ ОБЪЕДИНЕНИЕ ДАННЫХ
 function mergeConflictingRows(oldRow, newRow) {
     const merged = Object.assign({}, oldRow);
     for (const key in newRow) {
@@ -183,29 +185,32 @@ function mergeConflictingRows(oldRow, newRow) {
         const strOld = String(oldVal === null || oldVal === undefined ? '' : oldVal).trim();
         const strNew = String(newVal === null || newVal === undefined ? '' : newVal).trim();
         
-        // Извлекаем числа (убираем пробелы, меняем запятую на точку)
         const numOld = parseFloat(strOld.replace(/\s+/g, '').replace(',', '.'));
         const numNew = parseFloat(strNew.replace(/\s+/g, '').replace(',', '.'));
         
         const lowerKey = key.toLowerCase();
-        // Складываем только числовые метрики
-        const isNumericField = lowerKey.includes('шт') || lowerKey.includes('стоимость') || lowerKey.includes('баллов') || lowerKey.includes('кпроизв');
         
-        if (isNumericField && !isNaN(numOld) && !isNaN(numNew)) {
+        // Усредняем: баллы/час, кпроизв, медиана
+        const isAvgField = lowerKey.includes('баллов/час') || lowerKey.includes('кпроизв') || lowerKey.includes('медиана');
+        // Суммируем: штуки, стоимость, фрагменты
+        const isSumField = lowerKey.includes('шт') || lowerKey.includes('стоимость') || lowerKey.includes('фрагмент');
+        
+        if (isAvgField && !isNaN(numOld) && !isNaN(numNew)) {
+            merged[key] = (numOld + numNew) / 2;
+        } else if (isSumField && !isNaN(numOld) && !isNaN(numNew)) {
             merged[key] = numOld + numNew;
         } else if (strOld === '') {
             merged[key] = newVal;
         } else if (strNew === '') {
             merged[key] = oldVal;
         } else {
-            // Для текста, дат и названий оставляем новое значение
+            // Текст, даты и прочее — берем новое значение
             merged[key] = newVal;
         }
     }
     return merged;
 }
 
-// ★ ОБНОВЛЕННАЯ ФУНКЦИЯ: Применение данных
 export function commitNewData(resolvedConflicts = []) {
     if (!state.pendingNewData) return;
 
@@ -236,7 +241,7 @@ export function commitNewData(resolvedConflicts = []) {
         } else if (conflict.choice === 'merge') {
             arr[idx] = mergeConflictingRows(arr[idx], conflict.newRow);
         }
-        // Если choice === 'old', мы ничего не делаем, остается старая строка
+        // Если choice === 'old', оставляем как есть
     }
 
     state.pendingNewData = null;
@@ -374,6 +379,7 @@ export async function recomputeDashboard() {
             const idx = String(taskStr).lastIndexOf('_validate_');
             if (idx !== -1) {
                 marker = String(taskStr).substring(idx + '_validate_'.length).trim();
+                // ★ ИСПРАВЛЕНО: Сохраняем полное название задачи (пула) без обрезания проекта
                 pool = String(taskStr).substring(0, idx).trim(); 
             }
         }
