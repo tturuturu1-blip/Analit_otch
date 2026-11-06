@@ -1,7 +1,6 @@
-// js/report-runtime.js — ФИНАЛЬНАЯ ВЕРСИЯ (9 KPI, правильные графики, 8 строк)
-// ★ ИЗМЕНЕНО: В init() шрифт заголовка "Отчёт по проектам..." принудительно сделан жирным.
-// Ранее добавленное: Все проценты в формате .toFixed(2), fix падения updateKPI (from/to),
-// ISO-сравнение дат, _domain в ссылках, getNormsForPeriod для KPI «Норма», ISO-сортировка.
+// js/report-runtime.js — ФИНАЛЬНАЯ ВЕРСИЯ (с исправленной таблицей ОС)
+// ★ ИЗМЕНЕНО: renderFeedbackTableHome корректно обрабатывает массив markers и выводит avgQuality.
+// ★ ИЗМЕНЕНО: Заголовки колонок соответствуют новым полям (Организатор).
 
 (function () {
     'use strict';
@@ -206,7 +205,8 @@
 
         filteredFeedback = feedbackData.filter(function (f) {
             if (currentTab === 'all') return true;
-            return validMarkers.has(f.marker);
+            var markersArr = f.markers || (f.marker ? [f.marker] : []);
+            return markersArr.some(function(m) { return validMarkers.has(m); });
         }).sort(function (a, b) {
             var dA = parseDate(a.date);
             var dB = parseDate(b.date);
@@ -682,16 +682,24 @@
         for (var j = 0; j < rows.length; j++) {
             var f = rows[j];
             var statusColor = f.status === 'Проведена' ? '#85c4ae' : f.status === 'Отменена' ? '#e55555' : f.status === 'Перенесена' ? '#f2c94c' : '#7a95b8';
+            
+            // ★ ИЗМЕНЕНО: Выводим все маркеры из массива (или старый строковый вариант)
+            var markersText = f.markers ? f.markers.join(', ') : (f.marker || '');
+            
+            // ★ ИЗМЕНЕНО: Выводим среднее качество в процентах
             var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null) ? (f.avgQuality * 100).toFixed(2) + '%' : '—';
+            
             var displayProject = f.project || '—';
+            
+            // ★ ИЗМЕНЕНО: Колонка "Провел" теперь называется "Организатор" (заголовок в report.js)
             html += '<tr>' +
                 '<td>' + escapeHtml(formatDate(f.date)) + '</td>' +
-                '<td>' + escapeHtml(f.marker || '') + '</td>' +
+                '<td>' + escapeHtml(markersText) + '</td>' +
                 '<td>' + escapeHtml(f.typeVKS || '—') + '</td>' +
                 '<td>' + escapeHtml(f.conductor || '—') + '</td>' +
                 '<td><span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '">' + escapeHtml(f.status) + '</span></td>' +
                 '<td>' + escapeHtml(displayProject) + '</td>' +
-                '<td>' + escapeHtml(f.pools || '') + '</td>' +
+                '<td>' + escapeHtml(f.pools ? f.pools.join(', ') : '') + '</td>' +
                 '<td><b>' + avgQText + '</b></td>' +
             '</tr>';
         }
@@ -880,7 +888,6 @@
         document.title = fullTitle;
         var brandEl = document.querySelector('.brand');
         if (brandEl) {
-            // ★ ИЗМЕНЕНО: Явно задан font-weight: 700 для жирного шрифта
             brandEl.innerHTML = '<span class="brand-accent" style="font-weight: 700;">' + escapeHtml(accentText) + '</span> <span class="brand-pro" style="font-weight: 700;">' + escapeHtml(proText) + '</span>';
         }
 
