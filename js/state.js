@@ -1,13 +1,14 @@
-// js/state.js — ДОБАВЛЕНА КОНСТАНТА MAIN_ITEMS_PER_PAGE = 8
-// ★ ДОБАВЛЕНО: rawRecommendationsManual (ручные рекомендации), validationBaseUrl (домен платформы),
-//    domainHistory (история доменов), pendingNewData и pendingConflicts (для проверки дубликатов).
+// js/state.js — ОБНОВЛЕНО ДЛЯ НОВОГО ФУНКЦИОНАЛА
+// ★ ИЗМЕНЕНО: MAIN_ITEMS_PER_PAGE = 6 (для таблицы результатов).
+// ★ ДОБАВЛЕНО: calendarDayOffset (для листания календаря по датам).
+// Ранее добавленное: rawRecommendationsManual, validationBaseUrl, domainHistory, pendingNewData, pendingConflicts.
 
 export const STORAGE_KEY = 'validation_dashboard_data_v3';
 export const FB_STORAGE_KEY = 'validation_feedback_data_v1';
 
 // Количество строк на одной странице таблицы
 export const ITEMS_PER_PAGE = 10;
-export const MAIN_ITEMS_PER_PAGE = 8; // ★ для главной таблицы результатов
+export const MAIN_ITEMS_PER_PAGE = 6; // ★ ИЗМЕНЕНО: для главной таблицы результатов (теперь 6)
 
 const DEFAULT_NORM_HISTORY = [{ date: '2000-01-01', value: 580 }];
 
@@ -15,28 +16,31 @@ export const state = {
     rawMarkers: [],
     rawValidation: [],
     rawRecommendations: [],
-    rawRecommendationsManual: [],   // ★ Рекомендации, введённые вручную через #recTable
+    rawRecommendationsManual: [],   // Рекомендации, введённые вручную через #recTable
     rawFlatValidations: [],
     rawSuperset1: [],
     rawSuperset2: [],
     rawSuperset3: [],
     rawEmployeeMap: [],
     
-    // ★ Временные хранилища для логики дубликатов при загрузке
-    pendingNewData: null,           // Сюда складываются распарсенные новые данные до подтверждения
-    pendingConflicts: [],           // Сюда складываются найденные конфликты (старое vs новое)
+    // Временные хранилища для логики дубликатов при загрузке
+    pendingNewData: null,           
+    pendingConflicts: [],           
     
     processedData: [],
     filteredData: [],
     feedbackData: [],
-    editingFeedbackIndex: null,
+    editingFeedbackIndex: null,     // Индекс редактируемой записи в календаре
     charts: {},
     currentTab: 'all',
     currentMenu: 'main',
-    validationBaseUrl: '',   // ★ Домен платформы для ссылок (последний введённый)
-    domainHistory: [],       // ★ История введённых доменов для выпадающего списка в модалке
+    validationBaseUrl: '',   
+    domainHistory: [],       
     projects: [],
     
+    // ★ НОВОЕ: Смещение дней для календаря (0 = сегодня, -1 = вчера и т.д.)
+    calendarDayOffset: 0,
+
     pagination: {
         mainData: 1,
         fbHome: 1,
