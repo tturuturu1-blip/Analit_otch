@@ -1,5 +1,7 @@
-// js/report.js — ОБНОВЛЕНО: Выравнивание табов по правому краю
-// Ранее добавленное: Вариант А (без рекомендаций) + normHistory
+// js/report.js — ОБНОВЛЕНО
+// ★ ИЗМЕНЕНО: feedbackData фильтруется (исключаются задачи и отпуска).
+// ★ ИЗМЕНЕНО: В шапке таблицы "Обратные связи" колонка "Провел" заменена на "Организатор".
+// ★ ИЗМЕНЕНО: Выравнивание табов по правому краю, жирный шрифт заголовка.
 
 import { state } from './state.js';
 import { escapeHtml, formatDate, parseExcelDate } from './utils.js';
@@ -49,7 +51,7 @@ export async function generateHtmlReport() {
 
     let tabsHtml = '';
     if (showTabs) {
-        // ★ ИЗМЕНЕНО: Добавлен style="margin-left: auto;" для выравнивания по правому краю
+        // Выравнивание по правому краю
         tabsHtml = '<div class="tabs" id="projectTabs" style="margin-left: auto;">';
         tabsHtml += '<div class="tab active" data-tab="all">Все</div>';
         for (const p of projects) {
@@ -65,7 +67,7 @@ export async function generateHtmlReport() {
 
     const targetQuality = state.superset.norms.globalAvg;
 
-    // ★ Вариант А: рекомендации в отчёт не попадают
+    // Вариант А: рекомендации в отчёт не попадают
     const serializedProcessedData = state.processedData
         .filter(r => r._type !== 'recommendations')
         .map(r => {
@@ -75,14 +77,17 @@ export async function generateHtmlReport() {
             return copy;
         });
 
-    const serializedFeedbackData = state.feedbackData.map(f => {
-        const copy = Object.assign({}, f);
-        if (f.date) {
-            const parsed = parseExcelDate(f.date);
-            copy.date = parsed ? formatDate(parsed) : f.date;
-        }
-        return copy;
-    });
+    // ★ ИЗМЕНЕНО: Оставляем только ОС (убираем Задачи и Отпуска)
+    const serializedFeedbackData = state.feedbackData
+        .filter(f => !f.eventType || f.eventType === 'oc')
+        .map(f => {
+            const copy = Object.assign({}, f);
+            if (f.date) {
+                const parsed = parseExcelDate(f.date);
+                copy.date = parsed ? formatDate(parsed) : f.date;
+            }
+            return copy;
+        });
 
     const reportData = {
         processedData: serializedProcessedData,
@@ -232,7 +237,8 @@ export async function generateHtmlReport() {
                 <table id="fbTableHome">
                     <thead>
                         <tr>
-                            <th>Дата</th><th>Разметчик</th><th>Тип ВКС</th><th>Провел</th>
+                            <th>Дата</th><th>Разметчик</th><th>Тип ВКС</th>
+                            <th>Организатор</th> <!-- ★ ИЗМЕНЕНО: Было "Провел" -->
                             <th>Статус</th><th>Проект</th><th>Пулы с ошибками</th><th>Ср. качество за период</th>
                         </tr>
                     </thead>
@@ -258,6 +264,7 @@ export async function generateHtmlReport() {
 </body>
 </html>`;
 
+    // === Формируем имя файла по проектам ===
     const projectNames = [];
     const seen = new Set();
     for (const r of state.processedData) {
