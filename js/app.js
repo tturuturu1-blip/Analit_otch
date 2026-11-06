@@ -1,9 +1,5 @@
-// js/app.js — ПОЛНАЯ СБОРКА ЛОГИКИ (Исправлено отображение конфликтов)
-// ★ ДОБАВЛЕНО: Скролл-эффект для смены панелей фильтров.
-// ★ ДОБАВЛЕНО: Логика валидации домена (красный/зеленый).
-// ★ ДОБАВЛЕНО: Генерация Excel-файла с качеством (email + quality).
-// ★ ДОБАВЛЕНО: Логика календаря и открытия модалки добавления записи.
-// ★ ИСПРАВЛЕНО: Функция openConflictModal теперь корректно выводит текст и отличия.
+// js/app.js — ПОЛНАЯ СБОРКА (Добавлена логика объединения данных в конфликтах)
+// ★ ИЗМЕНЕНО: Функции openConflictModal и toggleConflictChoice переписаны под выбор "Старого", "Нового" или "Объединения".
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
@@ -192,7 +188,7 @@ document.getElementById('btnGenerateQualityExcel').addEventListener('click', () 
         return;
     }
 
-    const qualityMap = {}; // email -> { files: Set, qualities: [] }
+    const qualityMap = {};
     
     for (const r of state.processedData) {
         if (r._type !== 'validation') continue;
@@ -496,11 +492,12 @@ const conflictModal = document.getElementById('conflictModal');
 const conflictList = document.getElementById('conflictList');
 
 function openConflictModal(procRes) {
-    const doneMsg = document.getElementById('doneMessage');
-    if (doneMsg) doneMsg.textContent = `Добавлено новых записей: ${procRes.newCount}. Найдено конфликтов: ${procRes.conflictsCount}.`;
+    document.getElementById('doneMessage').textContent = `Добавлено новых записей: ${procRes.newCount}. Найдено конфликтов: ${procRes.conflictsCount}.`;
     
     conflictList.innerHTML = state.pendingConflicts.map((c, idx) => {
-        let diffsHtml = '';
+        let oldDiffs = '';
+        let newDiffs = '';
+        
         if (c.newRow && c.oldRow) {
             const keys = Object.keys(c.newRow);
             for (const k of keys) {
@@ -508,7 +505,10 @@ function openConflictModal(procRes) {
                 const oldVal = String(c.oldRow[k] || '').trim();
                 const newVal = String(c.newRow[k] || '').trim();
                 if (oldVal !== newVal) {
-                    diffsHtml += `<div class="conflict-diff" style="margin-bottom: 6px;"><span style="font-weight:700;">${escapeHtml(k)}:</span><br><del style="color:var(--danger); font-size:0.75rem;">${escapeHtml(oldVal)}</del> <br><span style="color:var(--success);">${escapeHtml(newVal)}</span></div>`;
+                    // Старое значение (красное, без зачеркивания)
+                    oldDiffs += `<div class="conflict-diff" style="margin-bottom: 6px;"><span style="font-weight:700;">${escapeHtml(k)}:</span><br><span style="color:var(--danger);">${escapeHtml(oldVal)}</span></div>`;
+                    // Новое значение (зеленое)
+                    newDiffs += `<div class="conflict-diff" style="margin-bottom: 6px;"><span style="font-weight:700;">${escapeHtml(k)}:</span><br><span style="color:var(--success);">${escapeHtml(newVal)}</span></div>`;
                 }
             }
         }
@@ -518,41 +518,65 @@ function openConflictModal(procRes) {
 
         return `
             <div class="conflict-card" id="conflict-${idx}">
-                <div class="conflict-col conflict-old selected" onclick="selectConflict(${idx}, 'old')">
-                    <h4>Старое</h4>
+                <div class="conflict-col conflict-old" onclick="toggleConflictChoice(${idx}, 'old')">
+                    <h4>Старое (в базе)</h4>
                     <div class="conflict-diff"><span>Проект:</span> ${escapeHtml(proj)}</div>
                     <div class="conflict-diff"><span>Пул:</span> ${escapeHtml(pool)}</div>
-                    <div style="margin-top:10px; font-size:0.8rem; color:var(--muted);">Файл: ${escapeHtml(c.fileName || '—')}</div>
+                    <div style="margin-top:10px; font-size:0.8rem; color:var(--muted); margin-bottom:10px;">Файл: ${escapeHtml(c.fileName || '—')}</div>
+                    ${oldDiffs || '<div style="color:var(--muted); font-size:0.85rem;">Нет отличий</div>'}
                 </div>
-                <div class="conflict-col conflict-new" onclick="selectConflict(${idx}, 'new')">
-                    <h4 style="color: var(--success);">Новое (изменения)</h4>
+                <div class="conflict-col conflict-new" onclick="toggleConflictChoice(${idx}, 'new')">
+                    <h4 style="color: var(--success);">Новое (из файла)</h4>
                     <div class="conflict-diff"><span>Проект:</span> ${escapeHtml(proj)}</div>
                     <div class="conflict-diff"><span>Пул:</span> ${escapeHtml(pool)}</div>
-                    <div style="margin-top:10px; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px; font-size:0.85rem;">
-                        ${diffsHtml || '<div style="color:var(--muted);">Нет явных отличий</div>'}
-                    </div>
+                    <div style="margin-top:10px; font-size:0.8rem; color:var(--muted); margin-bottom:10px;">Файл: ${escapeHtml(c.fileName || '—')}</div>
+                    ${newDiffs || '<div style="color:var(--muted); font-size:0.85rem;">Нет отличий</div>'}
                 </div>
             </div>
         `;
     }).join('');
     
-    state.pendingConflicts.forEach(c => c.choice = 'old');
+    // Инициализируем состояние (по умолчанию выбрано "Старое")
+    state.pendingConflicts.forEach((c, idx) => {
+        c.selOld = true;
+        c.selNew = false;
+        c.choice = 'old';
+        setTimeout(() => {
+            const card = document.getElementById(`conflict-${idx}`);
+            if (card) card.querySelector('.conflict-old').classList.add('selected');
+        }, 0);
+    });
+    
     conflictModal.classList.add('active');
 }
 
-window.selectConflict = (idx, choice) => {
-    state.pendingConflicts[idx].choice = choice;
+window.toggleConflictChoice = (idx, type) => {
+    const c = state.pendingConflicts[idx];
     const card = document.getElementById(`conflict-${idx}`);
     if (!card) return;
+    
     const oldCol = card.querySelector('.conflict-old');
     const newCol = card.querySelector('.conflict-new');
     
-    if (choice === 'old') {
-        oldCol.classList.add('selected');
-        newCol.classList.remove('selected');
+    if (type === 'old') c.selOld = !c.selOld;
+    else c.selNew = !c.selNew;
+    
+    if (!c.selOld && !c.selNew) {
+        if (type === 'old') c.selOld = true;
+        else c.selNew = true;
+    }
+    
+    oldCol.classList.toggle('selected', c.selOld);
+    newCol.classList.toggle('selected', c.selNew);
+    
+    if (c.selOld && c.selNew) {
+        c.choice = 'merge';
+        oldCol.classList.add('merge-active');
+        newCol.classList.add('merge-active');
     } else {
-        oldCol.classList.remove('selected');
-        newCol.classList.add('selected');
+        c.choice = c.selOld ? 'old' : 'new';
+        oldCol.classList.remove('merge-active');
+        newCol.classList.remove('merge-active');
     }
 };
 
@@ -564,7 +588,7 @@ document.getElementById('btnConflictKeepOld').addEventListener('click', () => {
 });
 
 document.getElementById('btnConflictApplyAll').addEventListener('click', () => {
-    state.pendingConflicts.forEach(c => c.choice = 'new');
+    // Если пользователь ничего не менял, применится choice, который был установлен при инициализации ('old' или 'merge')
     commitNewData(state.pendingConflicts);
     conflictModal.classList.remove('active');
     showModalView('done');
