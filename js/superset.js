@@ -1,7 +1,7 @@
-// js/superset.js — ОБНОВЛЕНО ДЛЯ УВЕДОМЛЕНИЙ И УДАЛЕНИЯ ПЕРИОДА
-// ★ ИЗМЕНЕНО: Удалена колонка "Период разметки" из getTable1Config.
-// ★ ДОБАВЛЕНО: Функция getQualityDiscrepancies() для страницы "Уведомления".
-// Ранее добавленное: String() для нормализации, rebuildTable2 без fallback, цены и нормы по свежей дате.
+// js/superset.js — ФИНАЛЬНАЯ ВЕРСИЯ
+// ★ ИЗМЕНЕНО: computeMainProjectsSet теперь добавляет все проекты из Суперсета (исправляет пустые таблицы).
+// ★ ИЗМЕНЕНО: getTable1Config без колонки "Период разметки".
+// ★ ДОБАВЛЕНО: getQualityDiscrepancies для страницы Уведомления.
 
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
@@ -15,24 +15,36 @@ function normalizeProject(project) {
 function computeMainProjectsSet() {
     const set = new Set();
 
+    // 1. Берем все проекты из уже обработанных данных (Валидация, Рекомендации)
     for (const r of state.processedData) {
         if (!r.project) continue;
         const name = String(r.project).trim();
         if (name) set.add(name);
     }
 
+    // 2. Берем проекты из сырых файлов Суперсета
     const supersetProjects = new Set();
     for (const arr of [state.rawSuperset1, state.rawSuperset2, state.rawSuperset3]) {
         for (const r of arr) {
-            const proj = getVal(r, 'Проект');
-            if (proj) supersetProjects.add(String(proj).trim());
+            const proj = String(getVal(r, 'Проект') || '').trim();
+            if (proj) supersetProjects.add(proj);
         }
     }
+    
+    // ★ ИСПРАВЛЕНО: Добавляем базовые проекты из Суперсета, даже если их нет в Валидации
     for (const sp of supersetProjects) {
-        if (!sp.endsWith('_validate')) continue;
-        const parent = sp.substring(0, sp.length - '_validate'.length).trim();
-        if (set.has(parent)) {
+        if (!sp.endsWith('_validate')) {
             set.add(sp);
+        }
+    }
+    
+    // Добавляем _validate проекты, только если их родитель есть в базе
+    for (const sp of supersetProjects) {
+        if (sp.endsWith('_validate')) {
+            const parent = sp.substring(0, sp.length - '_validate'.length).trim();
+            if (set.has(parent)) {
+                set.add(sp);
+            }
         }
     }
     return set;
@@ -374,7 +386,7 @@ export function getTable1Config() {
         { key: 'ballsPerHour', label: 'Факт баллов/час', get: r => String(r.ballsPerHour || '') },
         { key: 'prodPerHour', label: 'Кпроизв в час', get: r => String(r.prodPerHour || '') },
         { key: 'price', label: 'Цена', get: r => String(r.price || '') }
-        // ★ УДАЛЕНО: Период разметки (period)
+        // Удалена колонка period (Период разметки)
     ];
 }
 
@@ -697,23 +709,18 @@ export function getQualityDiscrepancies() {
     const discrepancies = [];
     const { fioToEmail } = state.superset.employeeMap || { fioToEmail: {} };
 
-    // Проходим по всей таблице 2 (там уже есть и Суперсет, и Факт)
     for (const r of state.superset.table2) {
-        // Пропускаем, если качества нет
         if (r.qualityFact == null || r.qualitySuperset == null || r.qualitySuperset === '') continue;
         
         let qsNum = parseFloat(String(r.qualitySuperset).replace(',', '.'));
         if (isNaN(qsNum)) continue;
         
-        // Приводим оба значения к процентам (0-100)
         let qsPct = qsNum <= 1 ? qsNum * 100 : qsNum;
         let qfPct = r.qualityFact * 100;
         
         let diff = Math.abs(qsPct - qfPct);
         
-        // Если разница больше 0.49, значит это расхождение
         if (diff > 0.49) {
-            // Ищем почту по ФИО, если не нашли - выводим ФИО
             const email = fioToEmail[r.fio.trim()] || r.fio;
             
             discrepancies.push({
@@ -728,7 +735,6 @@ export function getQualityDiscrepancies() {
         }
     }
     
-    // Сортируем по убыванию разницы (сначала самые проблемные)
     discrepancies.sort((a, b) => parseFloat(b.diff) - parseFloat(a.diff));
     return discrepancies;
 }
