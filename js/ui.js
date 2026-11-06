@@ -1,13 +1,10 @@
-// js/ui.js — ОБНОВЛЕНО ДЛЯ НОВОГО ФУНКЦИОНАЛА
-// ★ ИЗМЕНЕНО: Фильтры встроены прямо в заголовки таблиц (th).
-// ★ ИЗМЕНЕНО: Удалена колонка "Период разметки" в Сводной таблице.
-// ★ ИЗМЕНЕНО: Пагинация "Результатов валидации" перенесена в шапку.
-// ★ ДОБАВЛЕНО: Рендер страницы "Уведомления".
+// js/ui.js — ИСПРАВЛЕНИЕ ОШИБКИ ИМПОРТА (renderFeedbackTable)
+// ★ ИЗМЕНЕНО: Убраны импорты удаленных функций. Вызов календаря через window.renderCalendar.
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
 import { formatDate, updateLabel, escapeHtml, destroyChart, getVal, getValidationUrl } from './utils.js';
-import { renderFeedbackTable, renderFeedbackTableHome, applyFeedbackFilters } from './feedback.js';
+import { applyFeedbackFilters } from './feedback.js';
 import {
     applySupersetFilters, formatPeriod, getNormForDate, getNormsForPeriod,
     addNormEntry, getTable1Config, getTable2Config, getTable3Config, getTable4Config,
@@ -16,7 +13,6 @@ import {
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
-// Плагин подписей для графиков
 const dataLabelsPlugin = {
     id: 'dataLabels',
     afterDatasetsDraw(chart) {
@@ -68,7 +64,6 @@ export function switchMenu(menuId, btn) {
     }
     if (menuId === 'errors') renderErrorsTable();
     if (menuId === 'feedback') {
-        // Календарь рендерится через app.js/feedback.js
         if (window.renderCalendar) window.renderCalendar();
     }
     if (menuId === 'notifications') {
@@ -341,8 +336,6 @@ export function populateRecDatalists() {
     fill('recPoolsList', pools);
     fill('recMarkersList', markers);
     fill('recValidatorsList', validators);
-
-    // Заполняем списки для модалки генерации качества
     fill('qualProjectList', projects);
     fill('qualPoolList', pools);
 }
@@ -372,10 +365,6 @@ export function changePage(tableKey, page) {
     else if (tableKey === 'superset2') renderSupersetTable2();
     else if (tableKey === 'superset3') renderSupersetTable3();
     else if (tableKey === 'superset4') renderSupersetTable4();
-    else if (tableKey === 'fbHome' || tableKey === 'fbTable') {
-        if (window.renderFeedbackTableHome) window.renderFeedbackTableHome();
-        if (window.renderFeedbackTable) window.renderFeedbackTable();
-    }
 }
 
 function renderPaginationControls(controlsId, infoId, totalItems, tableKey) {
@@ -392,7 +381,7 @@ function renderPaginationControls(controlsId, infoId, totalItems, tableKey) {
 
     const start = totalItems === 0 ? 0 : (currentPage - 1) * limit + 1;
     const end = Math.min(currentPage * limit, totalItems);
-    info.textContent = totalItems === 0 ? 'Показано 0 из 0' : `Показано ${start}-${end} из ${totalItems}`;
+    if (info) info.textContent = totalItems === 0 ? 'Показано 0 из 0' : `Показано ${start}-${end} из ${totalItems}`;
 
     let html = '';
     html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage('${tableKey}', ${currentPage - 1})">&lt;</button>`;
@@ -420,12 +409,9 @@ export function triggerFilterUpdate() {
     buildDayQualityChart();
     buildErrorsByMarkerChart();
     buildTable();
-    renderFeedbackTableHome();
 }
 
 export function updateKPI() {
-    // ... (без изменений в логике, только проценты .toFixed(2))
-    // Код функции updateKPI оставлен без изменений, так как логика верна
     const uniqueFiles = new Set();
     let totalFragments = 0;
     for (const r of state.filteredData) {
@@ -465,10 +451,8 @@ export function updateKPI() {
 
     const isRed = (target != null) && (errorPercent > 5) && (avgQPct < target);
     const isGreen = (target != null) && (errorPercent <= 5) && (avgQPct >= target);
-    
     let qColorClass = 'val-brown';
     let errColorClass = 'val-brown';
-
     if (isRed) { qColorClass = 'val-red'; errColorClass = 'val-red'; }
     else if (isGreen) { qColorClass = 'val-green'; errColorClass = 'val-green'; }
 
@@ -587,8 +571,6 @@ export function updateKPI() {
         </div>
     `;
 }
-
-// ... (функции построения графиков оставлены без изменений, они используют .toFixed(2)) ...
 
 function targetLinesForLabels(labels) {
     const target = state.superset.norms.globalAvg;
@@ -830,7 +812,6 @@ export function buildTable() {
 }
 
 export function renderErrorsTable() {
-    // ... (код оставлен без изменений, включая <details> для типов ошибок) ...
     const container = document.getElementById('errorsCardsContainer');
     if (!container) return;
 
@@ -977,7 +958,6 @@ export function renderErrorsTable() {
                         <div class="marker-email" title="${escapeHtml(markerEmail)}">${escapeHtml(markerEmail)}</div>
                     </div>
                 </div>
-
                 <div class="inner-cards-container">
                     <div class="inner-card">
                         <div class="inner-card-title">Качество по проектам</div>
@@ -1000,7 +980,6 @@ export function renderErrorsTable() {
     container.innerHTML = html;
 }
 
-// ===== ★ НОВОЕ: Рендер страницы "Уведомления" =====
 export function renderNotificationsTable() {
     const tbody = document.getElementById('notificationsTableBody');
     if (!tbody) return;
@@ -1023,8 +1002,6 @@ export function renderNotificationsTable() {
         </tr>
     `).join('');
 }
-
-// ===== ФУНКЦИИ СУПЕРСЕТА =====
 
 export function renderSupersetPage() {
     renderSupersetFilters();
@@ -1117,7 +1094,6 @@ export function resetSupersetFilters() {
     renderSupersetPage();
 }
 
-// ★ ИЗМЕНЕНО: Встраиваем фильтр прямо в заголовок th
 function renderHeaderWithFilter(tableId, label, cfg, fullRows) {
     if (!cfg) return `<th>${escapeHtml(label)}</th>`;
     
@@ -1176,34 +1152,16 @@ function renderSupersetTable1() {
     const configs = getTable1Config();
     const allRows = state.superset.table1 || [];
 
-    // Перерисовываем шапку с встроенными фильтрами
-    let thHtml = '<th>Проект</th>'; // Проект обычно не фильтруется здесь, так как есть табы
-    const cfgTask = configs.find(c => c.key === 'task');
-    thHtml += renderHeaderWithFilter('t1', 'Задача', cfgTask, allRows);
-    
-    const cfgFragments = configs.find(c => c.key === 'fragments');
-    thHtml += renderHeaderWithFilter('t1', 'Размечено, шт', cfgFragments, allRows);
-    
-    const cfgNorm = configs.find(c => c.key === 'normQuality');
-    thHtml += renderHeaderWithFilter('t1', 'Норма качества', cfgNorm, allRows);
-    
-    const cfgQuality = configs.find(c => c.key === 'quality');
-    thHtml += renderHeaderWithFilter('t1', 'Качество', cfgQuality, allRows);
-    
-    const cfgComment = configs.find(c => c.key === 'comment');
-    thHtml += renderHeaderWithFilter('t1', 'Комментарий', cfgComment, allRows);
-    
-    const cfgWithout = configs.find(c => c.key === 'withoutQuality');
-    thHtml += renderHeaderWithFilter('t1', 'Без качества, шт', cfgWithout, allRows);
-    
-    const cfgBalls = configs.find(c => c.key === 'ballsPerHour');
-    thHtml += renderHeaderWithFilter('t1', 'Факт баллов/час', cfgBalls, allRows);
-    
-    const cfgProd = configs.find(c => c.key === 'prodPerHour');
-    thHtml += renderHeaderWithFilter('t1', 'Кпроизв в час', cfgProd, allRows);
-    
-    const cfgPrice = configs.find(c => c.key === 'price');
-    thHtml += renderHeaderWithFilter('t1', 'Цена', cfgPrice, allRows);
+    let thHtml = '<th>Проект</th>';
+    thHtml += renderHeaderWithFilter('t1', 'Задача', configs.find(c => c.key === 'task'), allRows);
+    thHtml += renderHeaderWithFilter('t1', 'Размечено, шт', configs.find(c => c.key === 'fragments'), allRows);
+    thHtml += renderHeaderWithFilter('t1', 'Норма качества', configs.find(c => c.key === 'normQuality'), allRows);
+    thHtml += renderHeaderWithFilter('t1', 'Качество', configs.find(c => c.key === 'quality'), allRows);
+    thHtml += renderHeaderWithFilter('t1', 'Комментарий', configs.find(c => c.key === 'comment'), allRows);
+    thHtml += renderHeaderWithFilter('t1', 'Без качества, шт', configs.find(c => c.key === 'withoutQuality'), allRows);
+    thHtml += renderHeaderWithFilter('t1', 'Факт баллов/час', configs.find(c => c.key === 'ballsPerHour'), allRows);
+    thHtml += renderHeaderWithFilter('t1', 'Кпроизв в час', configs.find(c => c.key === 'prodPerHour'), allRows);
+    thHtml += renderHeaderWithFilter('t1', 'Цена', configs.find(c => c.key === 'price'), allRows);
 
     thead.innerHTML = thHtml;
 
