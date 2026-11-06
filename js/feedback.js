@@ -1,7 +1,6 @@
-// js/feedback.js — ОБНОВЛЕНО ДЛЯ КАЛЕНДАРЯ И НОВЫХ ТИПОВ СОБЫТИЙ
-// ★ ИЗМЕНЕНО: Календарь теперь начинается с понедельника.
-// ★ ДОБАВЛЕНО: Кружочки аватарок, поля времени, логика для Задач и Отпусков.
-// ★ ИСПРАВЛЕНО: Устранено дублирование записей при сохранении.
+// js/feedback.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД
+// ★ ИЗМЕНЕНО: handleSaveFeedback теперь считает avgQuality и сохраняет marker строкой для совместимости.
+// ★ ИЗМЕНЕНО: В модалке добавления ОС заголовок "Провел" заменен на "Организатор" (в HTML это уже сделано, но в JS подтягиваем верно).
 
 import { state, saveFeedbackToStorage, ITEMS_PER_PAGE } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel, getVal, parseExcelDate } from './utils.js';
@@ -45,14 +44,12 @@ export function renderCalendar() {
     const container = document.getElementById('calendarScroller');
     if (!container) return;
 
-    // ★ ИЗМЕНЕНО: Вычисляем понедельник текущей недели
     const today = new Date();
-    const currentDay = today.getDay() || 7; // Делаем воскресенье 7-м днем, чтобы понедельник был 1-м
+    const currentDay = today.getDay() || 7;
     const monday = new Date(today);
     monday.setDate(today.getDate() - currentDay + 1 + state.calendarDayOffset);
 
     let html = '';
-    
     const dayNames = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
     
     for (let i = 0; i < 7; i++) {
@@ -65,20 +62,17 @@ export function renderCalendar() {
         const dateStrISO = `${y}-${m}-${d}`;
         const displayDate = `${dayNames[i]}, ${d}.${m}.${String(y).slice(-2)}`;
 
-        // Ищем записи на этот день
         const dayFeedbacks = state.feedbackData.filter(f => f.date === dateStrISO).sort((a,b) => new Date(b.date) - new Date(a.date));
 
         html += `<div class="calendar-day-card">
             <div class="calendar-date-title">${displayDate}</div>
             <div class="calendar-records-container" style="display:flex; flex-direction:column; gap:10px;">`;
 
-        // Рендерим карточки записей
         for (const fb of dayFeedbacks) {
             const realIdx = state.feedbackData.indexOf(fb);
             html += renderFeedbackRecordCard(fb, realIdx);
         }
 
-        // Плашка добавления
         html += `
             <button class="calendar-add-btn" onclick="openAddTypeModal('${dateStrISO}')" title="Добавить запись">
                 +
@@ -90,7 +84,6 @@ export function renderCalendar() {
 }
 
 function renderFeedbackRecordCard(fb, idx) {
-    // Если это Задача или Отпуск
     if (fb.eventType === 'task' || fb.eventType === 'vacation') {
         return `
             <div class="feedback-record-card" style="border-left-color: ${fb.eventType === 'task' ? 'var(--success)' : 'var(--warning)'};">
@@ -108,7 +101,6 @@ function renderFeedbackRecordCard(fb, idx) {
         `;
     }
 
-    // Если это ОС (стандартная логика)
     const markersHtml = (fb.markers || []).map(m => {
         let avgQuality = 0;
         let count = 0;
@@ -176,16 +168,13 @@ export function openEventModal(type) {
     else if (type === 'vacation') title.textContent = 'Добавить отпуск';
     else title.textContent = 'Добавить ОС';
 
-    // Заполняем список разметчиков
     const select = document.getElementById('eventModalMarker');
     const markers = [...new Set(state.processedData.map(r => r.marker).filter(Boolean))].sort();
     select.innerHTML = '<option value="">Выберите разметчика...</option>' + markers.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 
-    // Сбрасываем поля
     document.getElementById('eventModalTitleInput').value = '';
 
     if (type === 'feedback') {
-        // Перенаправляем на модалку ОС
         openAddFeedbackModal(dateStr);
     } else {
         modal.classList.add('active');
@@ -226,7 +215,6 @@ export function openAddFeedbackModal(dateStr, editIdx = null) {
     document.getElementById('btnSaveFeedback').textContent = 'Добавить';
     state.editingFeedbackIndex = editIdx;
 
-    // Сброс полей
     document.getElementById('fbModalProject').value = '';
     document.getElementById('fbModalTimeFrom').value = '';
     document.getElementById('fbModalTimeTo').value = '';
@@ -239,11 +227,9 @@ export function openAddFeedbackModal(dateStr, editIdx = null) {
     document.querySelectorAll('#msFbRecordMarkers_options input').forEach(cb => cb.checked = false);
     document.querySelectorAll('#msFbFormPools_options input').forEach(cb => cb.checked = false);
     
-    // Заполняем списки маркеров и пулов
     populateFeedbackModalSelects();
 
     if (editIdx !== null) {
-        // Заполняем данными для редактирования
         const fb = state.feedbackData[editIdx];
         if (fb) {
             document.getElementById('fbModalProject').value = fb.project || '';
@@ -256,7 +242,6 @@ export function openAddFeedbackModal(dateStr, editIdx = null) {
             if (fb.markers) fb.markers.forEach(m => state.filterState.fbRecordMarkers.add(m));
             if (fb.pools) fb.pools.forEach(p => state.filterState.fbFormPools.add(p));
             
-            // Восстанавливаем чекбоксы
             document.querySelectorAll('#msFbRecordMarkers_options input').forEach(cb => {
                 if (state.filterState.fbRecordMarkers.has(cb.value)) cb.checked = true;
             });
@@ -300,6 +285,7 @@ function populateFeedbackModalSelects() {
     }
 }
 
+// ★ ИЗМЕНЕНО: Теперь здесь рассчитывается среднее качество для записи
 export function handleSaveFeedback() {
     const dateStr = document.getElementById('fbModalDate').value;
     const project = document.getElementById('fbModalProject').value.trim();
@@ -316,6 +302,32 @@ export function handleSaveFeedback() {
         return;
     }
 
+    // Считаем среднее качество для сохранения (для отчета)
+    let totalQ = 0;
+    let countQ = 0;
+    for (const m of markers) {
+        const relevant = state.processedData.filter(r => {
+            if (r.marker !== m || r.quality == null) return false;
+            const rProj = (r.project || '').replace(/_validate$/, '').trim();
+            if (project && rProj !== project) return false;
+            if (pools.length > 0 && !pools.includes(r.pool)) return false;
+            return true;
+        });
+
+        const uniqueFiles = new Map();
+        for (const r of relevant) {
+            const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
+            if (!uniqueFiles.has(key)) uniqueFiles.set(key, r.quality);
+        }
+        
+        const vals = Array.from(uniqueFiles.values());
+        if (vals.length > 0) {
+            totalQ += vals.reduce((a, b) => a + b, 0) / vals.length;
+            countQ++;
+        }
+    }
+    const avgQuality = countQ > 0 ? totalQ / countQ : null;
+
     const newRecord = { 
         date: dateStr, 
         eventType: 'oc',
@@ -326,12 +338,14 @@ export function handleSaveFeedback() {
         typeVKS, 
         conductor, 
         markers, 
-        pools 
+        pools,
+        avgQuality,
+        marker: markers.join(', ') // Для совместимости со старой таблицей отчета
     };
 
     if (state.editingFeedbackIndex !== null) {
         state.feedbackData[state.editingFeedbackIndex] = newRecord;
-        state.editingFeedbackIndex = null; // Сбрасываем индекс после сохранения
+        state.editingFeedbackIndex = null;
     } else {
         state.feedbackData.push(newRecord);
     }
@@ -561,8 +575,6 @@ export function generateFeedbackHtml() {
     URL.revokeObjectURL(url);
 }
 
-// ===== 4. ЛОГИКА ФИЛЬТРОВ В МОДАЛКЕ СОЗДАНИЯ ФИДБЕКА =====
-
 export function applyFeedbackFilters() {
     const container = document.getElementById('feedbackGenerationBlocks');
     if (!container) return;
@@ -642,7 +654,6 @@ export function initFeedbackForm() {
     document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedbackHtml);
 }
 
-// Экспорт для window (вызывается из HTML)
 window.renderCalendar = renderCalendar;
 window.openAddTypeModal = openAddTypeModal;
 window.openEventModal = openEventModal;
