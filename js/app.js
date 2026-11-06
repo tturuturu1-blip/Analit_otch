@@ -1,4 +1,4 @@
-// js/app.js — ПОЛНАЯ СБОРКА ЛОГИКИ ИНТЕРФЕЙСА (Календарь, Генерация, Скролл)
+// js/app.js — ИСПРАВЛЕНИЕ ОШИБКИ ИМПОРТА (удалены старые функции feedback.js)
 // ★ ДОБАВЛЕНО: Скролл-эффект для смены панелей фильтров.
 // ★ ДОБАВЛЕНО: Логика валидации домена (красный/зеленый).
 // ★ ДОБАВЛЕНО: Генерация Excel-файла с качеством (email + quality).
@@ -16,9 +16,6 @@ import {
     changePage, renderNotificationsTable
 } from './ui.js';
 import { 
-    renderFeedbackTable, 
-    editFeedback, 
-    deleteFeedback, 
     initFeedbackForm, 
     applyFeedbackFilters, 
     handleVideoLinkInput,
@@ -71,7 +68,6 @@ if (document.getElementById('btnSaveNorm')) {
 Object.assign(window, {
     switchMenu, switchTab, toggleDropdown, filterMsOptions, toggleAll,
     onOptionChange, renderErrorsTable,
-    editFeedback, deleteFeedback,
     onSupersetTaskChange, onSupersetDateChange,
     resetSupersetFilters, editSupersetNorm, onSupersetTableFilterChange,
     handleVideoLinkInput,
@@ -195,8 +191,7 @@ document.getElementById('btnGenerateQualityExcel').addEventListener('click', () 
         return;
     }
 
-    // Собираем уникальные файлы по маркеру для выбранного пула
-    const qualityMap = {}; // email -> { uniqueFiles: Set, qualities: [] }
+    const qualityMap = {}; // email -> { files: Set, qualities: [] }
     
     for (const r of state.processedData) {
         if (r._type !== 'validation') continue;
@@ -221,9 +216,9 @@ document.getElementById('btnGenerateQualityExcel').addEventListener('click', () 
         
         const avgQ = qArr.reduce((a, b) => a + b, 0) / qArr.length;
         
-        // Форматируем: округляем до 3 знаков, убираем лишние нули
+        // Форматируем: округляем до 3 знаков, убираем лишние нули (1.000 -> 1, 0.950 -> 0.95)
         let formattedQ = Number(avgQ).toFixed(3);
-        formattedQ = formattedQ.replace(/\.?0+$/, ''); // Убираем .000, .500 -> 1, 0.5
+        formattedQ = formattedQ.replace(/\.?0+$/, ''); 
 
         rows.push({
             "email": email,
@@ -245,7 +240,6 @@ document.getElementById('btnGenerateQualityExcel').addEventListener('click', () 
 
 // ===== МОДАЛЬНОЕ ОКНО КАЛЕНДАРЯ =====
 document.getElementById('btnSaveFeedback').addEventListener('click', () => {
-    // Логика сохранения находится в feedback.js (handleSaveFeedback)
     handleSaveFeedback();
 });
 
@@ -309,19 +303,18 @@ function resetUploadModal() {
 if (btnSidebarAdd) btnSidebarAdd.addEventListener('click', () => { resetUploadModal(); uploadModal.classList.add('active'); });
 if (btnCloseModalX) btnCloseModalX.addEventListener('click', resetUploadModal);
 
-// ★ Валидация домена
+// Валидация домена
 function validateDomainInput() {
     const val = modalDomainInput.value.trim();
     if (!val) {
         modalDomainInput.classList.add('error');
         modalDomainInput.classList.remove('success');
-        domainErrorMsg.style.display = 'block';
+        if (domainErrorMsg) domainErrorMsg.style.display = 'block';
     } else {
         modalDomainInput.classList.remove('error');
         modalDomainInput.classList.add('success');
-        domainErrorMsg.style.display = 'none';
+        if (domainErrorMsg) domainErrorMsg.style.display = 'none';
         
-        // Сохраняем в историю
         state.validationBaseUrl = val;
         if (!state.domainHistory.includes(val)) {
             state.domainHistory.push(val);
@@ -436,7 +429,6 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                 document.getElementById('doneMessage').textContent = `Успешно обработано файлов: ${results.length}`;
             }
         } else {
-            // Логика импорта БД (упрощена для читаемости)
             const file = pendingFiles[0];
             const reader = new FileReader();
             reader.onload = async (ev) => {
@@ -507,7 +499,6 @@ function openConflictModal(procRes) {
     document.getElementById('doneMessage').textContent = `Добавлено новых записей: ${procRes.newCount}. Найдено конфликтов: ${procRes.conflictsCount}.`;
     
     conflictList.innerHTML = state.pendingConflicts.map((c, idx) => {
-        // Вычисляем отличия
         let diffsHtml = '';
         const keys = Object.keys(c.newRow);
         for (const k of keys) {
@@ -519,7 +510,6 @@ function openConflictModal(procRes) {
             }
         }
         
-        // Извлекаем проект и пул
         const proj = c.newRow['Проект'] || c.newRow['project'] || '—';
         const pool = c.newRow['Задача'] || c.newRow['Пул'] || c.newRow['pool'] || '—';
 
@@ -576,7 +566,7 @@ document.getElementById('btnConflictApplyAll').addEventListener('click', () => {
     showModalView('done');
 });
 
-// ===== ★ СКРОЛЛ ФИЛЬТРОВ =====
+// ===== СКРОЛЛ ФИЛЬТРОВ =====
 const contentScroll = document.getElementById('mainScrollContainer');
 const sectionSuperset = document.getElementById('section-superset-block');
 const filtersMain = document.getElementById('filters-main');
@@ -587,7 +577,6 @@ if (contentScroll && sectionSuperset && filtersMain && filtersSuperset) {
         if (state.currentMenu !== 'main') return;
         
         const rect = sectionSuperset.getBoundingClientRect();
-        // Если верх блока Суперсета поднялся выше верха области контента
         if (rect.top <= 60) {
             filtersMain.style.display = 'none';
             filtersSuperset.style.display = 'flex';
