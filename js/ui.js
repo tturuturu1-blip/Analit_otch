@@ -1,7 +1,8 @@
-// js/ui.js — ОБНОВЛЕННЫЙ КОД (Объединение страниц и карточки разметчиков)
-// ★ ИЗМЕНЕНО: switchMenu и switchTab теперь вызывают renderSupersetPage для страницы 'main'.
-// ★ ИЗМЕНЕНО: В renderErrorsTable блок ошибок обернут в <details> (сворачивание).
-// Ранее добавленное: _domain в таблице, toggleAll для 'tasks', ISO-даты, красный цвет в Суперсете.
+// js/ui.js — ОБНОВЛЕНО ДЛЯ НОВОГО ФУНКЦИОНАЛА
+// ★ ИЗМЕНЕНО: Фильтры встроены прямо в заголовки таблиц (th).
+// ★ ИЗМЕНЕНО: Удалена колонка "Период разметки" в Сводной таблице.
+// ★ ИЗМЕНЕНО: Пагинация "Результатов валидации" перенесена в шапку.
+// ★ ДОБАВЛЕНО: Рендер страницы "Уведомления".
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -9,12 +10,13 @@ import { formatDate, updateLabel, escapeHtml, destroyChart, getVal, getValidatio
 import { renderFeedbackTable, renderFeedbackTableHome, applyFeedbackFilters } from './feedback.js';
 import {
     applySupersetFilters, formatPeriod, getNormForDate, getNormsForPeriod,
-    addNormEntry, getTable1Config, getTable2Config, getTable3Config, getTable4Config
+    addNormEntry, getTable1Config, getTable2Config, getTable3Config, getTable4Config,
+    getQualityDiscrepancies
 } from './superset.js';
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
-// Плагин подписей (улучшен для избежания наложения)
+// Плагин подписей для графиков
 const dataLabelsPlugin = {
     id: 'dataLabels',
     afterDatasetsDraw(chart) {
@@ -56,7 +58,6 @@ export function switchMenu(menuId, btn) {
 
     const topBar = document.getElementById('topBar');
     if (topBar) {
-        // Скрываем табы только если это не главная страница (оставляем для проектов)
         topBar.style.display = (menuId === 'main') ? 'flex' : 'none';
     }
 
@@ -67,8 +68,11 @@ export function switchMenu(menuId, btn) {
     }
     if (menuId === 'errors') renderErrorsTable();
     if (menuId === 'feedback') {
-        renderFeedbackTable();
-        state.pagination.fbTable = 1;
+        // Календарь рендерится через app.js/feedback.js
+        if (window.renderCalendar) window.renderCalendar();
+    }
+    if (menuId === 'notifications') {
+        renderNotificationsTable();
     }
 }
 
@@ -78,8 +82,6 @@ export function switchTab(tabId, btn) {
     if (btn) btn.classList.add('active');
 
     state.pagination.mainData = 1;
-    state.pagination.fbHome = 1;
-    state.pagination.fbTable = 1;
     state.pagination.superset1 = 1;
     state.pagination.superset2 = 1;
     state.pagination.superset3 = 1;
@@ -91,7 +93,7 @@ export function switchTab(tabId, btn) {
         renderSupersetPage();
     }
     if (state.currentMenu === 'errors') renderErrorsTable();
-    if (state.currentMenu === 'feedback') renderFeedbackTable();
+    if (state.currentMenu === 'notifications') renderNotificationsTable();
 }
 
 export function buildProjectTabs() {
@@ -339,6 +341,10 @@ export function populateRecDatalists() {
     fill('recPoolsList', pools);
     fill('recMarkersList', markers);
     fill('recValidatorsList', validators);
+
+    // Заполняем списки для модалки генерации качества
+    fill('qualProjectList', projects);
+    fill('qualPoolList', pools);
 }
 
 export function addRecRow() {
@@ -418,6 +424,8 @@ export function triggerFilterUpdate() {
 }
 
 export function updateKPI() {
+    // ... (без изменений в логике, только проценты .toFixed(2))
+    // Код функции updateKPI оставлен без изменений, так как логика верна
     const uniqueFiles = new Set();
     let totalFragments = 0;
     for (const r of state.filteredData) {
@@ -436,12 +444,10 @@ export function updateKPI() {
 
     for (const r of state.filteredData) {
         if (r.marker) uniqueMarkers.add(r.marker);
-        
         if (r.result === 'Ошибка') {
             const weight = r.errorType === 'Некритичная ошибка' ? 0.5 : 1;
             weightedErrorsCount += weight;
         }
-        
         if (r.quality != null && isFinite(r.quality)) {
             const key = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
@@ -455,7 +461,6 @@ export function updateKPI() {
     const errorPercent = totalFragments > 0 ? (weightedErrorsCount / totalFragments) * 100 : 0;
     const avgQ = qualityCount ? qualitySum / qualityCount : null;
     const avgQPct = avgQ !== null ? avgQ * 100 : 0;
-    
     const target = state.superset.norms.globalAvg;
 
     const isRed = (target != null) && (errorPercent > 5) && (avgQPct < target);
@@ -502,10 +507,8 @@ export function updateKPI() {
 
     const balls = activeTasks.map(r => parseHtmlNumberToFloatLocal(r.ballsPerHour)).filter(v => v !== null);
     const ballsPerHour = avgLocal(balls);
-
     const prods = activeTasks.map(r => parseHtmlNumberToFloatLocal(r.prodPerHour)).filter(v => v !== null);
     const prodPerHour = avgLocal(prods);
-
     const prices = activeTasks.map(r => parsePriceToFloatLocal(r.price)).filter(v => v !== null);
     const avgPrice = avgLocal(prices);
 
@@ -585,6 +588,8 @@ export function updateKPI() {
     `;
 }
 
+// ... (функции построения графиков оставлены без изменений, они используют .toFixed(2)) ...
+
 function targetLinesForLabels(labels) {
     const target = state.superset.norms.globalAvg;
     if (target != null) {
@@ -608,7 +613,6 @@ export function buildQualityChart() {
     }
     const labels = Object.keys(byMarker).sort();
     const values = labels.map(m => (byMarker[m].reduce((a, b) => a + b, 0) / byMarker[m].length) * 100);
-    
     const datasets = [
         { label: 'Ср. качество, %', data: values, backgroundColor: '#d4ebd9', borderRadius: 8, order: 2, showLabels: true, isPercentage: true },
         ...targetLinesForLabels(labels)
@@ -619,14 +623,7 @@ export function buildQualityChart() {
     state.charts.quality = new Chart(canvas, {
         type: 'bar',
         data: { labels: labels.map(l => l.length > 25 ? l.slice(0, 22) + '…' : l), datasets },
-        options: { 
-            responsive: true, maintainAspectRatio: false, 
-            plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
-            scales: { 
-                y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
-                x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
-            } 
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -640,7 +637,6 @@ export function buildErrorChart() {
     const canvas = document.getElementById('chartErrors');
     if (!canvas) return;
     const labels = Object.keys(byType);
-
     state.charts.errors = new Chart(canvas, {
         type: 'doughnut',
         data: { labels: labels, datasets: [{ data: Object.values(byType), backgroundColor: CHART_COLORS, borderWidth: 0 }] },
@@ -663,7 +659,6 @@ export function buildPoolQualityChart() {
     }
     const labels = Object.keys(byPool).sort();
     const values = labels.map(p => (byPool[p].reduce((a, b) => a + b, 0) / byPool[p].length) * 100);
-    
     const target = state.superset.norms.globalAvg;
     const datasets = [
         { label: 'Ср. качество, %', data: values, borderColor: '#1f1f1f', backgroundColor: 'rgba(31, 31, 31, 0.05)', tension: .4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderWidth: 2, order: 2 }
@@ -671,21 +666,13 @@ export function buildPoolQualityChart() {
     if (target != null) {
         datasets.push({ label: 'Целевое', data: labels.map(() => target), borderColor: '#e55555', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
     }
-
     const canvas = document.getElementById('chartPoolQuality');
     if (!canvas) return;
     
     state.charts.poolQuality = new Chart(canvas, {
         type: 'line',
         data: { labels: labels.map(l => l.length > 30 ? l.slice(0, 27) + '…' : l), datasets },
-        options: { 
-            responsive: true, maintainAspectRatio: false, 
-            plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
-            scales: { 
-                y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
-                x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
-            } 
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -697,9 +684,7 @@ export function buildDayQualityChart() {
         if (r.date && r.quality != null && isFinite(r.quality)) {
             const d = new Date(r.date);
             if (isNaN(d.getTime())) continue;
-            const iso = d.getFullYear() + '-' +
-                String(d.getMonth() + 1).padStart(2, '0') + '-' +
-                String(d.getDate()).padStart(2, '0');
+            const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
             const k = formatDate(r.date);
             const key = k + '|' + (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '');
             if (!qualityKeys.has(key)) {
@@ -720,20 +705,12 @@ export function buildDayQualityChart() {
     if (target != null) {
         datasets.push({ label: 'Целевое', data: labels.map(() => target), borderColor: '#e55555', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, order: 1 });
     }
-
     const canvas = document.getElementById('chartDayQuality');
     if (!canvas) return;
     state.charts.dayQuality = new Chart(canvas, {
         type: 'line',
         data: { labels, datasets },
-        options: { 
-            responsive: true, maintainAspectRatio: false, 
-            plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
-            scales: { 
-                y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, 
-                x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } 
-            } 
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { callback: v => v + '%', color: '#7a7a7a' } }, x: { grid: { display: false }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -741,28 +718,19 @@ export function buildErrorsByMarkerChart() {
     destroyChart(state.charts.errorsByMarker);
     const markers = [...new Set(state.filteredData.map(r => r.marker).filter(Boolean))].sort();
     const errorTypes = [...new Set(state.filteredData.map(r => r.errorType).filter(Boolean))].sort();
-    
     const datasets = errorTypes.map((type, idx) => ({
         label: type,
         data: markers.map(m => state.filteredData.filter(r => r.marker === m && r.errorType === type).length),
         backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
         borderRadius: 4
     }));
-    
     const canvas = document.getElementById('chartErrorsByMarker');
     if (!canvas) return;
 
     state.charts.errorsByMarker = new Chart(canvas, {
         type: 'bar',
         data: { labels: markers.map(m => m.length > 20 ? m.slice(0, 18) + '…' : m), datasets },
-        options: { 
-            responsive: true, maintainAspectRatio: false, 
-            plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, 
-            scales: { 
-                x: { stacked: true, grid: { display: false }, ticks: { color: '#7a7a7a' } }, 
-                y: { stacked: true, beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { color: '#7a7a7a' } } 
-            } 
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#1f1f1f' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#7a7a7a' } }, y: { stacked: true, beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { color: '#7a7a7a' } } } }
     });
 }
 
@@ -831,7 +799,6 @@ export function buildTable() {
 
         const fileName = g.fileName ? escapeHtml(g.fileName.slice(0, 40)) : '';
         const fileNameTitle = escapeHtml(g.fileName || '');
-        
         const quality = (g.quality !== null && !isNaN(g.quality)) ? (g.quality * 100).toFixed(2) + '%' : '';
 
         let itemsHtml = '<div class="items-grid">';
@@ -843,14 +810,7 @@ export function buildTable() {
             const commentTitle = item.comment ? escapeHtml(item.comment) : '';
             const interval = escapeHtml(item.interval || '');
 
-            itemsHtml += `
-                <div class="item-row">
-                    <div>${resBadge}</div>
-                    <div>${errType}</div>
-                    <div ${commentTitle ? `title="${commentTitle}"` : ''}>${comment}</div>
-                    <div>${interval}</div>
-                </div>
-            `;
+            itemsHtml += `<div class="item-row"><div>${resBadge}</div><div>${errType}</div><div ${commentTitle ? `title="${commentTitle}"` : ''}>${comment}</div><div>${interval}</div></div>`;
         }
         itemsHtml += '</div>';
 
@@ -870,6 +830,7 @@ export function buildTable() {
 }
 
 export function renderErrorsTable() {
+    // ... (код оставлен без изменений, включая <details> для типов ошибок) ...
     const container = document.getElementById('errorsCardsContainer');
     if (!container) return;
 
@@ -894,12 +855,9 @@ export function renderErrorsTable() {
     });
 
     const markerStats = {};
-    
     for (const r of filtered) {
         if (!r.marker) continue;
-        if (!markerStats[r.marker]) {
-            markerStats[r.marker] = { totalErrors: 0, totalFragments: 0, errorTypes: {}, projectQuality: {} };
-        }
+        if (!markerStats[r.marker]) markerStats[r.marker] = { totalErrors: 0, totalFragments: 0, errorTypes: {}, projectQuality: {} };
         
         const fileKey = (r.marker || '') + '|' + (r.project || '') + '|' + (r.pool || '') + '|' + (r.fileName || '') + '|' + r.fragments;
         if (!markerStats[r.marker]._files) markerStats[r.marker]._files = new Set();
@@ -909,9 +867,7 @@ export function renderErrorsTable() {
         }
 
         if (r.project && r.quality != null && isFinite(r.quality)) {
-            if (!markerStats[r.marker].projectQuality[r.project]) {
-                markerStats[r.marker].projectQuality[r.project] = new Set();
-            }
+            if (!markerStats[r.marker].projectQuality[r.project]) markerStats[r.marker].projectQuality[r.project] = new Set();
             markerStats[r.marker].projectQuality[r.project].add(r.fileName);
         }
 
@@ -920,15 +876,11 @@ export function renderErrorsTable() {
             markerStats[r.marker].totalErrors += weight;
             
             const type = r.errorType || 'Неизвестная';
-            if (!markerStats[r.marker].errorTypes[type]) {
-                markerStats[r.marker].errorTypes[type] = { count: 0, pools: {} };
-            }
+            if (!markerStats[r.marker].errorTypes[type]) markerStats[r.marker].errorTypes[type] = { count: 0, pools: {} };
             markerStats[r.marker].errorTypes[type].count += weight;
             
             const pool = r.pool || 'Неизвестный пул';
-            if (!markerStats[r.marker].errorTypes[type].pools[pool]) {
-                markerStats[r.marker].errorTypes[type].pools[pool] = { count: 0, comments: [] };
-            }
+            if (!markerStats[r.marker].errorTypes[type].pools[pool]) markerStats[r.marker].errorTypes[type].pools[pool] = { count: 0, comments: [] };
             markerStats[r.marker].errorTypes[type].pools[pool].count += weight;
             if (r.comment && !markerStats[r.marker].errorTypes[type].pools[pool].comments.includes(r.comment)) {
                 markerStats[r.marker].errorTypes[type].pools[pool].comments.push(r.comment);
@@ -973,14 +925,10 @@ export function renderErrorsTable() {
                     cntQ++;
                 }
             }
-            if (cntQ > 0) {
-                qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${((sumQ/cntQ)*100).toFixed(2)}%</strong></li>`;
-            }
+            if (cntQ > 0) qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${((sumQ/cntQ)*100).toFixed(2)}%</strong></li>`;
         }
         qualityHtml += '</ul>';
-        if (Object.keys(stats.projectQuality).length === 0) {
-            qualityHtml = '<div style="font-size:0.85rem; color:var(--muted);">Нет данных</div>';
-        }
+        if (Object.keys(stats.projectQuality).length === 0) qualityHtml = '<div style="font-size:0.85rem; color:var(--muted);">Нет данных</div>';
 
         let typesHtml = '';
         const sortedTypes = Object.keys(stats.errorTypes).sort((a, b) => stats.errorTypes[b].count - stats.errorTypes[a].count);
@@ -1007,7 +955,6 @@ export function renderErrorsTable() {
             }
             poolListHtml += '</ul>';
 
-            // ★ ИЗМЕНЕНО: обернуто в details для сворачивания
             typesHtml += `
                 <details class="error-type-block">
                     <summary class="error-type-header">
@@ -1036,13 +983,11 @@ export function renderErrorsTable() {
                         <div class="inner-card-title">Качество по проектам</div>
                         ${qualityHtml}
                     </div>
-
                     <div class="inner-card">
                         <div class="inner-card-title">Процент ошибок</div>
                         <div class="inner-card-value" style="color: var(--danger);">${errorRate.toFixed(2)}%</div>
                         <div style="font-size: 0.75rem; color: var(--muted); margin-top: 4px;">${stats.totalErrors.toFixed(1)} из ${stats.totalFragments} фрагментов</div>
                     </div>
-
                     <div class="inner-card">
                         <div class="inner-card-title">Процент ошибок по типам</div>
                         ${typesHtml}
@@ -1055,7 +1000,31 @@ export function renderErrorsTable() {
     container.innerHTML = html;
 }
 
-// ===== ФУНКЦИИ СУПЕРСЕТА (без изменений в логике, просто рендер на странице main) =====
+// ===== ★ НОВОЕ: Рендер страницы "Уведомления" =====
+export function renderNotificationsTable() {
+    const tbody = document.getElementById('notificationsTableBody');
+    if (!tbody) return;
+
+    const discrepancies = getQualityDiscrepancies();
+    
+    if (discrepancies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--muted); padding: 20px;">Расхождений в качестве не найдено. Всё идеально!</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = discrepancies.map(d => `
+        <tr>
+            <td>${escapeHtml(d.email)}</td>
+            <td>${escapeHtml(d.project)}</td>
+            <td>${escapeHtml(d.pool)}</td>
+            <td style="color: var(--danger); font-weight: bold;">${d.qsPct}%</td>
+            <td style="font-weight: bold;">${d.qfPct}%</td>
+            <td style="color: var(--danger);">${d.diff}%</td>
+        </tr>
+    `).join('');
+}
+
+// ===== ФУНКЦИИ СУПЕРСЕТА =====
 
 export function renderSupersetPage() {
     renderSupersetFilters();
@@ -1110,12 +1079,10 @@ export function onSupersetTaskChange(value, isChecked) {
     if (isChecked) state.superset.filters.tasks.add(value);
     else state.superset.filters.tasks.delete(value);
     updateSupersetTaskLabel();
-    
     state.pagination.superset1 = 1;
     state.pagination.superset2 = 1;
     state.pagination.superset3 = 1;
     state.pagination.superset4 = 1;
-
     applySupersetFilters();
     renderSupersetPage();
 }
@@ -1123,12 +1090,10 @@ export function onSupersetTaskChange(value, isChecked) {
 export function onSupersetDateChange() {
     state.superset.filters.dateFrom = document.getElementById('supersetDateFrom').value;
     state.superset.filters.dateTo = document.getElementById('supersetDateTo').value;
-    
     state.pagination.superset1 = 1;
     state.pagination.superset2 = 1;
     state.pagination.superset3 = 1;
     state.pagination.superset4 = 1;
-
     applySupersetFilters();
     renderSupersetPage();
 }
@@ -1138,58 +1103,53 @@ export function resetSupersetFilters() {
     state.superset.filters.dateTo = '';
     state.superset.filters.tasks.clear();
     state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
-
     const df = document.getElementById('supersetDateFrom');
     const dt = document.getElementById('supersetDateTo');
     if (df) df.value = '';
     if (dt) dt.value = '';
     document.querySelectorAll('#msSupersetTask_options input').forEach(cb => { cb.checked = false; });
     updateSupersetTaskLabel();
-
     state.pagination.superset1 = 1;
     state.pagination.superset2 = 1;
     state.pagination.superset3 = 1;
     state.pagination.superset4 = 1;
-
     applySupersetFilters();
     renderSupersetPage();
 }
 
-function renderTableFilters(tableId, configs, fullRows) {
-    return configs.map(cfg => {
-        const values = new Set();
-        for (const r of fullRows) {
-            const v = cfg.get(r) || '';
-            if (v !== '') values.add(v);
-        }
-        const sorted = Array.from(values).sort();
+// ★ ИЗМЕНЕНО: Встраиваем фильтр прямо в заголовок th
+function renderHeaderWithFilter(tableId, label, cfg, fullRows) {
+    if (!cfg) return `<th>${escapeHtml(label)}</th>`;
+    
+    const values = new Set();
+    for (const r of fullRows) {
+        const v = cfg.get(r) || '';
+        if (v !== '') values.add(v);
+    }
+    const sorted = Array.from(values).sort();
+    const sel = (state.superset.tableFilters[tableId] && state.superset.tableFilters[tableId][cfg.key]) || new Set();
+    const cnt = sel.size;
+    const isActive = cnt > 0;
+    const id = `ms-${tableId}-${cfg.key}`;
 
-        const sel = (state.superset.tableFilters[tableId] && state.superset.tableFilters[tableId][cfg.key]) || new Set();
-        const cnt = sel.size;
-        const label = cnt === 0 ? 'Все' : (cnt === 1 ? Array.from(sel)[0] : 'Выбрано: ' + cnt);
-        const emptyCls = cnt === 0 ? 'empty' : '';
-
-        const id = `ms-${tableId}-${cfg.key}`;
-
-        const optionsHtml = sorted.map(v => {
-            const safe = escapeHtml(String(v));
-            const checked = sel.has(v) ? 'checked' : '';
-            return `<label class="ms-item ms-item-compact"><input type="checkbox" value="${safe}" onchange="onSupersetTableFilterChange('${tableId}', '${cfg.key}', this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
-        }).join('');
-
-        return `<th style="padding: 8px 10px;">
-            <div class="multi-select ms-compact" id="${id}">
-                <div class="ms-header ms-header-compact" onclick="toggleDropdown('${id}')">
-                    <span class="ms-label ${emptyCls}" id="${id}_label">${escapeHtml(label)}</span>
-                    <span class="ms-arrow">▼</span>
-                </div>
-                <div class="ms-dropdown ms-dropdown-compact" id="${id}_dropdown">
-                    <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                    <div>${optionsHtml || '<div class="ms-item" style="color:var(--muted);cursor:default;padding:8px;">Нет данных</div>'}</div>
-                </div>
-            </div>
-        </th>`;
+    const optionsHtml = sorted.map(v => {
+        const safe = escapeHtml(String(v));
+        const checked = sel.has(v) ? 'checked' : '';
+        return `<label class="ms-item ms-item-compact"><input type="checkbox" value="${safe}" onchange="onSupersetTableFilterChange('${tableId}', '${cfg.key}', this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
     }).join('');
+
+    return `<th>
+        <div class="multi-select ms-compact" id="${id}">
+            <div class="th-filter-wrapper" onclick="toggleDropdown('${id}')">
+                <span>${escapeHtml(label)}</span>
+                <span class="th-filter-icon" style="color: ${isActive ? 'var(--accent)' : 'inherit'}">▼</span>
+            </div>
+            <div class="ms-dropdown ms-dropdown-compact" id="${id}_dropdown">
+                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
+                <div>${optionsHtml || '<div class="ms-item" style="color:var(--muted);cursor:default;padding:8px;">Нет данных</div>'}</div>
+            </div>
+        </div>
+    </th>`;
 }
 
 export function onSupersetTableFilterChange(tableId, colKey, value, isChecked) {
@@ -1198,22 +1158,6 @@ export function onSupersetTableFilterChange(tableId, colKey, value, isChecked) {
     const set = state.superset.tableFilters[tableId][colKey];
     if (isChecked) set.add(value);
     else set.delete(value);
-
-    const id = `ms-${tableId}-${colKey}`;
-    const label = document.getElementById(id + '_label');
-    if (label) {
-        const cnt = set.size;
-        if (cnt === 0) {
-            label.textContent = 'Все';
-            label.classList.add('empty');
-        } else if (cnt === 1) {
-            label.textContent = Array.from(set)[0];
-            label.classList.remove('empty');
-        } else {
-            label.textContent = 'Выбрано: ' + cnt;
-            label.classList.remove('empty');
-        }
-    }
 
     state.pagination.superset1 = 1;
     state.pagination.superset2 = 1;
@@ -1226,23 +1170,52 @@ export function onSupersetTableFilterChange(tableId, colKey, value, isChecked) {
 
 function renderSupersetTable1() {
     const tbody = document.getElementById('supersetTable1Body');
-    const filtersRow = document.getElementById('supersetTable1Filters');
-    if (!tbody) return;
+    const thead = document.querySelector('#supersetTable1 thead tr');
+    if (!tbody || !thead) return;
 
     const configs = getTable1Config();
-    if (filtersRow) {
-        filtersRow.innerHTML = renderTableFilters('t1', configs, state.superset.table1 || []);
-    }
+    const allRows = state.superset.table1 || [];
 
-    const allRows = state.superset.filteredTable1 || [];
-    const totalItems = allRows.length;
+    // Перерисовываем шапку с встроенными фильтрами
+    let thHtml = '<th>Проект</th>'; // Проект обычно не фильтруется здесь, так как есть табы
+    const cfgTask = configs.find(c => c.key === 'task');
+    thHtml += renderHeaderWithFilter('t1', 'Задача', cfgTask, allRows);
+    
+    const cfgFragments = configs.find(c => c.key === 'fragments');
+    thHtml += renderHeaderWithFilter('t1', 'Размечено, шт', cfgFragments, allRows);
+    
+    const cfgNorm = configs.find(c => c.key === 'normQuality');
+    thHtml += renderHeaderWithFilter('t1', 'Норма качества', cfgNorm, allRows);
+    
+    const cfgQuality = configs.find(c => c.key === 'quality');
+    thHtml += renderHeaderWithFilter('t1', 'Качество', cfgQuality, allRows);
+    
+    const cfgComment = configs.find(c => c.key === 'comment');
+    thHtml += renderHeaderWithFilter('t1', 'Комментарий', cfgComment, allRows);
+    
+    const cfgWithout = configs.find(c => c.key === 'withoutQuality');
+    thHtml += renderHeaderWithFilter('t1', 'Без качества, шт', cfgWithout, allRows);
+    
+    const cfgBalls = configs.find(c => c.key === 'ballsPerHour');
+    thHtml += renderHeaderWithFilter('t1', 'Факт баллов/час', cfgBalls, allRows);
+    
+    const cfgProd = configs.find(c => c.key === 'prodPerHour');
+    thHtml += renderHeaderWithFilter('t1', 'Кпроизв в час', cfgProd, allRows);
+    
+    const cfgPrice = configs.find(c => c.key === 'price');
+    thHtml += renderHeaderWithFilter('t1', 'Цена', cfgPrice, allRows);
+
+    thead.innerHTML = thHtml;
+
+    const filteredRows = state.superset.filteredTable1 || [];
+    const totalItems = filteredRows.length;
     const currentPage = state.pagination.superset1;
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const rows = allRows.slice(startIndex, endIndex);
+    const rows = filteredRows.slice(startIndex, endIndex);
 
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
     } else {
         tbody.innerHTML = rows.map(r => `<tr>
             <td>${escapeHtml(r.project)}</td>
@@ -1255,7 +1228,6 @@ function renderSupersetTable1() {
             <td>${escapeHtml(String(r.ballsPerHour))}</td>
             <td>${escapeHtml(String(r.prodPerHour))}</td>
             <td>${escapeHtml(String(r.price))}</td>
-            <td>${escapeHtml(formatPeriod(r.dateStart, r.dateEnd))}</td>
         </tr>`).join('');
     }
 
@@ -1264,20 +1236,32 @@ function renderSupersetTable1() {
 
 function renderSupersetTable2() {
     const tbody = document.getElementById('supersetTable2Body');
-    const filtersRow = document.getElementById('supersetTable2Filters');
-    if (!tbody) return;
+    const thead = document.querySelector('#supersetTable2 thead tr');
+    if (!tbody || !thead) return;
 
     const configs = getTable2Config();
-    if (filtersRow) {
-        filtersRow.innerHTML = renderTableFilters('t2', configs, state.superset.table2 || []);
-    }
+    const allRows = state.superset.table2 || [];
 
-    const allRows = state.superset.filteredTable2 || [];
-    const totalItems = allRows.length;
+    let thHtml = '';
+    thHtml += renderHeaderWithFilter('t2', 'Дата', configs.find(c => c.key === 'date'), allRows);
+    thHtml += renderHeaderWithFilter('t2', 'ФИО', configs.find(c => c.key === 'fio'), allRows);
+    thHtml += '<th>Проект</th>';
+    thHtml += renderHeaderWithFilter('t2', 'Задача', configs.find(c => c.key === 'task'), allRows);
+    thHtml += renderHeaderWithFilter('t2', 'Размечено, шт', configs.find(c => c.key === 'fragments'), allRows);
+    thHtml += renderHeaderWithFilter('t2', 'Размечено, б', configs.find(c => c.key === 'balls'), allRows);
+    thHtml += renderHeaderWithFilter('t2', 'Качество в суперсете', configs.find(c => c.key === 'qualitySuperset'), allRows);
+    thHtml += renderHeaderWithFilter('t2', 'Качество факт.', configs.find(c => c.key === 'qualityFact'), allRows);
+    thHtml += renderHeaderWithFilter('t2', 'Норматив', configs.find(c => c.key === 'norm'), allRows);
+    thHtml += renderHeaderWithFilter('t2', 'Без качества, шт', configs.find(c => c.key === 'withoutQuality'), allRows);
+
+    thead.innerHTML = thHtml;
+
+    const filteredRows = state.superset.filteredTable2 || [];
+    const totalItems = filteredRows.length;
     const currentPage = state.pagination.superset2;
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const rows = allRows.slice(startIndex, endIndex);
+    const rows = filteredRows.slice(startIndex, endIndex);
 
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
@@ -1290,13 +1274,12 @@ function renderSupersetTable2() {
                 let style = '';
                 if (r.qualityFact != null) {
                     let qfPct = r.qualityFact * 100;
-                    if (Math.abs(qsPct - qfPct) > 0.01) {
+                    if (Math.abs(qsPct - qfPct) > 0.49) {
                         style = 'style="color: var(--danger); font-weight: bold;"';
                     }
                 }
                 qsHtml = `<span ${style}>${qsPct.toFixed(2)}%</span>`;
             }
-
             return `<tr>
                 <td>${r.date ? formatDate(r.date) : ''}</td>
                 <td>${escapeHtml(r.fio)}</td>
@@ -1317,20 +1300,25 @@ function renderSupersetTable2() {
 
 function renderSupersetTable3() {
     const tbody = document.getElementById('supersetTable3Body');
-    const filtersRow = document.getElementById('supersetTable3Filters');
-    if (!tbody) return;
+    const thead = document.querySelector('#supersetTable3 thead tr');
+    if (!tbody || !thead) return;
 
     const configs = getTable3Config();
-    if (filtersRow) {
-        filtersRow.innerHTML = renderTableFilters('t3', configs, state.superset.table3 || []);
-    }
+    const allRows = state.superset.table3 || [];
 
-    const allRows = state.superset.filteredTable3 || [];
-    const totalItems = allRows.length;
+    let thHtml = '';
+    thHtml += renderHeaderWithFilter('t3', 'Дата', configs.find(c => c.key === 'date'), allRows);
+    thHtml += '<th>Проект</th>';
+    thHtml += renderHeaderWithFilter('t3', 'Цена', configs.find(c => c.key === 'price'), allRows);
+
+    thead.innerHTML = thHtml;
+
+    const filteredRows = state.superset.filteredTable3 || [];
+    const totalItems = filteredRows.length;
     const currentPage = state.pagination.superset3;
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const rows = allRows.slice(startIndex, endIndex);
+    const rows = filteredRows.slice(startIndex, endIndex);
 
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
@@ -1347,20 +1335,25 @@ function renderSupersetTable3() {
 
 function renderSupersetTable4() {
     const tbody = document.getElementById('supersetTable4Body');
-    const filtersRow = document.getElementById('supersetTable4Filters');
-    if (!tbody) return;
+    const thead = document.querySelector('#supersetTable4 thead tr');
+    if (!tbody || !thead) return;
 
     const configs = getTable4Config();
-    if (filtersRow) {
-        filtersRow.innerHTML = renderTableFilters('t4', configs, state.superset.table4 || []);
-    }
+    const allRows = state.superset.table4 || [];
 
-    const allRows = state.superset.filteredTable4 || [];
-    const totalItems = allRows.length;
+    let thHtml = '';
+    thHtml += renderHeaderWithFilter('t4', 'ФИО', configs.find(c => c.key === 'fio'), allRows);
+    thHtml += renderHeaderWithFilter('t4', 'Качество', configs.find(c => c.key === 'factQuality'), allRows);
+    thHtml += renderHeaderWithFilter('t4', 'Норматив', configs.find(c => c.key === 'normQuality'), allRows);
+
+    thead.innerHTML = thHtml;
+
+    const filteredRows = state.superset.filteredTable4 || [];
+    const totalItems = filteredRows.length;
     const currentPage = state.pagination.superset4;
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const rows = allRows.slice(startIndex, endIndex);
+    const rows = filteredRows.slice(startIndex, endIndex);
 
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
