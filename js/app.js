@@ -1,8 +1,9 @@
-// js/app.js — ИСПРАВЛЕНИЕ ОШИБКИ ИМПОРТА (удалены старые функции feedback.js)
+// js/app.js — ПОЛНАЯ СБОРКА ЛОГИКИ (Исправлено отображение конфликтов)
 // ★ ДОБАВЛЕНО: Скролл-эффект для смены панелей фильтров.
 // ★ ДОБАВЛЕНО: Логика валидации домена (красный/зеленый).
 // ★ ДОБАВЛЕНО: Генерация Excel-файла с качеством (email + quality).
 // ★ ДОБАВЛЕНО: Логика календаря и открытия модалки добавления записи.
+// ★ ИСПРАВЛЕНО: Функция openConflictModal теперь корректно выводит текст и отличия.
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
@@ -216,7 +217,6 @@ document.getElementById('btnGenerateQualityExcel').addEventListener('click', () 
         
         const avgQ = qArr.reduce((a, b) => a + b, 0) / qArr.length;
         
-        // Форматируем: округляем до 3 знаков, убираем лишние нули (1.000 -> 1, 0.950 -> 0.95)
         let formattedQ = Number(avgQ).toFixed(3);
         formattedQ = formattedQ.replace(/\.?0+$/, ''); 
 
@@ -496,22 +496,25 @@ const conflictModal = document.getElementById('conflictModal');
 const conflictList = document.getElementById('conflictList');
 
 function openConflictModal(procRes) {
-    document.getElementById('doneMessage').textContent = `Добавлено новых записей: ${procRes.newCount}. Найдено конфликтов: ${procRes.conflictsCount}.`;
+    const doneMsg = document.getElementById('doneMessage');
+    if (doneMsg) doneMsg.textContent = `Добавлено новых записей: ${procRes.newCount}. Найдено конфликтов: ${procRes.conflictsCount}.`;
     
     conflictList.innerHTML = state.pendingConflicts.map((c, idx) => {
         let diffsHtml = '';
-        const keys = Object.keys(c.newRow);
-        for (const k of keys) {
-            if (k.startsWith('_')) continue;
-            const oldVal = String(c.oldRow[k] || '').trim();
-            const newVal = String(c.newRow[k] || '').trim();
-            if (oldVal !== newVal) {
-                diffsHtml += `<div class="conflict-diff"><span>${escapeHtml(k)}:</span> <del style="color:var(--danger); font-size:0.75rem;">${escapeHtml(oldVal)}</del> <span style="color:var(--success);">${escapeHtml(newVal)}</span></div>`;
+        if (c.newRow && c.oldRow) {
+            const keys = Object.keys(c.newRow);
+            for (const k of keys) {
+                if (k.startsWith('_')) continue;
+                const oldVal = String(c.oldRow[k] || '').trim();
+                const newVal = String(c.newRow[k] || '').trim();
+                if (oldVal !== newVal) {
+                    diffsHtml += `<div class="conflict-diff" style="margin-bottom: 6px;"><span style="font-weight:700;">${escapeHtml(k)}:</span><br><del style="color:var(--danger); font-size:0.75rem;">${escapeHtml(oldVal)}</del> <br><span style="color:var(--success);">${escapeHtml(newVal)}</span></div>`;
+                }
             }
         }
         
-        const proj = c.newRow['Проект'] || c.newRow['project'] || '—';
-        const pool = c.newRow['Задача'] || c.newRow['Пул'] || c.newRow['pool'] || '—';
+        const proj = (c.newRow && (c.newRow['Проект'] || c.newRow['project'])) || '—';
+        const pool = (c.newRow && (c.newRow['Задача'] || c.newRow['Пул'] || c.newRow['pool'])) || '—';
 
         return `
             <div class="conflict-card" id="conflict-${idx}">
@@ -519,20 +522,20 @@ function openConflictModal(procRes) {
                     <h4>Старое</h4>
                     <div class="conflict-diff"><span>Проект:</span> ${escapeHtml(proj)}</div>
                     <div class="conflict-diff"><span>Пул:</span> ${escapeHtml(pool)}</div>
-                    <div style="margin-top:10px; font-size:0.8rem; color:var(--muted);">Файл: ${escapeHtml(c.fileName)}</div>
+                    <div style="margin-top:10px; font-size:0.8rem; color:var(--muted);">Файл: ${escapeHtml(c.fileName || '—')}</div>
                 </div>
                 <div class="conflict-col conflict-new" onclick="selectConflict(${idx}, 'new')">
                     <h4 style="color: var(--success);">Новое (изменения)</h4>
                     <div class="conflict-diff"><span>Проект:</span> ${escapeHtml(proj)}</div>
                     <div class="conflict-diff"><span>Пул:</span> ${escapeHtml(pool)}</div>
-                    <div style="margin-top:10px; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px;">
-                        ${diffsHtml || '<div style="font-size:0.8rem;">Нет явных отличий</div>'}
+                    <div style="margin-top:10px; background:rgba(0,0,0,0.03); padding:10px; border-radius:6px; font-size:0.85rem;">
+                        ${diffsHtml || '<div style="color:var(--muted);">Нет явных отличий</div>'}
                     </div>
                 </div>
             </div>
         `;
     }).join('');
-
+    
     state.pendingConflicts.forEach(c => c.choice = 'old');
     conflictModal.classList.add('active');
 }
@@ -540,6 +543,7 @@ function openConflictModal(procRes) {
 window.selectConflict = (idx, choice) => {
     state.pendingConflicts[idx].choice = choice;
     const card = document.getElementById(`conflict-${idx}`);
+    if (!card) return;
     const oldCol = card.querySelector('.conflict-old');
     const newCol = card.querySelector('.conflict-new');
     
