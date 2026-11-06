@@ -1,6 +1,6 @@
-// js/data.js — ИСПРАВЛЕНА ОШИБКА "TRIM IS NOT A FUNCTION"
-// ★ ИЗМЕНЕНО: Все вызовы getVal обернуты в String(...) перед .trim() и .replace(), чтобы избежать падения при чтении чисел из Excel.
-// Ранее добавленное: поиск дубликатов/конфликтов, полное название пула, _domain, пропуск 0 фрагментов.
+// js/data.js — ОБНОВЛЕНО: Добавлена логика объединения (merge) конфликтов
+// ★ ДОБАВЛЕНО: Функция mergeConflictingRows и обработка choice === 'merge' в commitNewData.
+// Ранее добавленное: Защита от ошибок trim(), поиск дубликатов, полное название пула, _domain.
 
 import { state, saveToStorage } from './state.js';
 import {
@@ -75,7 +75,6 @@ function getRowKey(type, row) {
     if (type === 'validation') return normalizeId(getVal(row, 'assignment_id'));
     if (type === 'markers') return normalizeId(getVal(row, 'ID задачи')) + '|' + normalizeId(getVal(row, 'ID разметчика'));
     
-    // ★ ИСПРАВЛЕНО: оборачиваем в String() перед .trim()
     if (type === 'recommendations') return normalizeId(getVal(row, 'item_id')) + '|' + String(getVal(row, 'Почта разметчика') || '').trim();
     if (type === 'employee_map') return String(getVal(row, 'ФИО') || '').trim() + '|' + String(getVal(row, 'Почта') || '').trim();
     if (type === 'validation_flat') return String(getVal(row, 'url задания') || '').trim() + '|' + String(getVal(row, 'email') || '').trim();
@@ -102,7 +101,6 @@ function isRowEqual(rowA, rowB) {
     return normalizeForCompare(rowA) === normalizeForCompare(rowB);
 }
 
-// ★ Обновленная функция обработки новых данных
 export async function processNewRows(results) {
     state.pendingNewData = { markers: [], validation: [], recommendations: [], flat: [], superset1: [], superset2: [], superset3: [], employee: [] };
     state.pendingConflicts = [];
@@ -173,7 +171,41 @@ export async function processNewRows(results) {
     return { hasConflicts: false };
 }
 
-// ★ Функция применения данных
+// ★ НОВАЯ ФУНКЦИЯ: Объединение данных
+function mergeConflictingRows(oldRow, newRow) {
+    const merged = Object.assign({}, oldRow);
+    for (const key in newRow) {
+        if (key.startsWith('_')) continue;
+        
+        const oldVal = oldRow[key];
+        const newVal = newRow[key];
+        
+        const strOld = String(oldVal === null || oldVal === undefined ? '' : oldVal).trim();
+        const strNew = String(newVal === null || newVal === undefined ? '' : newVal).trim();
+        
+        // Извлекаем числа (убираем пробелы, меняем запятую на точку)
+        const numOld = parseFloat(strOld.replace(/\s+/g, '').replace(',', '.'));
+        const numNew = parseFloat(strNew.replace(/\s+/g, '').replace(',', '.'));
+        
+        const lowerKey = key.toLowerCase();
+        // Складываем только числовые метрики
+        const isNumericField = lowerKey.includes('шт') || lowerKey.includes('стоимость') || lowerKey.includes('баллов') || lowerKey.includes('кпроизв');
+        
+        if (isNumericField && !isNaN(numOld) && !isNaN(numNew)) {
+            merged[key] = numOld + numNew;
+        } else if (strOld === '') {
+            merged[key] = newVal;
+        } else if (strNew === '') {
+            merged[key] = oldVal;
+        } else {
+            // Для текста, дат и названий оставляем новое значение
+            merged[key] = newVal;
+        }
+    }
+    return merged;
+}
+
+// ★ ОБНОВЛЕННАЯ ФУНКЦИЯ: Применение данных
 export function commitNewData(resolvedConflicts = []) {
     if (!state.pendingNewData) return;
 
@@ -193,15 +225,18 @@ export function commitNewData(resolvedConflicts = []) {
     };
 
     for (const conflict of resolvedConflicts) {
+        const arr = arrays[conflict.pendingKey];
+        if (!arr) continue;
+        
+        const idx = arr.findIndex(r => getRowKey(conflict.type, r) === conflict.key);
+        if (idx === -1) continue;
+
         if (conflict.choice === 'new') {
-            const arr = arrays[conflict.pendingKey];
-            if (arr) {
-                const idx = arr.findIndex(r => getRowKey(conflict.type, r) === conflict.key);
-                if (idx !== -1) {
-                    arr[idx] = conflict.newRow;
-                }
-            }
+            arr[idx] = conflict.newRow;
+        } else if (conflict.choice === 'merge') {
+            arr[idx] = mergeConflictingRows(arr[idx], conflict.newRow);
         }
+        // Если choice === 'old', мы ничего не делаем, остается старая строка
     }
 
     state.pendingNewData = null;
@@ -246,7 +281,6 @@ function processFlatValidations() {
         const first = rows[0];
         processedTasks++;
 
-        // ★ ИСПРАВЛЕНО: оборачиваем в String() перед replace/trim
         const project = String(getVal(first, 'Проект') || '').replace(/_validate$/, '').trim() || null;
         const pool = String(getVal(first, 'Пул') || '').trim() || null;
         
@@ -346,8 +380,6 @@ export async function recomputeDashboard() {
         
         const taskId = normalizeId(getVal(m, 'ID задачи'));
         const markerId = normalizeId(getVal(m, 'ID разметчика'));
-        
-        // ★ ИСПРАВЛЕНО: оборачиваем в String()
         const project = String(getVal(m, 'Проект') || '').replace(/_validate$/, '').trim() || null;
         
         if (taskId && markerId) {
