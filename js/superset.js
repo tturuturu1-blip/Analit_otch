@@ -1,13 +1,13 @@
-// js/superset.js — ИСПРАВЛЕНА ОШИБКА TRIM (Числа в названиях проектов).
-// ★ ИЗМЕНЕНО: В normalizeProject добавлено String(), чтобы числа из Excel не ломали загрузку.
-// Ранее добавленное: rebuildTable2 без fallback, удален тип задания, цена и нормы по свежей дате.
+// js/superset.js — ОБНОВЛЕНО ДЛЯ УВЕДОМЛЕНИЙ И УДАЛЕНИЯ ПЕРИОДА
+// ★ ИЗМЕНЕНО: Удалена колонка "Период разметки" из getTable1Config.
+// ★ ДОБАВЛЕНО: Функция getQualityDiscrepancies() для страницы "Уведомления".
+// Ранее добавленное: String() для нормализации, rebuildTable2 без fallback, цены и нормы по свежей дате.
 
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
 
 // ===== Утилиты =====
 function normalizeProject(project) {
-    // ★ ИСПРАВЛЕНО: оборачиваем в String(), чтобы избежать ошибки trim() на числах
     return String(project || '').trim();
 }
 
@@ -373,8 +373,8 @@ export function getTable1Config() {
         { key: 'withoutQuality', label: 'Без качества, шт', get: r => String(r.withoutQuality || '') },
         { key: 'ballsPerHour', label: 'Факт баллов/час', get: r => String(r.ballsPerHour || '') },
         { key: 'prodPerHour', label: 'Кпроизв в час', get: r => String(r.prodPerHour || '') },
-        { key: 'price', label: 'Цена', get: r => String(r.price || '') },
-        { key: 'period', label: 'Период разметки', get: r => formatPeriod(r.dateStart, r.dateEnd) }
+        { key: 'price', label: 'Цена', get: r => String(r.price || '') }
+        // ★ УДАЛЕНО: Период разметки (period)
     ];
 }
 
@@ -690,4 +690,45 @@ export function getTargetQuality(project, pool) {
     if (state.superset.norms.byProjectPool[key] != null) return state.superset.norms.byProjectPool[key];
     if (state.superset.norms.byProject[name] != null) return state.superset.norms.byProject[name];
     return state.superset.norms.globalAvg;
+}
+
+// ===== ★ НОВОЕ: Поиск расхождений для страницы "Уведомления" =====
+export function getQualityDiscrepancies() {
+    const discrepancies = [];
+    const { fioToEmail } = state.superset.employeeMap || { fioToEmail: {} };
+
+    // Проходим по всей таблице 2 (там уже есть и Суперсет, и Факт)
+    for (const r of state.superset.table2) {
+        // Пропускаем, если качества нет
+        if (r.qualityFact == null || r.qualitySuperset == null || r.qualitySuperset === '') continue;
+        
+        let qsNum = parseFloat(String(r.qualitySuperset).replace(',', '.'));
+        if (isNaN(qsNum)) continue;
+        
+        // Приводим оба значения к процентам (0-100)
+        let qsPct = qsNum <= 1 ? qsNum * 100 : qsNum;
+        let qfPct = r.qualityFact * 100;
+        
+        let diff = Math.abs(qsPct - qfPct);
+        
+        // Если разница больше 0.49, значит это расхождение
+        if (diff > 0.49) {
+            // Ищем почту по ФИО, если не нашли - выводим ФИО
+            const email = fioToEmail[r.fio.trim()] || r.fio;
+            
+            discrepancies.push({
+                email: email,
+                fio: r.fio,
+                project: r.project,
+                pool: r.task,
+                qsPct: qsPct.toFixed(2),
+                qfPct: qfPct.toFixed(2),
+                diff: diff.toFixed(2)
+            });
+        }
+    }
+    
+    // Сортируем по убыванию разницы (сначала самые проблемные)
+    discrepancies.sort((a, b) => parseFloat(b.diff) - parseFloat(a.diff));
+    return discrepancies;
 }
