@@ -1,5 +1,7 @@
-// js/ui.js — ИСПРАВЛЕНИЕ ОШИБКИ ИМПОРТА (renderFeedbackTable)
-// ★ ИЗМЕНЕНО: Убраны импорты удаленных функций. Вызов календаря через window.renderCalendar.
+// js/ui.js — ПОЛНОСТЬЮ ОБНОВЛЕННЫЙ КОД
+// ★ ДОБАВЛЕНО: В renderErrorsTable перед стрелочкой теперь выводится процент ошибки.
+// ★ ИСПРАВЛЕНО: switchMenu вызывает window.renderCalendar() вместо несуществующей функции.
+// ★ ИСПРАВЛЕНО: Из таблицы Суперсета 1 убран вывод периода разметки.
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -13,6 +15,7 @@ import {
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
+// Плагин подписей для графиков
 const dataLabelsPlugin = {
     id: 'dataLabels',
     afterDatasetsDraw(chart) {
@@ -811,6 +814,7 @@ export function buildTable() {
     renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, 'mainData');
 }
 
+// ★ ИСПРАВЛЕНО: Добавлен вывод процента ошибки в summary
 export function renderErrorsTable() {
     const container = document.getElementById('errorsCardsContainer');
     if (!container) return;
@@ -940,8 +944,9 @@ export function renderErrorsTable() {
                 <details class="error-type-block">
                     <summary class="error-type-header">
                         <span>${escapeHtml(type)}</span>
+                        <span class="error-type-percent">${typeRate.toFixed(2)}%</span>
                     </summary>
-                    <div class="error-type-rate">${typeRate.toFixed(2)}% от всех ошибок</div>
+                    <div class="error-type-rate">${typeData.count.toFixed(1)} шт. от всех ошибок</div>
                     ${poolListHtml}
                 </details>
             `;
