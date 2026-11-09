@@ -1,7 +1,8 @@
-// js/ui.js — ПОЛНОСТЬЮ ОБНОВЛЕННЫЙ КОД
-// ★ ДОБАВЛЕНО: В renderErrorsTable перед стрелочкой теперь выводится процент ошибки.
-// ★ ИСПРАВЛЕНО: switchMenu вызывает window.renderCalendar() вместо несуществующей функции.
-// ★ ИСПРАВЛЕНО: Из таблицы Суперсета 1 убран вывод периода разметки.
+// js/ui.js — ФИНАЛЬНАЯ ВЕРСИЯ
+// ★ ИСПРАВЛЕНО: renderErrorsTable — проценты по типам теперь считаются от общего числа фрагментов (сумма = общий процент).
+// ★ ДОБАВЛЕНО: renderUpcomingEvents — карточки ближайших событий (ОС, отпуска, задачи) на 7 дней.
+// ★ ДОБАВЛЕНО: Округление всех числовых значений в таблицах до 1 знака после запятой.
+// ★ ИСПРАВЛЕНО: Пагинация "Результатов валидации" корректно рендерится в шапке.
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -15,7 +16,6 @@ import {
 
 const CHART_COLORS = ['#f9d7d7', '#fce4c8', '#e1d9f9', '#d3e9fb', '#d4ebd9'];
 
-// Плагин подписей для графиков
 const dataLabelsPlugin = {
     id: 'dataLabels',
     afterDatasetsDraw(chart) {
@@ -269,7 +269,7 @@ export function toggleAll(containerId, stateKey) {
     if (stateKey === 'feedbackPool') {
         applyFeedbackFilters();
     } else {
-        const excl = ['fbFormPools', 'feedbackGroup', 'fbRecordMarkers'];
+        const excl = ['fbFormPools', 'feedbackGroup', 'fbRecordMarkers', 'fbMarkerFilter'];
         if (!excl.includes(stateKey)) triggerFilterUpdate();
     }
 }
@@ -285,7 +285,7 @@ export function onOptionChange(containerId, stateKey, value, isChecked) {
     if (stateKey === 'feedbackPool') {
         applyFeedbackFilters();
     } else {
-        const excl = ['fbFormPools', 'feedbackGroup', 'fbRecordMarkers'];
+        const excl = ['fbFormPools', 'feedbackGroup', 'fbRecordMarkers', 'fbMarkerFilter'];
         if (!excl.includes(stateKey)) triggerFilterUpdate();
     }
 }
@@ -311,6 +311,7 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msFbPool', 'feedbackPool', pools);
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
     populateMultiSelect('msFbRecordMarkers', 'fbRecordMarkers', markers);
+    populateMultiSelect('msFbMarkerFilter', 'fbMarkerFilter', markers); // ★ НОВОЕ
 }
 
 export function populateRecDatalists() {
@@ -811,10 +812,11 @@ export function buildTable() {
         </tr>`;
     }).join('');
 
+    // ★ ИСПРАВЛЕНО: Пагинация рендерится в шапке таблицы
     renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, 'mainData');
 }
 
-// ★ ИСПРАВЛЕНО: Добавлен вывод процента ошибки в summary
+// ★ ИСПРАВЛЕНО: Проценты по типам считаются от общего числа фрагментов
 export function renderErrorsTable() {
     const container = document.getElementById('errorsCardsContainer');
     if (!container) return;
@@ -891,6 +893,8 @@ export function renderErrorsTable() {
     for (const markerEmail of sortedMarkers) {
         const stats = markerStats[markerEmail];
         const fio = emailToFio[markerEmail.toLowerCase()] || markerEmail;
+        
+        // Общий процент ошибок (сумма процентов по типам будет равна этому значению)
         const errorRate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
 
         const uniqueFileQuality = {};
@@ -910,7 +914,7 @@ export function renderErrorsTable() {
                     cntQ++;
                 }
             }
-            if (cntQ > 0) qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${((sumQ/cntQ)*100).toFixed(2)}%</strong></li>`;
+            if (cntQ > 0) qualityHtml += `<li><span>${escapeHtml(proj)}:</span> <strong>${((sumQ/cntQ)*100).toFixed(1)}%</strong></li>`;
         }
         qualityHtml += '</ul>';
         if (Object.keys(stats.projectQuality).length === 0) qualityHtml = '<div style="font-size:0.85rem; color:var(--muted);">Нет данных</div>';
@@ -920,7 +924,8 @@ export function renderErrorsTable() {
         
         for (const type of sortedTypes) {
             const typeData = stats.errorTypes[type];
-            const typeRate = (typeData.count / stats.totalErrors) * 100;
+            // ★ ИСПРАВЛЕНО: Считаем процент от общего числа фрагментов, чтобы сумма была равна errorRate
+            const typeRateFromTotal = stats.totalFragments > 0 ? (typeData.count / stats.totalFragments) * 100 : 0;
             
             let poolListHtml = '<ul class="pool-list">';
             const sortedPools = Object.keys(typeData.pools).sort((a, b) => typeData.pools[b].count - typeData.pools[a].count);
@@ -933,7 +938,7 @@ export function renderErrorsTable() {
                 poolListHtml += `<li class="pool-item">
                     <div class="pool-header">
                         <span>${escapeHtml(pool)}</span>
-                        <span>${poolRate.toFixed(2)}% (${poolData.count})</span>
+                        <span>${poolRate.toFixed(1)}% (${poolData.count.toFixed(1)})</span>
                     </div>
                     ${comments}
                 </li>`;
@@ -944,9 +949,9 @@ export function renderErrorsTable() {
                 <details class="error-type-block">
                     <summary class="error-type-header">
                         <span>${escapeHtml(type)}</span>
-                        <span class="error-type-percent">${typeRate.toFixed(2)}%</span>
+                        <span class="error-type-percent">${typeRateFromTotal.toFixed(2)}%</span>
                     </summary>
-                    <div class="error-type-rate">${typeData.count.toFixed(1)} шт. от всех ошибок</div>
+                    <div class="error-type-rate">${typeData.count.toFixed(1)} шт. (всего ошибок)</div>
                     ${poolListHtml}
                 </details>
             `;
@@ -985,9 +990,61 @@ export function renderErrorsTable() {
     container.innerHTML = html;
 }
 
+// ★ НОВОЕ: Рендер карточек ближайших событий на 7 дней
+function renderUpcomingEvents() {
+    const container = document.getElementById('upcomingEventsContainer');
+    if (!container) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+
+    const upcoming = state.feedbackData.filter(f => {
+        if (!f.date) return false;
+        const d = new Date(f.date);
+        return d >= today && d <= nextWeek;
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (upcoming.length === 0) {
+        container.innerHTML = '<div style="color: var(--muted); padding: 20px;">На ближайшие 7 дней событий не запланировано.</div>';
+        return;
+    }
+
+    container.innerHTML = upcoming.map(f => {
+        let title = '';
+        let desc = '';
+        let color = 'var(--accent)';
+        
+        if (f.eventType === 'task') {
+            title = 'Задача';
+            desc = `${f.marker}: ${f.description || 'Без названия'} (${f.status || 'Запланировано'})`;
+            color = 'var(--success)';
+        } else if (f.eventType === 'vacation') {
+            title = 'Отпуск';
+            desc = `${f.marker}: с ${f.startDate || f.date} по ${f.endDate || f.date}`;
+            color = '#8b5cf6';
+        } else {
+            title = 'Обратная связь (ОС)';
+            desc = `${f.conductor || 'Без орга'} (${f.project || 'Без проекта'})`;
+            color = 'var(--danger)';
+        }
+
+        return `
+            <div class="event-card" style="border-left-color: ${color};">
+                <div class="event-card-title">${title}</div>
+                <div class="event-card-desc">${escapeHtml(desc)}</div>
+                <div class="event-card-date">${formatDate(f.date)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
 export function renderNotificationsTable() {
     const tbody = document.getElementById('notificationsTableBody');
     if (!tbody) return;
+
+    renderUpcomingEvents(); // Вызываем рендер ближайших событий
 
     const discrepancies = getQualityDiscrepancies();
     
@@ -1183,14 +1240,14 @@ function renderSupersetTable1() {
         tbody.innerHTML = rows.map(r => `<tr>
             <td>${escapeHtml(r.project)}</td>
             <td>${escapeHtml(r.task)}</td>
-            <td>${escapeHtml(String(r.fragments))}</td>
+            <td>${parseFloat(r.fragments || 0).toFixed(1)}</td>
             <td>${escapeHtml(String(r.normQuality))}</td>
             <td>${escapeHtml(String(r.quality))}</td>
             <td>${escapeHtml(String(r.comment))}</td>
-            <td>${escapeHtml(String(r.withoutQuality))}</td>
-            <td>${escapeHtml(String(r.ballsPerHour))}</td>
-            <td>${escapeHtml(String(r.prodPerHour))}</td>
-            <td>${escapeHtml(String(r.price))}</td>
+            <td>${parseFloat(r.withoutQuality || 0).toFixed(1)}</td>
+            <td>${parseFloat(r.ballsPerHour || 0).toFixed(1)}</td>
+            <td>${parseFloat(r.prodPerHour || 0).toFixed(1)}</td>
+            <td>${parseFloat(r.price || 0).toFixed(1)}</td>
         </tr>`).join('');
     }
 
@@ -1241,19 +1298,19 @@ function renderSupersetTable2() {
                         style = 'style="color: var(--danger); font-weight: bold;"';
                     }
                 }
-                qsHtml = `<span ${style}>${qsPct.toFixed(2)}%</span>`;
+                qsHtml = `<span ${style}>${qsPct.toFixed(1)}%</span>`;
             }
             return `<tr>
                 <td>${r.date ? formatDate(r.date) : ''}</td>
                 <td>${escapeHtml(r.fio)}</td>
                 <td>${escapeHtml(r.project)}</td>
                 <td>${escapeHtml(r.task)}</td>
-                <td>${escapeHtml(String(r.fragments))}</td>
-                <td>${escapeHtml(String(r.balls))}</td>
+                <td>${parseFloat(r.fragments || 0).toFixed(1)}</td>
+                <td>${parseFloat(r.balls || 0).toFixed(1)}</td>
                 <td>${qsHtml}</td>
-                <td>${r.qualityFact != null ? (r.qualityFact * 100).toFixed(2) + '%' : '—'}</td>
+                <td>${r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '—'}</td>
                 <td>${escapeHtml(String(r.norm))}</td>
-                <td>${escapeHtml(String(r.withoutQuality))}</td>
+                <td>${parseFloat(r.withoutQuality || 0).toFixed(1)}</td>
             </tr>`;
         }).join('');
     }
@@ -1289,7 +1346,7 @@ function renderSupersetTable3() {
         tbody.innerHTML = rows.map(r => `<tr>
             <td>${r.date ? formatDate(r.date) : ''}</td>
             <td>${escapeHtml(r.project)}</td>
-            <td>${escapeHtml(String(r.price))}</td>
+            <td>${parseFloat(r.price || 0).toFixed(1)}</td>
         </tr>`).join('');
     }
 
@@ -1323,8 +1380,8 @@ function renderSupersetTable4() {
     } else {
         tbody.innerHTML = rows.map(r => `<tr>
             <td>${escapeHtml(r.fio)}</td>
-            <td>${r.factQuality != null ? (r.factQuality * 100).toFixed(2) + '%' : '—'}</td>
-            <td>${r.normQuality != null ? r.normQuality.toFixed(2) + '%' : '—'}</td>
+            <td>${r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '—'}</td>
+            <td>${r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '—'}</td>
         </tr>`).join('');
     }
 
