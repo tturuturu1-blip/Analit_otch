@@ -1,7 +1,9 @@
-// js/app.js — ПОЛНАЯ СБОРКА (Обновлено для Календаря, Конфликтов и Загрузки)
-// ★ ДОБАВЛЕНО: Кнопка "Объединить данные" в окне конфликтов (btnConflictMergeAll).
-// ★ ИЗМЕНЕНО: guessFileType обновлен под новые названия файлов.
-// ★ ИЗМЕНЕНО: Экспорт/Импорт Excel сохраняет новые поля календаря (статусы, отпуска).
+// js/app.js — ФИНАЛЬНАЯ ВЕРСИЯ (со всеми фиксами экспорта/импорта)
+// ★ ИСПРАВЛЕНО: Экспорт avgQuality для ОС.
+// ★ ИСПРАВЛЕНО: Импорт дат (без сдвига на UTC).
+// ★ ИСПРАВЛЕНО: Импорт задач/отпусков (добавлено поле marker для карточек).
+// ★ ИСПРАВЛЕНО: handleClearAll сбрасывает новые переменные состояния.
+// ★ ИСПРАВЛЕНО: Автообновление списка разметчиков при открытии модалки фидбека.
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
@@ -143,19 +145,20 @@ document.getElementById('btnDownloadExcel').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
         }
         
-        // ★ ОБНОВЛЕНО: Экспорт ОС с учетом новых полей
+        // ★ ИСПРАВЛЕНО: Добавлено avgQuality в экспорт
         if (state.feedbackData.length > 0) {
             const cleanFeedback = state.feedbackData.map(f => {
                 const base = {
                     "Дата": f.date, 
-                    "Разметчик": (f.markers || [f.marker || f.marker]).join(', '), 
+                    "Разметчик": (f.markers || [f.marker || '']).join(', '), 
                     "Статус": f.status || "",
                     "Тип ВКС": f.typeVKS || "", 
                     "Организатор": f.conductor || "",
                     "Проект": f.project || "", 
                     "Пулы с ошибками": (f.pools || []).join(', '),
                     "Время с": f.timeFrom || "",
-                    "Время по": f.timeTo || ""
+                    "Время по": f.timeTo || "",
+                    "Ср. качество за период": f.avgQuality != null ? (f.avgQuality * 100).toFixed(2) + '%' : ""
                 };
                 if (f.eventType === 'task') {
                     base["Тип записи"] = "Задача";
@@ -205,9 +208,11 @@ document.getElementById('btnDownloadReport').addEventListener('click', async () 
     }
 });
 
+// ★ ИСПРАВЛЕНО: Автообновление списка при открытии
 document.getElementById('btnOpenFeedbackModal').addEventListener('click', () => {
     generateModal.classList.remove('active');
     document.getElementById('feedbackModal').classList.add('active');
+    applyFeedbackFilters();
 });
 
 document.getElementById('btnOpenQualityModal').addEventListener('click', () => {
@@ -369,7 +374,6 @@ document.getElementById('btnUploadSource').addEventListener('click', () => { upl
 document.getElementById('btnUploadDB').addEventListener('click', () => { uploadMode = 'db'; importInput.click(); });
 document.getElementById('btnAddMoreFiles').addEventListener('click', () => fileInput.click());
 
-// ★ ОБНОВЛЕНО: Новые названия типов файлов
 function guessFileType(filename) {
     const n = filename.toLowerCase();
     if (n.includes('marker') || n.includes('разметчик')) return 'Статистика по исполнителям';
@@ -488,13 +492,17 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                     state.rawFlatValidations = parsedF; state.rawSuperset1 = parsedS1;
                     state.rawSuperset2 = parsedS2; state.rawSuperset3 = parsedS3; state.rawEmployeeMap = parsedEmp;
                     
-                    // ★ ОБНОВЛЕНО: Импорт ОС с учетом новых полей
                     if (parsedFb.length > 0) {
                         state.feedbackData = parsedFb.map(row => {
+                            // ★ ИСПРАВЛЕНО: Парсинг даты без сдвига UTC
                             let dateStr = row['Дата'];
                             if (dateStr) {
                                 const d = parseExcelDate(dateStr);
-                                if (d && !isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
+                                if (d && !isNaN(d.getTime())) {
+                                    dateStr = d.getFullYear() + '-' +
+                                              String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                                              String(d.getDate()).padStart(2, '0');
+                                }
                             }
                             
                             let avgQ = row['Ср. качество за период'];
@@ -503,9 +511,11 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                                 avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
                             }
 
+                            // ★ ИСПРАВЛЕНО: Добавлено поле marker
                             const rec = {
                                 date: dateStr || '', 
                                 markers: (row['Разметчик'] || '').split(',').map(s=>s.trim()).filter(Boolean), 
+                                marker: row['Разметчик'] || '', 
                                 status: row['Статус'] || '',
                                 typeVKS: row['Тип ВКС'] || '', 
                                 conductor: row['Организатор'] || '',
@@ -648,7 +658,6 @@ document.getElementById('btnConflictKeepOld').addEventListener('click', () => {
     showModalView('done');
 });
 
-// ★ НОВОЕ: Кнопка "Объединить всё"
 document.getElementById('btnConflictMergeAll').addEventListener('click', () => {
     state.pendingConflicts.forEach(c => c.choice = 'merge');
     commitNewData(state.pendingConflicts);
@@ -703,6 +712,15 @@ function handleClearAll() {
     state.feedbackGeneration.appliedPools.clear(); state.feedbackGeneration.appliedGroups.clear(); state.feedbackGeneration.videoLinks = {};
     const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
     if (fbGenContainer) fbGenContainer.innerHTML = '';
+
+    // ★ ИСПРАВЛЕНО: Полный сброс новых переменных
+    state.deleteTargetIndex = null;
+    state.editingFeedbackIndex = null;
+    state.filterState.fbMarkerFilter.clear();
+    state.filterState.feedbackPool.clear();
+    state.filterState.feedbackGroup.clear();
+    state.filterState.fbRecordMarkers.clear();
+    state.filterState.fbFormPools.clear();
     
     for (const key in state.pagination) state.pagination[key] = 1;
     try { localStorage.removeItem('validation_dashboard_data_v3'); localStorage.removeItem('validation_feedback_data_v1'); } catch (e) { }
