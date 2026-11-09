@@ -1,6 +1,6 @@
 // js/data.js — ФИНАЛЬНАЯ ВЕРСИЯ
-// ★ ДОБАВЛЕНО: mergeConflictingRows — умное объединение данных (сумма шт, среднее для баллов/час).
-// ★ ДОБАВЛЕНО: processNewRows — поиск дубликатов и формирование списка конфликтов.
+// ★ ДОБАВЛЕНО: Фильтрация конфликтов (показываются только проекты из Markers/Validation/Validation Flat).
+// ★ ДОБАВЛЕНО: Обработка choice === 'merge' (умное объединение данных).
 // ★ ИСПРАВЛЕНО: Защита от ошибок trim() (все getVal обернуты в String).
 // ★ ИСПРАВЛЕНО: Сохранение полного названия пула (без обрезания проекта).
 
@@ -103,11 +103,40 @@ function isRowEqual(rowA, rowB) {
     return normalizeForCompare(rowA) === normalizeForCompare(rowB);
 }
 
+// ★ НОВОЕ: Сбор допустимых проектов для фильтрации конфликтов
+function getAllowedProjects(newResults) {
+    const allowed = new Set();
+    
+    // Из текущих сырых данных
+    for (const m of state.rawMarkers) {
+        const p = String(getVal(m, 'Проект') || '').replace(/_validate$/, '').trim();
+        if (p) allowed.add(p);
+    }
+    for (const f of state.rawFlatValidations) {
+        const p = String(getVal(f, 'Проект') || '').replace(/_validate$/, '').trim();
+        if (p) allowed.add(p);
+    }
+    for (const v of state.rawValidation) {
+        const p = String(getVal(v, 'Проект') || '').replace(/_validate$/, '').trim();
+        if (p) allowed.add(p);
+    }
+
+    // Из только что загруженных файлов
+    for (const res of newResults) {
+        for (const row of res.rows) {
+            const p = String(getVal(row, 'Проект') || '').replace(/_validate$/, '').trim();
+            if (p) allowed.add(p);
+        }
+    }
+    return allowed;
+}
+
 export async function processNewRows(results) {
     state.pendingNewData = { markers: [], validation: [], recommendations: [], flat: [], superset1: [], superset2: [], superset3: [], employee: [] };
     state.pendingConflicts = [];
 
     const currentDomain = state.validationBaseUrl || '';
+    const allowedProjects = getAllowedProjects(results);
 
     for (const { file, rows } of results) {
         const hasRadioColumn = detectRadioColumn(rows);
@@ -151,6 +180,14 @@ export async function processNewRows(results) {
             if (!existingRow) {
                 state.pendingNewData[pendingKey].push(processedRow);
             } else if (!isRowEqual(existingRow, processedRow)) {
+                // Проверяем, относится ли проект к допустимым
+                const rowProj = String(getVal(processedRow, 'Проект') || getVal(existingRow, 'Проект') || '').replace(/_validate$/, '').trim();
+                
+                // Если проект указан и его нет в разрешенных — пропускаем конфликт
+                if (rowProj && !allowedProjects.has(rowProj)) {
+                    continue; 
+                }
+
                 state.pendingConflicts.push({
                     type, pendingKey, key: newKey, oldRow: existingRow, newRow: processedRow, fileName: file
                 });
@@ -190,9 +227,7 @@ function mergeConflictingRows(oldRow, newRow) {
         
         const lowerKey = key.toLowerCase();
         
-        // Усредняем: баллы/час, кпроизв, медиана
         const isAvgField = lowerKey.includes('баллов/час') || lowerKey.includes('кпроизв') || lowerKey.includes('медиана');
-        // Суммируем: штуки, стоимость, фрагменты
         const isSumField = lowerKey.includes('шт') || lowerKey.includes('стоимость') || lowerKey.includes('фрагмент');
         
         if (isAvgField && !isNaN(numOld) && !isNaN(numNew)) {
@@ -204,7 +239,6 @@ function mergeConflictingRows(oldRow, newRow) {
         } else if (strNew === '') {
             merged[key] = oldVal;
         } else {
-            // Текст, даты и прочее — берем новое значение
             merged[key] = newVal;
         }
     }
@@ -241,7 +275,6 @@ export function commitNewData(resolvedConflicts = []) {
         } else if (conflict.choice === 'merge') {
             arr[idx] = mergeConflictingRows(arr[idx], conflict.newRow);
         }
-        // Если choice === 'old', оставляем как есть
     }
 
     state.pendingNewData = null;
@@ -379,7 +412,6 @@ export async function recomputeDashboard() {
             const idx = String(taskStr).lastIndexOf('_validate_');
             if (idx !== -1) {
                 marker = String(taskStr).substring(idx + '_validate_'.length).trim();
-                // ★ ИСПРАВЛЕНО: Сохраняем полное название задачи (пула) без обрезания проекта
                 pool = String(taskStr).substring(0, idx).trim(); 
             }
         }
