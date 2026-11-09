@@ -1,6 +1,7 @@
-// js/report-runtime.js — ФИНАЛЬНАЯ ВЕРСИЯ (с исправленной таблицей ОС)
-// ★ ИЗМЕНЕНО: renderFeedbackTableHome корректно обрабатывает массив markers и выводит avgQuality.
-// ★ ИЗМЕНЕНО: Заголовки колонок соответствуют новым полям (Организатор).
+// js/report-runtime.js — ФИНАЛЬНАЯ ВЕРСИЯ
+// ★ ДОБАВЛЕНО: Таблица "Отпуска" (сбор данных, пагинация, рендер).
+// ★ ИЗМЕНЕНО: В таблице ОС разметчики выводятся с переносом строки (<br>).
+// ★ ИЗМЕНЕНО: Колонка "Организатор" (бывш. "Провел").
 
 (function () {
     'use strict';
@@ -8,6 +9,7 @@
     var REPORT_DATA = JSON.parse(document.getElementById('report-data').textContent);
     var processedData = REPORT_DATA.processedData || [];
     var feedbackData = REPORT_DATA.feedbackData || [];
+    var vacationsData = REPORT_DATA.vacationsData || [];
     var targetQualityGlobal = REPORT_DATA.targetQuality || null;
     var supersetTable1 = REPORT_DATA.supersetTable1 || [];
     var normHistory = REPORT_DATA.normHistory || [{ date: '2000-01-01', value: 580 }];
@@ -16,9 +18,11 @@
     var MAIN_ITEMS_PER_PAGE = 8;
     var currentPage = 1;
     var currentPageFb = 1;
+    var currentPageVacations = 1;
 
     var filteredData = [];
     var filteredFeedback = [];
+    var filteredVacations = [];
     var charts = {};
     var currentTab = 'all';
     var filterState = { pool: new Set(), marker: new Set(), result: new Set() };
@@ -203,6 +207,7 @@
             }
         }
 
+        // Фильтруем ОС по активному табу
         filteredFeedback = feedbackData.filter(function (f) {
             if (currentTab === 'all') return true;
             var markersArr = f.markers || (f.marker ? [f.marker] : []);
@@ -210,6 +215,19 @@
         }).sort(function (a, b) {
             var dA = parseDate(a.date);
             var dB = parseDate(b.date);
+            if (!dA && !dB) return 0;
+            if (!dA) return 1;
+            if (!dB) return -1;
+            return dB - dA;
+        });
+
+        // Фильтруем отпуска по активному табу
+        filteredVacations = vacationsData.filter(function (v) {
+            if (currentTab === 'all') return true;
+            return validMarkers.has(v.marker);
+        }).sort(function (a, b) {
+            var dA = parseDate(a.startDate);
+            var dB = parseDate(b.startDate);
             if (!dA && !dB) return 0;
             if (!dA) return 1;
             if (!dB) return -1;
@@ -557,8 +575,10 @@
     function changePage(tableKey, page) {
         if (tableKey === 'main') currentPage = page;
         else if (tableKey === 'fb') currentPageFb = page;
+        else if (tableKey === 'vacations') currentPageVacations = page;
         buildTable();
         renderFeedbackTableHome();
+        buildVacationsTable();
     }
 
     function renderPaginationControls(controlsId, infoId, totalItems, currentPage, tableKey, limit) {
@@ -683,18 +703,15 @@
             var f = rows[j];
             var statusColor = f.status === 'Проведена' ? '#85c4ae' : f.status === 'Отменена' ? '#e55555' : f.status === 'Перенесена' ? '#f2c94c' : '#7a95b8';
             
-            // ★ ИЗМЕНЕНО: Выводим все маркеры из массива (или старый строковый вариант)
-            var markersText = f.markers ? f.markers.join(', ') : (f.marker || '');
+            // ★ ИЗМЕНЕНО: Почты с переносом на новую строку
+            var markersHtml = (f.markers || [f.marker]).filter(Boolean).map(function(m){ return escapeHtml(m); }).join('<br>');
             
-            // ★ ИЗМЕНЕНО: Выводим среднее качество в процентах
             var avgQText = (f.avgQuality !== undefined && f.avgQuality !== null) ? (f.avgQuality * 100).toFixed(2) + '%' : '—';
-            
             var displayProject = f.project || '—';
             
-            // ★ ИЗМЕНЕНО: Колонка "Провел" теперь называется "Организатор" (заголовок в report.js)
             html += '<tr>' +
                 '<td>' + escapeHtml(formatDate(f.date)) + '</td>' +
-                '<td>' + escapeHtml(markersText) + '</td>' +
+                '<td>' + markersHtml + '</td>' +
                 '<td>' + escapeHtml(f.typeVKS || '—') + '</td>' +
                 '<td>' + escapeHtml(f.conductor || '—') + '</td>' +
                 '<td><span class="status-badge" style="background:' + statusColor + '20; color:' + statusColor + '">' + escapeHtml(f.status) + '</span></td>' +
@@ -712,9 +729,39 @@
         renderPaginationControls('pagination-fbHome-controls', 'pagination-fbHome-info', totalItems, currentPageFb, 'fb', ITEMS_PER_PAGE);
     }
 
+    // ★ НОВОЕ: Таблица отпусков
+    function buildVacationsTable() {
+        var tbody = document.getElementById('vacationsTableBody');
+        if (!tbody) return;
+
+        var totalItems = filteredVacations.length;
+        var startIndex = (currentPageVacations - 1) * ITEMS_PER_PAGE;
+        var endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
+        var rows = filteredVacations.slice(startIndex, endIndex);
+
+        var html = '';
+        for (var j = 0; j < rows.length; j++) {
+            var v = rows[j];
+            var dateRange = formatDate(v.startDate) + ' - ' + formatDate(v.endDate);
+            
+            html += '<tr>' +
+                '<td>' + escapeHtml(v.marker) + '</td>' +
+                '<td>' + escapeHtml(dateRange) + '</td>' +
+            '</tr>';
+        }
+        tbody.innerHTML = html;
+
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" style="text-align:center; color: var(--muted); padding: 20px;">Нет данных.</td></tr>';
+        }
+
+        renderPaginationControls('pagination-vacations-controls', 'pagination-vacations-info', totalItems, currentPageVacations, 'vacations', ITEMS_PER_PAGE);
+    }
+
     function triggerFilterUpdate() {
         currentPage = 1;
         currentPageFb = 1;
+        currentPageVacations = 1;
         applyFilters();
         updateKPI();
         buildQualityChart();
@@ -724,6 +771,7 @@
         buildErrorsByMarkerChart();
         buildTable();
         renderFeedbackTableHome();
+        buildVacationsTable();
     }
 
     function switchTab(tabId, btn) {
