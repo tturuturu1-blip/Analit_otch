@@ -1,7 +1,7 @@
 // js/report.js — ОБНОВЛЕНО
-// ★ ИЗМЕНЕНО: feedbackData фильтруется (исключаются задачи и отпуска).
-// ★ ИЗМЕНЕНО: В шапке таблицы "Обратные связи" колонка "Провел" заменена на "Организатор".
-// ★ ИЗМЕНЕНО: Выравнивание табов по правому краю, жирный шрифт заголовка.
+// ★ ИЗМЕНЕНО: Добавлена передача vacationsData (для таблицы отпусков).
+// ★ ИЗМЕНЕНО: Заголовок "Провел" в таблице ОС заменен на "Организатор".
+// ★ ИЗМЕНЕНО: Добавлена таблица "Отпуска" в HTML-шаблон.
 
 import { state } from './state.js';
 import { escapeHtml, formatDate, parseExcelDate } from './utils.js';
@@ -51,7 +51,6 @@ export async function generateHtmlReport() {
 
     let tabsHtml = '';
     if (showTabs) {
-        // Выравнивание по правому краю
         tabsHtml = '<div class="tabs" id="projectTabs" style="margin-left: auto;">';
         tabsHtml += '<div class="tab active" data-tab="all">Все</div>';
         for (const p of projects) {
@@ -77,7 +76,7 @@ export async function generateHtmlReport() {
             return copy;
         });
 
-    // ★ ИЗМЕНЕНО: Оставляем только ОС (убираем Задачи и Отпуска)
+    // Оставляем только ОС (убираем Задачи и Отпуска из этой таблицы)
     const serializedFeedbackData = state.feedbackData
         .filter(f => !f.eventType || f.eventType === 'oc')
         .map(f => {
@@ -89,9 +88,21 @@ export async function generateHtmlReport() {
             return copy;
         });
 
+    // ★ НОВОЕ: Собираем данные об отпусках для отдельной таблицы
+    const serializedVacationsData = state.feedbackData
+        .filter(f => f.eventType === 'vacation')
+        .map(f => {
+            return {
+                marker: f.marker,
+                startDate: f.startDate || f.date,
+                endDate: f.endDate || f.date
+            };
+        });
+
     const reportData = {
         processedData: serializedProcessedData,
         feedbackData: serializedFeedbackData,
+        vacationsData: serializedVacationsData,
         targetQuality: targetQuality,
         supersetTable1: state.superset.table1 || [],
         norms: state.superset.norms || { byProjectPool: {}, byProject: {}, globalAvg: null },
@@ -238,7 +249,7 @@ export async function generateHtmlReport() {
                     <thead>
                         <tr>
                             <th>Дата</th><th>Разметчик</th><th>Тип ВКС</th>
-                            <th>Организатор</th> <!-- ★ ИЗМЕНЕНО: Было "Провел" -->
+                            <th>Организатор</th> <!-- ★ ИЗМЕНЕНО -->
                             <th>Статус</th><th>Проект</th><th>Пулы с ошибками</th><th>Ср. качество за период</th>
                         </tr>
                     </thead>
@@ -247,6 +258,26 @@ export async function generateHtmlReport() {
                 <div class="pagination-container" id="pagination-fbHome">
                     <div class="pagination-info" id="pagination-fbHome-info">Показано 0-0 из 0</div>
                     <div class="pagination-controls" id="pagination-fbHome-controls"></div>
+                </div>
+            </div>
+
+            <!-- ★ НОВОЕ: Таблица отпусков -->
+            <div class="table-card">
+                <div class="table-header">
+                    <h3>Отпуска</h3>
+                </div>
+                <table id="vacationsTable">
+                    <thead>
+                        <tr>
+                            <th>Разметчик</th>
+                            <th>Период отпуска</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vacationsTableBody"></tbody>
+                </table>
+                <div class="pagination-container" id="pagination-vacations">
+                    <div class="pagination-info" id="pagination-vacations-info">Показано 0-0 из 0</div>
+                    <div class="pagination-controls" id="pagination-vacations-controls"></div>
                 </div>
             </div>
 
