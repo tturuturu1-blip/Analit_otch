@@ -1,6 +1,8 @@
-// js/feedback.js — ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД
-// ★ ИЗМЕНЕНО: handleSaveFeedback теперь считает avgQuality и сохраняет marker строкой для совместимости.
-// ★ ИЗМЕНЕНО: В модалке добавления ОС заголовок "Провел" заменен на "Организатор" (в HTML это уже сделано, но в JS подтягиваем верно).
+// js/feedback.js — ФИНАЛЬНАЯ ВЕРСИЯ (Календарь, Задачи, Отпуска, Kinescope)
+// ★ ИЗМЕНЕНО: Задачи (время, статус, описание), Отпуска (диапазон дат, цвет), ОС (дата, проект).
+// ★ ДОБАВЛЕНО: Модальное окно подтверждения удаления (через state.deleteTargetIndex).
+// ★ ИЗМЕНЕНО: В фидбеке теперь можно выбрать конкретных разметчиков (из выбранного пула).
+// ★ ИЗМЕНЕНО: Улучшено встраивание видео Kinescope (работает iframe).
 
 import { state, saveFeedbackToStorage, ITEMS_PER_PAGE } from './state.js';
 import { formatDate, maskEmail, escapeHtml, updateLabel, getVal, parseExcelDate } from './utils.js';
@@ -15,15 +17,6 @@ function buildPoolProjectCache() {
         }
     }
     return cache;
-}
-
-function getGroups() {
-    const groups = new Set();
-    for (const emp of state.rawEmployeeMap) {
-        const g = getVal(emp, 'Группа', 'группа', 'Group');
-        if (g) groups.add(String(g).trim());
-    }
-    return Array.from(groups).sort();
 }
 
 function getMarkerGroup(markerEmail) {
@@ -45,7 +38,7 @@ export function renderCalendar() {
     if (!container) return;
 
     const today = new Date();
-    const currentDay = today.getDay() || 7;
+    const currentDay = today.getDay() || 7; // Делаем воскресенье 7-м днем
     const monday = new Date(today);
     monday.setDate(today.getDate() - currentDay + 1 + state.calendarDayOffset);
 
@@ -62,7 +55,16 @@ export function renderCalendar() {
         const dateStrISO = `${y}-${m}-${d}`;
         const displayDate = `${dayNames[i]}, ${d}.${m}.${String(y).slice(-2)}`;
 
-        const dayFeedbacks = state.feedbackData.filter(f => f.date === dateStrISO).sort((a,b) => new Date(b.date) - new Date(a.date));
+        // Ищем записи на этот день (ОС, Задачи) и Отпуска (которые длятся в этот день)
+        const dayFeedbacks = state.feedbackData.filter(f => {
+            if (f.eventType === 'vacation') {
+                // Для отпуска проверяем, попадает ли дата в диапазон
+                const start = f.startDate || f.date;
+                const end = f.endDate || f.date;
+                return dateStrISO >= start && dateStrISO <= end;
+            }
+            return f.date === dateStrISO;
+        }).sort((a,b) => new Date(a.date) - new Date(b.date));
 
         html += `<div class="calendar-day-card">
             <div class="calendar-date-title">${displayDate}</div>
@@ -84,23 +86,51 @@ export function renderCalendar() {
 }
 
 function renderFeedbackRecordCard(fb, idx) {
-    if (fb.eventType === 'task' || fb.eventType === 'vacation') {
+    // --- КАРТОЧКА ЗАДАЧИ ---
+    if (fb.eventType === 'task') {
+        let statusClass = 'planned';
+        if (fb.status === 'В процессе') statusClass = 'progress';
+        if (fb.status === 'Выполнено') statusClass = 'done';
+        
+        const timeStr = (fb.timeFrom && fb.timeTo) ? `🕒 ${fb.timeFrom} - ${fb.timeTo}` : '';
+        
         return `
-            <div class="feedback-record-card" style="border-left-color: ${fb.eventType === 'task' ? 'var(--success)' : 'var(--warning)'};">
+            <div class="feedback-record-card" style="border-left-color: var(--success);">
                 <div class="feedback-record-actions">
-                    <button class="icon-btn" onclick="deleteFeedbackFromCalendar(${idx})" title="Удалить">
+                    <button class="icon-btn" onclick="editEventFromCalendar(${idx})" title="Редактировать">
+                        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                    </button>
+                    <button class="icon-btn" onclick="confirmDeleteEvent(${idx})" title="Удалить">
                         <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                     </button>
                 </div>
-                <div class="feedback-record-header" style="color: ${fb.eventType === 'task' ? 'var(--success)' : 'var(--warning)'};">
-                    ${fb.eventType === 'task' ? 'Задача' : 'Отпуск'}
-                </div>
-                <div class="feedback-record-sub"><b>${escapeHtml(fb.marker)}</b></div>
+                <div class="feedback-record-header" style="color: var(--success);">Задача <span class="task-status ${statusClass}">${fb.status}</span></div>
+                <div class="feedback-record-sub"><b>${escapeHtml(fb.marker)}</b> ${timeStr}</div>
                 <div style="font-size: 0.85rem; margin-top: 5px;">${escapeHtml(fb.description || '')}</div>
             </div>
         `;
     }
 
+    // --- КАРТОЧКА ОТПУСКА ---
+    if (fb.eventType === 'vacation') {
+        return `
+            <div class="feedback-record-card vacation-card">
+                <div class="feedback-record-actions">
+                    <button class="icon-btn" onclick="editEventFromCalendar(${idx})" title="Редактировать">
+                        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                    </button>
+                    <button class="icon-btn" onclick="confirmDeleteEvent(${idx})" title="Удалить">
+                        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                    </button>
+                </div>
+                <div class="vacation-badge">ОТПУСК</div>
+                <div class="feedback-record-sub"><b>${escapeHtml(fb.marker)}</b></div>
+                <div style="font-size: 0.8rem; color: #5b21b6;">с ${formatDate(new Date(fb.startDate || fb.date))} по ${formatDate(new Date(fb.endDate || fb.date))}</div>
+            </div>
+        `;
+    }
+
+    // --- КАРТОЧКА ОС ---
     const markersHtml = (fb.markers || []).map(m => {
         let avgQuality = 0;
         let count = 0;
@@ -125,7 +155,7 @@ function renderFeedbackRecordCard(fb, idx) {
         </div>`;
     }).join('');
 
-    const timeStr = (fb.timeFrom && fb.timeTo) ? `${fb.timeFrom} - ${fb.timeTo}` : '';
+    const timeStr = (fb.timeFrom && fb.timeTo) ? `(${fb.timeFrom} - ${fb.timeTo})` : '';
 
     return `
         <div class="feedback-record-card">
@@ -133,15 +163,13 @@ function renderFeedbackRecordCard(fb, idx) {
                 <button class="icon-btn" onclick="editFeedbackFromCalendar(${idx})" title="Редактировать">
                     <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                 </button>
-                <button class="icon-btn" onclick="deleteFeedbackFromCalendar(${idx})" title="Удалить">
+                <button class="icon-btn" onclick="confirmDeleteEvent(${idx})" title="Удалить">
                     <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                 </button>
             </div>
-            <div class="feedback-record-header">${escapeHtml(fb.conductor || 'Без организатора')}</div>
-            <div class="feedback-record-sub">${escapeHtml(fb.typeVKS)} ${timeStr ? `(${timeStr})` : ''} • ${escapeHtml(fb.project || 'Без проекта')}</div>
-            <div class="feedback-avatars-container">
-                ${markersHtml}
-            </div>
+            <div class="feedback-record-header" style="color: var(--danger);">Тип ВКС: ${escapeHtml(fb.typeVKS)}</div>
+            <div class="feedback-record-sub">${escapeHtml(fb.conductor || 'Без организатора')} ${timeStr} • ${escapeHtml(fb.project || 'Без проекта')}</div>
+            <div class="feedback-avatars-container">${markersHtml}</div>
         </div>
     `;
 }
@@ -153,7 +181,7 @@ export function openAddTypeModal(dateStr) {
     document.getElementById('addTypeModal').classList.add('active');
 }
 
-export function openEventModal(type) {
+export function openEventModal(type, editIdx = null) {
     document.getElementById('addTypeModal').classList.remove('active');
     
     const modal = document.getElementById('addEventModal');
@@ -162,47 +190,106 @@ export function openEventModal(type) {
     const dateStr = document.getElementById('eventModalDate').value;
     
     typeInput.value = type;
-    modal.querySelector('#eventModalDate').value = dateStr;
-    
-    if (type === 'task') title.textContent = 'Добавить задачу';
-    else if (type === 'vacation') title.textContent = 'Добавить отпуск';
-    else title.textContent = 'Добавить ОС';
+    document.getElementById('eventModalDate').value = dateStr;
+    document.getElementById('eventModalEditIndex').value = editIdx !== null ? editIdx : '';
 
+    // Показываем нужные блоки
+    const taskFields = document.getElementById('eventFieldsTask');
+    const vacFields = document.getElementById('eventFieldsVacation');
+    
+    if (type === 'task') {
+        title.textContent = editIdx !== null ? 'Редактировать задачу' : 'Добавить задачу';
+        taskFields.style.display = 'flex';
+        vacFields.style.display = 'none';
+    } else if (type === 'vacation') {
+        title.textContent = editIdx !== null ? 'Редактировать отпуск' : 'Добавить отпуск';
+        taskFields.style.display = 'none';
+        vacFields.style.display = 'flex';
+    } else {
+        // Перенаправляем на ОС
+        openAddFeedbackModal(dateStr, editIdx);
+        return;
+    }
+
+    // Заполняем список ФИО
     const select = document.getElementById('eventModalMarker');
     const markers = [...new Set(state.processedData.map(r => r.marker).filter(Boolean))].sort();
     select.innerHTML = '<option value="">Выберите разметчика...</option>' + markers.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 
-    document.getElementById('eventModalTitleInput').value = '';
-
-    if (type === 'feedback') {
-        openAddFeedbackModal(dateStr);
+    // Сброс/заполнение полей
+    if (editIdx !== null) {
+        const fb = state.feedbackData[editIdx];
+        select.value = fb.marker || '';
+        
+        if (type === 'task') {
+            document.getElementById('eventTaskDesc').value = fb.description || '';
+            document.getElementById('eventTaskTimeFrom').value = fb.timeFrom || '';
+            document.getElementById('eventTaskTimeTo').value = fb.timeTo || '';
+            document.getElementById('eventTaskStatus').value = fb.status || 'Запланировано';
+        } else if (type === 'vacation') {
+            document.getElementById('eventVacationDateFrom').value = fb.startDate || fb.date || dateStr;
+            document.getElementById('eventVacationDateTo').value = fb.endDate || fb.date || dateStr;
+        }
     } else {
-        modal.classList.add('active');
+        select.value = '';
+        document.getElementById('eventTaskDesc').value = '';
+        document.getElementById('eventTaskTimeFrom').value = '';
+        document.getElementById('eventTaskTimeTo').value = '';
+        document.getElementById('eventTaskStatus').value = 'Запланировано';
+        document.getElementById('eventVacationDateFrom').value = dateStr;
+        document.getElementById('eventVacationDateTo').value = dateStr;
     }
+
+    modal.classList.add('active');
 }
 
 export function handleSaveEvent() {
-    const date = document.getElementById('eventModalDate').value;
+    const editIdx = document.getElementById('eventModalEditIndex').value;
     const type = document.getElementById('eventModalType').value;
+    const date = document.getElementById('eventModalDate').value;
     const marker = document.getElementById('eventModalMarker').value;
-    const description = document.getElementById('eventModalTitleInput').value.trim();
 
     if (!marker) {
         alert('Выберите разметчика');
         return;
     }
 
-    const newRecord = { 
-        date, 
-        eventType: type, 
-        marker, 
-        description,
-        typeVKS: type === 'task' ? 'Задача' : 'Отпуск'
-    };
-
-    state.feedbackData.push(newRecord);
-    saveFeedbackToStorage();
+    let newRecord = {};
     
+    if (type === 'task') {
+        newRecord = {
+            date,
+            eventType: 'task',
+            marker,
+            description: document.getElementById('eventTaskDesc').value.trim(),
+            timeFrom: document.getElementById('eventTaskTimeFrom').value,
+            timeTo: document.getElementById('eventTaskTimeTo').value,
+            status: document.getElementById('eventTaskStatus').value,
+            typeVKS: 'Задача'
+        };
+    } else if (type === 'vacation') {
+        const start = document.getElementById('eventVacationDateFrom').value;
+        const end = document.getElementById('eventVacationDateTo').value;
+        if (!start || !end) { alert('Укажите даты отпуска'); return; }
+        if (start > end) { alert('Дата начала не может быть позже даты окончания'); return; }
+        
+        newRecord = {
+            date: start,
+            startDate: start,
+            endDate: end,
+            eventType: 'vacation',
+            marker,
+            typeVKS: 'Отпуск'
+        };
+    }
+
+    if (editIdx !== '') {
+        state.feedbackData[Number(editIdx)] = newRecord;
+    } else {
+        state.feedbackData.push(newRecord);
+    }
+
+    saveFeedbackToStorage();
     document.getElementById('addEventModal').classList.remove('active');
     renderCalendar();
 }
@@ -212,9 +299,12 @@ export function openAddFeedbackModal(dateStr, editIdx = null) {
     if (!modal) return;
 
     document.getElementById('fbModalDate').value = dateStr;
-    document.getElementById('btnSaveFeedback').textContent = 'Добавить';
+    document.getElementById('btnSaveFeedback').textContent = editIdx !== null ? 'Сохранить' : 'Добавить';
+    document.getElementById('fbModalEditIndex').value = editIdx !== null ? editIdx : '';
+    
     state.editingFeedbackIndex = editIdx;
 
+    // Сброс полей
     document.getElementById('fbModalProject').value = '';
     document.getElementById('fbModalTimeFrom').value = '';
     document.getElementById('fbModalTimeTo').value = '';
@@ -232,6 +322,7 @@ export function openAddFeedbackModal(dateStr, editIdx = null) {
     if (editIdx !== null) {
         const fb = state.feedbackData[editIdx];
         if (fb) {
+            document.getElementById('fbModalDate').value = fb.date || dateStr;
             document.getElementById('fbModalProject').value = fb.project || '';
             document.getElementById('fbModalTimeFrom').value = fb.timeFrom || '';
             document.getElementById('fbModalTimeTo').value = fb.timeTo || '';
@@ -248,8 +339,6 @@ export function openAddFeedbackModal(dateStr, editIdx = null) {
             document.querySelectorAll('#msFbFormPools_options input').forEach(cb => {
                 if (state.filterState.fbFormPools.has(cb.value)) cb.checked = true;
             });
-            
-            document.getElementById('btnSaveFeedback').textContent = 'Сохранить';
         }
     }
 
@@ -285,8 +374,8 @@ function populateFeedbackModalSelects() {
     }
 }
 
-// ★ ИЗМЕНЕНО: Теперь здесь рассчитывается среднее качество для записи
 export function handleSaveFeedback() {
+    const editIdx = document.getElementById('fbModalEditIndex').value;
     const dateStr = document.getElementById('fbModalDate').value;
     const project = document.getElementById('fbModalProject').value.trim();
     const timeFrom = document.getElementById('fbModalTimeFrom').value;
@@ -302,7 +391,7 @@ export function handleSaveFeedback() {
         return;
     }
 
-    // Считаем среднее качество для сохранения (для отчета)
+    // Считаем среднее качество для сохранения
     let totalQ = 0;
     let countQ = 0;
     for (const m of markers) {
@@ -343,22 +432,29 @@ export function handleSaveFeedback() {
         marker: markers.join(', ') // Для совместимости со старой таблицей отчета
     };
 
-    if (state.editingFeedbackIndex !== null) {
-        state.feedbackData[state.editingFeedbackIndex] = newRecord;
-        state.editingFeedbackIndex = null;
+    if (editIdx !== '') {
+        state.feedbackData[Number(editIdx)] = newRecord;
     } else {
         state.feedbackData.push(newRecord);
     }
 
+    state.editingFeedbackIndex = null;
     saveFeedbackToStorage();
     document.getElementById('addFeedbackModal').classList.remove('active');
     renderCalendar();
 }
 
-export function deleteFeedbackFromCalendar(idx) {
-    if (!confirm('Удалить запись?')) return;
-    state.feedbackData.splice(idx, 1);
+export function confirmDeleteEvent(idx) {
+    state.deleteTargetIndex = idx;
+    document.getElementById('confirmDeleteModal').classList.add('active');
+}
+
+export function deleteFeedbackFromCalendar() {
+    if (state.deleteTargetIndex === null) return;
+    state.feedbackData.splice(state.deleteTargetIndex, 1);
+    state.deleteTargetIndex = null;
     saveFeedbackToStorage();
+    document.getElementById('confirmDeleteModal').classList.remove('active');
     renderCalendar();
 }
 
@@ -366,16 +462,13 @@ export function deleteFeedbackFromCalendar(idx) {
 
 export function generateFeedbackHtml() {
     const selectedPools = state.filterState.feedbackPool;
-    const selectedGroups = state.filterState.feedbackGroup;
+    const selectedMarkers = state.filterState.fbMarkerFilter;
 
     const filtered = state.processedData.filter(r => {
         if (r._type !== 'validation') return false;
         if (state.currentTab !== 'all' && r.project !== state.currentTab) return false;
         if (selectedPools.size > 0 && !selectedPools.has(r.pool)) return false;
-        if (selectedGroups.size > 0) {
-            const group = getMarkerGroup(r.marker);
-            if (!selectedGroups.has(group)) return false;
-        }
+        if (selectedMarkers.size > 0 && !selectedMarkers.has(r.marker)) return false;
         return true;
     });
 
@@ -427,14 +520,16 @@ export function generateFeedbackHtml() {
                     
                     let videoContent = '<div class="video-placeholder">Ссылка на видео не указана</div>';
                     if (videoUrl) {
+                        // ★ ИСПРАВЛЕНО: Улучшенное встраивание Kinescope
                         if (videoUrl.includes('kinescope.io') || videoUrl.startsWith('<iframe')) {
                             let srcUrl = videoUrl;
-                            const match = videoUrl.match(/src="([^"]+)"/);
+                            // Если вставили iframe код целиком, достаем src
+                            const match = videoUrl.match(/src=["']([^"']+)["']/);
                             if (match) srcUrl = match[1];
                             
                             videoContent = `
                                 <div class="video-embed-container">
-                                    <iframe src="${escapeHtml(srcUrl)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen frameborder="0"></iframe>
+                                    <iframe src="${escapeHtml(srcUrl)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen frameborder="0"></iframe>
                                 </div>
                             `;
                         } else {
@@ -542,8 +637,11 @@ export function generateFeedbackHtml() {
         .file-block { display: flex; flex-direction: column; gap: 15px; }
         .file-name { font-size: 1.1rem; font-weight: 600; color: var(--text); word-break: break-all; margin-bottom: 5px; }
         .video-wrapper { width: 100%; max-width: 600px; }
+        
+        /* ★ Стили для встроенного видео (Kinescope) */
         .video-embed-container { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; background: #000; }
         .video-embed-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+        
         .video-button { display: inline-flex; align-items: center; gap: 10px; background: var(--accent); color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 1rem; transition: opacity 0.2s; }
         .video-button:hover { opacity: 0.8; }
         .video-placeholder { padding: 15px 20px; color: var(--muted); background: rgba(0,0,0,0.03); border-radius: 8px; font-size: 0.9rem; font-style: italic; }
@@ -575,21 +673,42 @@ export function generateFeedbackHtml() {
     URL.revokeObjectURL(url);
 }
 
+// ===== 4. ЛОГИКА ФИЛЬТРОВ В МОДАЛКЕ СОЗДАНИЯ ФИДБЕКА =====
+
 export function applyFeedbackFilters() {
     const container = document.getElementById('feedbackGenerationBlocks');
     if (!container) return;
 
     const selectedPools = state.filterState.feedbackPool;
-    const selectedGroups = state.filterState.feedbackGroup;
+    const selectedMarkers = state.filterState.fbMarkerFilter;
 
+    // 1. Собираем список доступных разметчиков (только те, кто размечал выбранные пулы)
+    const availableMarkers = new Set();
+    for (const r of state.processedData) {
+        if (r._type !== 'validation' || !r.marker) continue;
+        if (state.currentTab !== 'all' && r.project !== state.currentTab) continue;
+        if (selectedPools.size > 0 && !selectedPools.has(r.pool)) continue;
+        availableMarkers.add(r.marker);
+    }
+
+    // Обновляем выпадающий список разметчиков
+    const msMarkersOptions = document.getElementById('msFbMarkerFilter_options');
+    if (msMarkersOptions) {
+        const sorted = Array.from(availableMarkers).sort();
+        msMarkersOptions.innerHTML = sorted.map(m => {
+            const safe = escapeHtml(m);
+            const checked = selectedMarkers.has(m) ? 'checked' : '';
+            return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onOptionChange('msFbMarkerFilter', 'fbMarkerFilter', this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
+        }).join('');
+    }
+    updateLabel('msFbMarkerFilter', 'fbMarkerFilter');
+
+    // 2. Фильтруем данные для отображения полей ввода ссылок
     const filtered = state.processedData.filter(r => {
         if (r._type !== 'validation') return false;
         if (state.currentTab !== 'all' && r.project !== state.currentTab) return false;
         if (selectedPools.size > 0 && !selectedPools.has(r.pool)) return false;
-        if (selectedGroups.size > 0) {
-            const group = getMarkerGroup(r.marker);
-            if (!selectedGroups.has(group)) return false;
-        }
+        if (selectedMarkers.size > 0 && !selectedMarkers.has(r.marker)) return false;
         return true;
     });
 
@@ -647,18 +766,30 @@ export function initFeedbackForm() {
     document.getElementById('btnSaveEvent').addEventListener('click', handleSaveEvent);
     
     document.getElementById('btnApplyGroup').addEventListener('click', () => {
-        if (window.toggleDropdown) window.toggleDropdown('msFbGroup');
+        if (window.toggleDropdown) window.toggleDropdown('msFbMarkerFilter');
         applyFeedbackFilters();
     });
 
     document.getElementById('btnGenerateFeedback').addEventListener('click', generateFeedbackHtml);
+
+    // Обработчики окна подтверждения удаления
+    document.getElementById('btnDelCancel').addEventListener('click', () => {
+        state.deleteTargetIndex = null;
+        document.getElementById('confirmDeleteModal').classList.remove('active');
+    });
+    document.getElementById('btnDelConfirm').addEventListener('click', deleteFeedbackFromCalendar);
 }
 
+// Экспорт для window (вызывается из HTML)
 window.renderCalendar = renderCalendar;
 window.openAddTypeModal = openAddTypeModal;
 window.openEventModal = openEventModal;
+window.confirmDeleteEvent = confirmDeleteEvent;
 window.editFeedbackFromCalendar = (idx) => {
     const fb = state.feedbackData[idx];
     if (fb) openAddFeedbackModal(fb.date, idx);
 };
-window.deleteFeedbackFromCalendar = deleteFeedbackFromCalendar;
+window.editEventFromCalendar = (idx) => {
+    const fb = state.feedbackData[idx];
+    if (fb) openEventModal(fb.eventType, idx);
+};
