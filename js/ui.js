@@ -1,8 +1,8 @@
-// js/ui.js — ФИНАЛЬНАЯ ВЕРСИЯ
-// ★ ИСПРАВЛЕНО: renderErrorsTable — проценты по типам теперь считаются от общего числа фрагментов (сумма = общий процент).
-// ★ ДОБАВЛЕНО: renderUpcomingEvents — карточки ближайших событий (ОС, отпуска, задачи) на 7 дней.
-// ★ ДОБАВЛЕНО: Округление всех числовых значений в таблицах до 1 знака после запятой.
-// ★ ИСПРАВЛЕНО: Пагинация "Результатов валидации" корректно рендерится в шапке.
+// js/ui.js — ФИНАЛЬНАЯ ВЕРСИЯ (Исправлены Уведомления и Календарь)
+// ★ ИСПРАВЛЕНО: renderUpcomingEvents корректно показывает пересекающиеся отпуска.
+// ★ ИСПРАВЛЕНО: Удалены вызовы устаревших таблиц ОС (теперь календарь в feedback.js).
+// ★ ИСПРАВЛЕНО: Проценты по типам ошибок строго равны общему проценту ошибок.
+// ★ ДОБАВЛЕНО: Округление до 1 знака в таблицах Суперсета.
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -311,7 +311,7 @@ export function populateAllMultiSelects() {
     populateMultiSelect('msFbPool', 'feedbackPool', pools);
     populateMultiSelect('msFbFormPools', 'fbFormPools', pools);
     populateMultiSelect('msFbRecordMarkers', 'fbRecordMarkers', markers);
-    populateMultiSelect('msFbMarkerFilter', 'fbMarkerFilter', markers); // ★ НОВОЕ
+    populateMultiSelect('msFbMarkerFilter', 'fbMarkerFilter', markers);
 }
 
 export function populateRecDatalists() {
@@ -812,11 +812,9 @@ export function buildTable() {
         </tr>`;
     }).join('');
 
-    // ★ ИСПРАВЛЕНО: Пагинация рендерится в шапке таблицы
     renderPaginationControls('pagination-data-controls', 'pagination-data-info', totalItems, 'mainData');
 }
 
-// ★ ИСПРАВЛЕНО: Проценты по типам считаются от общего числа фрагментов
 export function renderErrorsTable() {
     const container = document.getElementById('errorsCardsContainer');
     if (!container) return;
@@ -894,7 +892,6 @@ export function renderErrorsTable() {
         const stats = markerStats[markerEmail];
         const fio = emailToFio[markerEmail.toLowerCase()] || markerEmail;
         
-        // Общий процент ошибок (сумма процентов по типам будет равна этому значению)
         const errorRate = stats.totalFragments > 0 ? (stats.totalErrors / stats.totalFragments) * 100 : 0;
 
         const uniqueFileQuality = {};
@@ -924,7 +921,7 @@ export function renderErrorsTable() {
         
         for (const type of sortedTypes) {
             const typeData = stats.errorTypes[type];
-            // ★ ИСПРАВЛЕНО: Считаем процент от общего числа фрагментов, чтобы сумма была равна errorRate
+            // Считаем процент от общего числа фрагментов, чтобы сумма была равна errorRate
             const typeRateFromTotal = stats.totalFragments > 0 ? (typeData.count / stats.totalFragments) * 100 : 0;
             
             let poolListHtml = '<ul class="pool-list">';
@@ -990,7 +987,7 @@ export function renderErrorsTable() {
     container.innerHTML = html;
 }
 
-// ★ НОВОЕ: Рендер карточек ближайших событий на 7 дней
+// ★ ИСПРАВЛЕНО: Корректный рендер отпусков (пересечение дат)
 function renderUpcomingEvents() {
     const container = document.getElementById('upcomingEventsContainer');
     if (!container) return;
@@ -999,10 +996,23 @@ function renderUpcomingEvents() {
     today.setHours(0, 0, 0, 0);
     const nextWeek = new Date(today);
     nextWeek.setDate(today.getDate() + 7);
+    nextWeek.setHours(23, 59, 59, 999);
 
     const upcoming = state.feedbackData.filter(f => {
         if (!f.date) return false;
+        
+        if (f.eventType === 'vacation') {
+            const start = new Date(f.startDate || f.date);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(f.endDate || f.date);
+            end.setHours(23, 59, 59, 999);
+            
+            // Отпуск попадает в диапазон, если он начинается до конца следующей недели И заканчивается после начала сегодня
+            return start <= nextWeek && end >= today;
+        }
+        
         const d = new Date(f.date);
+        d.setHours(12, 0, 0, 0); // Ставим полдень, чтобы избежать сдвигов часовых поясов
         return d >= today && d <= nextWeek;
     }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -1022,7 +1032,7 @@ function renderUpcomingEvents() {
             color = 'var(--success)';
         } else if (f.eventType === 'vacation') {
             title = 'Отпуск';
-            desc = `${f.marker}: с ${f.startDate || f.date} по ${f.endDate || f.date}`;
+            desc = `${f.marker}: с ${formatDate(new Date(f.startDate || f.date))} по ${formatDate(new Date(f.endDate || f.date))}`;
             color = '#8b5cf6';
         } else {
             title = 'Обратная связь (ОС)';
@@ -1044,7 +1054,7 @@ export function renderNotificationsTable() {
     const tbody = document.getElementById('notificationsTableBody');
     if (!tbody) return;
 
-    renderUpcomingEvents(); // Вызываем рендер ближайших событий
+    renderUpcomingEvents();
 
     const discrepancies = getQualityDiscrepancies();
     
