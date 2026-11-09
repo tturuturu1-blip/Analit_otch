@@ -1,14 +1,14 @@
-// js/state.js — ОБНОВЛЕНО ДЛЯ НОВОГО ФУНКЦИОНАЛА
-// ★ ИЗМЕНЕНО: MAIN_ITEMS_PER_PAGE = 6 (для таблицы результатов).
-// ★ ДОБАВЛЕНО: calendarDayOffset (для листания календаря по датам).
-// Ранее добавленное: rawRecommendationsManual, validationBaseUrl, domainHistory, pendingNewData, pendingConflicts.
+// js/state.js — ОБНОВЛЕНО ДЛЯ НОВЫХ ФУНКЦИЙ
+// ★ ДОБАВЛЕНО: filterState.fbMarkerFilter (для выбора конкретных разметчиков в фидбеке).
+// ★ ДОБАВЛЕНО: deleteTargetIndex и deleteTargetType (для окна подтверждения удаления).
+// Ранее добавленное: calendarDayOffset, pendingNewData, pendingConflicts, domainHistory.
 
 export const STORAGE_KEY = 'validation_dashboard_data_v3';
 export const FB_STORAGE_KEY = 'validation_feedback_data_v1';
 
 // Количество строк на одной странице таблицы
 export const ITEMS_PER_PAGE = 10;
-export const MAIN_ITEMS_PER_PAGE = 6; // ★ ИЗМЕНЕНО: для главной таблицы результатов (теперь 6)
+export const MAIN_ITEMS_PER_PAGE = 6; // Для главной таблицы результатов
 
 const DEFAULT_NORM_HISTORY = [{ date: '2000-01-01', value: 580 }];
 
@@ -30,6 +30,11 @@ export const state = {
     processedData: [],
     filteredData: [],
     feedbackData: [],
+    
+    // ★ НОВОЕ: Для модального окна подтверждения удаления
+    deleteTargetIndex: null,
+    deleteTargetType: null, // 'feedback', 'task', 'vacation'
+
     editingFeedbackIndex: null,     // Индекс редактируемой записи в календаре
     charts: {},
     currentTab: 'all',
@@ -38,7 +43,7 @@ export const state = {
     domainHistory: [],       
     projects: [],
     
-    // ★ НОВОЕ: Смещение дней для календаря (0 = сегодня, -1 = вчера и т.д.)
+    // Смещение дней для календаря (0 = текущая неделя, -7 = прошлая и т.д.)
     calendarDayOffset: 0,
 
     pagination: {
@@ -58,7 +63,8 @@ export const state = {
         feedbackPool: new Set(),
         feedbackGroup: new Set(),
         fbFormPools: new Set(),
-        fbRecordMarkers: new Set()
+        fbRecordMarkers: new Set(),
+        fbMarkerFilter: new Set() // ★ НОВОЕ: для фильтрации разметчиков в модалке фидбека
     },
 
     feedbackGeneration: {
