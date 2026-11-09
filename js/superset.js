@@ -1,5 +1,5 @@
 // js/superset.js — ФИНАЛЬНАЯ ВЕРСИЯ
-// ★ ИЗМЕНЕНО: computeMainProjectsSet теперь добавляет все проекты из Суперсета (исправляет пустые таблицы).
+// ★ ИЗМЕНЕНО: computeMainProjectsSet собирает все проекты из Суперсета (исправляет пустые таблицы).
 // ★ ИЗМЕНЕНО: getTable1Config без колонки "Период разметки".
 // ★ ДОБАВЛЕНО: getQualityDiscrepancies для страницы Уведомления.
 
@@ -31,7 +31,7 @@ function computeMainProjectsSet() {
         }
     }
     
-    // ★ ИСПРАВЛЕНО: Добавляем базовые проекты из Суперсета, даже если их нет в Валидации
+    // ★ Добавляем базовые проекты из Суперсета, даже если их нет в Валидации
     for (const sp of supersetProjects) {
         if (!sp.endsWith('_validate')) {
             set.add(sp);
@@ -146,12 +146,8 @@ export function getNormsForPeriod(dateFrom, dateTo) {
         segments.push({ value: history[i].value, start: effectiveStart, end: effectiveEnd });
     }
 
-    if (segments.length === 0) {
-        return [{ value: getNormForDate(from), label: null }];
-    }
-    if (segments.length === 1) {
-        return [{ value: segments[0].value, label: null }];
-    }
+    if (segments.length === 0) return [{ value: getNormForDate(from), label: null }];
+    if (segments.length === 1) return [{ value: segments[0].value, label: null }];
 
     const mapped = segments.map((s, idx) => {
         let label = null;
@@ -398,7 +394,7 @@ export function getTable2Config() {
         { key: 'fragments', label: 'Размечено, шт', get: r => String(r.fragments || '') },
         { key: 'balls', label: 'Размечено, б', get: r => String(r.balls || '') },
         { key: 'qualitySuperset', label: 'Качество в суперсете', get: r => String(r.qualitySuperset || '') },
-        { key: 'qualityFact', label: 'Качество факт.', get: r => r.qualityFact != null ? (r.qualityFact * 100).toFixed(2) + '%' : '' },
+        { key: 'qualityFact', label: 'Качество факт.', get: r => r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '' },
         { key: 'norm', label: 'Норматив', get: r => String(r.norm || '') },
         { key: 'withoutQuality', label: 'Без качества, шт', get: r => String(r.withoutQuality || '') }
     ];
@@ -414,8 +410,8 @@ export function getTable3Config() {
 export function getTable4Config() {
     return [
         { key: 'fio', label: 'ФИО', get: r => r.fio || '' },
-        { key: 'factQuality', label: 'Качество', get: r => r.factQuality != null ? (r.factQuality * 100).toFixed(2) + '%' : '' },
-        { key: 'normQuality', label: 'Норматив', get: r => r.normQuality != null ? r.normQuality.toFixed(2) + '%' : '' }
+        { key: 'factQuality', label: 'Качество', get: r => r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '' },
+        { key: 'normQuality', label: 'Норматив', get: r => r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '' }
     ];
 }
 
@@ -704,7 +700,7 @@ export function getTargetQuality(project, pool) {
     return state.superset.norms.globalAvg;
 }
 
-// ===== ★ НОВОЕ: Поиск расхождений для страницы "Уведомления" =====
+// ===== Поиск расхождений для страницы "Уведомления" =====
 export function getQualityDiscrepancies() {
     const discrepancies = [];
     const { fioToEmail } = state.superset.employeeMap || { fioToEmail: {} };
@@ -728,9 +724,9 @@ export function getQualityDiscrepancies() {
                 fio: r.fio,
                 project: r.project,
                 pool: r.task,
-                qsPct: qsPct.toFixed(2),
-                qfPct: qfPct.toFixed(2),
-                diff: diff.toFixed(2)
+                qsPct: qsPct.toFixed(1),
+                qfPct: qfPct.toFixed(1),
+                diff: diff.toFixed(1)
             });
         }
     }
