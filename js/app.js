@@ -1,7 +1,7 @@
-// js/app.js — ФИНАЛЬНАЯ ВЕРСИЯ (Календарь, Модалки, Экспорт)
-// ★ ДОБАВЛЕНО: Обработчики для новых модалок (openAddTypeModal, openEventModal).
-// ★ ИЗМЕНЕНО: В экспорте Excel колонка "Провел" заменена на "Организатор", добавлены поля времени.
-// ★ ИЗМЕНЕНО: Импорт Excel теперь корректно восстанавливает массивы markers, pools и время.
+// js/app.js — ПОЛНАЯ СБОРКА (Обновлено для Календаря, Конфликтов и Загрузки)
+// ★ ДОБАВЛЕНО: Кнопка "Объединить данные" в окне конфликтов (btnConflictMergeAll).
+// ★ ИЗМЕНЕНО: guessFileType обновлен под новые названия файлов.
+// ★ ИЗМЕНЕНО: Экспорт/Импорт Excel сохраняет новые поля календаря (статусы, отпуска).
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
@@ -81,6 +81,14 @@ Object.assign(window, {
     editFeedbackFromCalendar: (idx) => {
         const fb = state.feedbackData[idx];
         if (fb) openAddFeedbackModal(fb.date, idx);
+    },
+    editEventFromCalendar: (idx) => {
+        const fb = state.feedbackData[idx];
+        if (fb) openEventModal(fb.eventType, idx);
+    },
+    confirmDeleteEvent: (idx) => {
+        state.deleteTargetIndex = idx;
+        document.getElementById('confirmDeleteModal').classList.add('active');
     }
 });
 
@@ -134,20 +142,36 @@ document.getElementById('btnDownloadExcel').addEventListener('click', () => {
             }));
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
         }
+        
+        // ★ ОБНОВЛЕНО: Экспорт ОС с учетом новых полей
         if (state.feedbackData.length > 0) {
-            const cleanFeedback = state.feedbackData.map(f => ({
-                "Дата": f.date, 
-                "Разметчик": (f.markers || [f.marker]).join(', '), 
-                "Статус": f.status || "",
-                "Тип ВКС": f.typeVKS || "", 
-                "Организатор": f.conductor || "",
-                "Проект": f.project || "", 
-                "Пулы с ошибками": (f.pools || []).join(', '),
-                "Время с": f.timeFrom || "",
-                "Время по": f.timeTo || ""
-            }));
+            const cleanFeedback = state.feedbackData.map(f => {
+                const base = {
+                    "Дата": f.date, 
+                    "Разметчик": (f.markers || [f.marker || f.marker]).join(', '), 
+                    "Статус": f.status || "",
+                    "Тип ВКС": f.typeVKS || "", 
+                    "Организатор": f.conductor || "",
+                    "Проект": f.project || "", 
+                    "Пулы с ошибками": (f.pools || []).join(', '),
+                    "Время с": f.timeFrom || "",
+                    "Время по": f.timeTo || ""
+                };
+                if (f.eventType === 'task') {
+                    base["Тип записи"] = "Задача";
+                    base["Описание"] = f.description || "";
+                } else if (f.eventType === 'vacation') {
+                    base["Тип записи"] = "Отпуск";
+                    base["Дата начала"] = f.startDate || "";
+                    base["Дата окончания"] = f.endDate || "";
+                } else {
+                    base["Тип записи"] = "ОС";
+                }
+                return base;
+            });
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanFeedback), "Обратная связь");
         }
+        
         if (state.rawEmployeeMap.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawEmployeeMap), "Сотрудники");
         if (state.rawMarkers.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawMarkers), "Markers (сырые)");
         if (state.rawValidation.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.rawValidation), "Валидация (сырые)");
@@ -345,16 +369,17 @@ document.getElementById('btnUploadSource').addEventListener('click', () => { upl
 document.getElementById('btnUploadDB').addEventListener('click', () => { uploadMode = 'db'; importInput.click(); });
 document.getElementById('btnAddMoreFiles').addEventListener('click', () => fileInput.click());
 
+// ★ ОБНОВЛЕНО: Новые названия типов файлов
 function guessFileType(filename) {
     const n = filename.toLowerCase();
-    if (n.includes('marker') || n.includes('разметчик')) return 'Markers';
-    if (n.includes('superset 1') || n.includes('суперсет 1') || n.includes('сет1')) return 'Суперсет 1';
-    if (n.includes('superset 2') || n.includes('суперсет 2') || n.includes('сет2')) return 'Суперсет 2';
-    if (n.includes('superset 3') || n.includes('суперсет 3') || n.includes('сет3')) return 'Суперсет 3';
-    if (n.includes('valid') || n.includes('валидац')) return 'Валидация';
+    if (n.includes('marker') || n.includes('разметчик')) return 'Статистика по исполнителям';
+    if (n.includes('validation_flat') || n.includes('плоск')) return 'Статистика после валидации';
+    if (n.includes('valid') || n.includes('валидац')) return 'Результаты валидации';
     if (n.includes('recommend') || n.includes('рекоменд')) return 'Рекомендации';
-    if (n.includes('employee') || n.includes('сотрудник')) return 'Сотрудники';
-    if (n.includes('flat') || n.includes('плоск')) return 'Плоская валидация';
+    if (n.includes('employee') || n.includes('сотрудник')) return 'Список разметчиков';
+    if (n.includes('superset 1') || n.includes('суперсет 1') || n.includes('сет1') || n.includes('отклонен')) return 'Отклонения баллов в час';
+    if (n.includes('superset 2') || n.includes('суперсет 2') || n.includes('сет2')) return 'Расшифровка по проектам';
+    if (n.includes('superset 3') || n.includes('суперсет 3') || n.includes('сет3')) return 'Расшифровка по разметчикам';
     return 'Другое';
 }
 
@@ -463,6 +488,7 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                     state.rawFlatValidations = parsedF; state.rawSuperset1 = parsedS1;
                     state.rawSuperset2 = parsedS2; state.rawSuperset3 = parsedS3; state.rawEmployeeMap = parsedEmp;
                     
+                    // ★ ОБНОВЛЕНО: Импорт ОС с учетом новых полей
                     if (parsedFb.length > 0) {
                         state.feedbackData = parsedFb.map(row => {
                             let dateStr = row['Дата'];
@@ -477,7 +503,7 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                                 avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
                             }
 
-                            return {
+                            const rec = {
                                 date: dateStr || '', 
                                 markers: (row['Разметчик'] || '').split(',').map(s=>s.trim()).filter(Boolean), 
                                 status: row['Статус'] || '',
@@ -490,6 +516,17 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                                 avgQuality: avgQ,
                                 eventType: 'oc'
                             };
+                            
+                            if (row['Тип записи'] === 'Задача') {
+                                rec.eventType = 'task';
+                                rec.description = row['Описание'] || '';
+                            } else if (row['Тип записи'] === 'Отпуск') {
+                                rec.eventType = 'vacation';
+                                rec.startDate = row['Дата начала'] || dateStr;
+                                rec.endDate = row['Дата окончания'] || dateStr;
+                            }
+                            
+                            return rec;
                         });
                         saveFeedbackToStorage();
                     }
@@ -606,6 +643,14 @@ window.toggleConflictChoice = (idx, type) => {
 
 document.getElementById('btnConflictKeepOld').addEventListener('click', () => {
     state.pendingConflicts.forEach(c => c.choice = 'old');
+    commitNewData(state.pendingConflicts);
+    conflictModal.classList.remove('active');
+    showModalView('done');
+});
+
+// ★ НОВОЕ: Кнопка "Объединить всё"
+document.getElementById('btnConflictMergeAll').addEventListener('click', () => {
+    state.pendingConflicts.forEach(c => c.choice = 'merge');
     commitNewData(state.pendingConflicts);
     conflictModal.classList.remove('active');
     showModalView('done');
