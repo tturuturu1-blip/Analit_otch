@@ -1,9 +1,8 @@
-// js/app.js — ФИНАЛЬНАЯ ВЕРСИЯ (со всеми фиксами экспорта/импорта)
-// ★ ИСПРАВЛЕНО: Экспорт avgQuality для ОС.
-// ★ ИСПРАВЛЕНО: Импорт дат (без сдвига на UTC).
-// ★ ИСПРАВЛЕНО: Импорт задач/отпусков (добавлено поле marker для карточек).
-// ★ ИСПРАВЛЕНО: handleClearAll сбрасывает новые переменные состояния.
+// js/app.js — ФИНАЛЬНАЯ ВЕРСИЯ
+// ★ ИСПРАВЛЕНО: Экспорт/Импорт (avgQuality, задачи, отпуска, локальные даты, поле marker).
+// ★ ИСПРАВЛЕНО: handleClearAll сбрасывает все новые переменные состояния.
 // ★ ИСПРАВЛЕНО: Автообновление списка разметчиков при открытии модалки фидбека.
+// ★ ДОБАВЛЕНО: Вызов renderNotificationsTable (включая renderMissingPools) при обновлении данных.
 
 import { state, loadFromStorage, loadFeedbackFromStorage, saveToStorage, saveFeedbackToStorage } from './state.js';
 import { recomputeDashboard, readExcelFiles, processNewRows, commitNewData } from './data.js';
@@ -145,7 +144,6 @@ document.getElementById('btnDownloadExcel').addEventListener('click', () => {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanProcessed), "Свод валидации");
         }
         
-        // ★ ИСПРАВЛЕНО: Добавлено avgQuality в экспорт
         if (state.feedbackData.length > 0) {
             const cleanFeedback = state.feedbackData.map(f => {
                 const base = {
@@ -208,7 +206,6 @@ document.getElementById('btnDownloadReport').addEventListener('click', async () 
     }
 });
 
-// ★ ИСПРАВЛЕНО: Автообновление списка при открытии
 document.getElementById('btnOpenFeedbackModal').addEventListener('click', () => {
     generateModal.classList.remove('active');
     document.getElementById('feedbackModal').classList.add('active');
@@ -494,7 +491,6 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                     
                     if (parsedFb.length > 0) {
                         state.feedbackData = parsedFb.map(row => {
-                            // ★ ИСПРАВЛЕНО: Парсинг даты без сдвига UTC
                             let dateStr = row['Дата'];
                             if (dateStr) {
                                 const d = parseExcelDate(dateStr);
@@ -511,7 +507,6 @@ document.getElementById('btnPreviewContinue').addEventListener('click', async ()
                                 avgQ = parseFloat(avgQ.replace('%', '').replace(',', '.')) / 100;
                             }
 
-                            // ★ ИСПРАВЛЕНО: Добавлено поле marker
                             const rec = {
                                 date: dateStr || '', 
                                 markers: (row['Разметчик'] || '').split(',').map(s=>s.trim()).filter(Boolean), 
@@ -713,7 +708,6 @@ function handleClearAll() {
     const fbGenContainer = document.getElementById('feedbackGenerationBlocks');
     if (fbGenContainer) fbGenContainer.innerHTML = '';
 
-    // ★ ИСПРАВЛЕНО: Полный сброс новых переменных
     state.deleteTargetIndex = null;
     state.editingFeedbackIndex = null;
     state.filterState.fbMarkerFilter.clear();
