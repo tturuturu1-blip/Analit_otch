@@ -1,7 +1,7 @@
 // js/superset.js — ФИНАЛЬНАЯ ВЕРСИЯ
-// ★ ИЗМЕНЕНО: computeMainProjectsSet собирает все проекты из Суперсета (исправляет пустые таблицы).
-// ★ ИЗМЕНЕНО: getTable1Config без колонки "Период разметки".
-// ★ ДОБАВЛЕНО: getQualityDiscrepancies для страницы Уведомления.
+// ★ ИСПРАВЛЕНО: computeMainProjectsSet теперь собирает проекты ТОЛЬКО из processedData.
+//    Базовые проекты из Суперсета, которых нет в Валидации, больше не попадают в _mainProjects.
+// ★ ОСТАВЛЕНО: _validate-проекты из Суперсета добавляются, только если есть родитель в processedData.
 
 import { state, saveToStorage } from './state.js';
 import { getVal, parseExcelDate, parseHtmlNumber, parseNorm, formatDate } from './utils.js';
@@ -15,14 +15,16 @@ function normalizeProject(project) {
 function computeMainProjectsSet() {
     const set = new Set();
 
-    // 1. Берем все проекты из уже обработанных данных (Валидация, Рекомендации)
+    // ★ ИСПРАВЛЕНО: Берем ТОЛЬКО проекты, которые есть в обработанных данных (Валидация/Плоская/Рекомендации).
+    //    Если по проекту нет валидации, значит, он не считается «проектом на Главной».
     for (const r of state.processedData) {
         if (!r.project) continue;
-        const name = String(r.project).trim();
+        const name = String(r.project).replace(/_validate$/, '').trim();
         if (name) set.add(name);
     }
 
-    // 2. Берем проекты из сырых файлов Суперсета
+    // ★ ИСПРАВЛЕНО: Из Суперсета берем ТОЛЬКО _validate варианты, если есть родитель в processedData.
+    //    Базовые проекты из Суперсета (которых нет в Валидации) больше не добавляем.
     const supersetProjects = new Set();
     for (const arr of [state.rawSuperset1, state.rawSuperset2, state.rawSuperset3]) {
         for (const r of arr) {
@@ -30,23 +32,14 @@ function computeMainProjectsSet() {
             if (proj) supersetProjects.add(proj);
         }
     }
-    
-    // ★ Добавляем базовые проекты из Суперсета, даже если их нет в Валидации
     for (const sp of supersetProjects) {
-        if (!sp.endsWith('_validate')) {
+        if (!sp.endsWith('_validate')) continue;
+        const parent = sp.substring(0, sp.length - '_validate'.length).trim();
+        if (set.has(parent)) {
             set.add(sp);
         }
     }
-    
-    // Добавляем _validate проекты, только если их родитель есть в базе
-    for (const sp of supersetProjects) {
-        if (sp.endsWith('_validate')) {
-            const parent = sp.substring(0, sp.length - '_validate'.length).trim();
-            if (set.has(parent)) {
-                set.add(sp);
-            }
-        }
-    }
+
     return set;
 }
 
@@ -382,7 +375,6 @@ export function getTable1Config() {
         { key: 'ballsPerHour', label: 'Факт баллов/час', get: r => String(r.ballsPerHour || '') },
         { key: 'prodPerHour', label: 'Кпроизв в час', get: r => String(r.prodPerHour || '') },
         { key: 'price', label: 'Цена', get: r => String(r.price || '') }
-        // Удалена колонка period (Период разметки)
     ];
 }
 
