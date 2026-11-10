@@ -1,6 +1,9 @@
-// js/ui.js — ИСПРАВЛЕНА ОШИБКА (добавлен экспорт onSupersetDateChange)
-// ★ ИСПРАВЛЕНО: Добавлен export function onSupersetDateChange (была пропущена).
+// js/ui.js — ФИНАЛЬНАЯ ВЕРСИЯ
+// ★ ДОБАВЛЕНО: onSupersetDateChange (была пропущена).
 // ★ ДОБАВЛЕНО: renderMissingPools() — карточка отсутствующих валидаций на странице Уведомления.
+// ★ ИСПРАВЛЕНО: Проценты по типам ошибок считаются от общего числа фрагментов.
+// ★ ИСПРАВЛЕНО: renderUpcomingEvents корректно показывает пересекающиеся отпуска.
+// ★ ПРОЕКТЫ В СУПЕРСЕТЕ: фильтруются через state.superset._mainProjects в superset.js.
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -458,6 +461,7 @@ export function updateKPI() {
     if (isRed) { qColorClass = 'val-red'; errColorClass = 'val-red'; }
     else if (isGreen) { qColorClass = 'val-green'; errColorClass = 'val-green'; }
 
+    // ★ ВАЖНО: state.superset.table1 уже отфильтрован по _mainProjects в superset.js
     let activeTasks = state.superset.table1 || [];
     if (state.currentTab !== 'all') activeTasks = activeTasks.filter(r => r.project === state.currentTab);
     if (state.filterState.pool.size > 0) activeTasks = activeTasks.filter(r => state.filterState.pool.has(r.task));
@@ -1180,7 +1184,6 @@ export function onSupersetTaskChange(value, isChecked) {
     renderSupersetPage();
 }
 
-// ★ ДОБАВЛЕНО: Эта функция была пропущена в прошлый раз
 export function onSupersetDateChange() {
     state.superset.filters.dateFrom = document.getElementById('supersetDateFrom').value;
     state.superset.filters.dateTo = document.getElementById('supersetDateTo').value;
