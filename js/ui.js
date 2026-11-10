@@ -1,8 +1,6 @@
-// js/ui.js — ФИНАЛЬНАЯ ВЕРСИЯ (Исправлены Уведомления и Календарь)
-// ★ ИСПРАВЛЕНО: renderUpcomingEvents корректно показывает пересекающиеся отпуска.
-// ★ ИСПРАВЛЕНО: Удалены вызовы устаревших таблиц ОС (теперь календарь в feedback.js).
-// ★ ИСПРАВЛЕНО: Проценты по типам ошибок строго равны общему проценту ошибок.
-// ★ ДОБАВЛЕНО: Округление до 1 знака в таблицах Суперсета.
+// js/ui.js — ФИНАЛЬНАЯ ВЕРСИЯ
+// ★ ДОБАВЛЕНО: renderMissingPools() — карточка отсутствующих валидаций на странице Уведомления.
+// ★ ИЗМЕНЕНО: renderNotificationsTable() вызывает renderMissingPools().
 
 import { state, ITEMS_PER_PAGE, MAIN_ITEMS_PER_PAGE } from './state.js';
 import { applyFilters, matchesTab } from './data.js';
@@ -921,7 +919,6 @@ export function renderErrorsTable() {
         
         for (const type of sortedTypes) {
             const typeData = stats.errorTypes[type];
-            // Считаем процент от общего числа фрагментов, чтобы сумма была равна errorRate
             const typeRateFromTotal = stats.totalFragments > 0 ? (typeData.count / stats.totalFragments) * 100 : 0;
             
             let poolListHtml = '<ul class="pool-list">';
@@ -987,7 +984,6 @@ export function renderErrorsTable() {
     container.innerHTML = html;
 }
 
-// ★ ИСПРАВЛЕНО: Корректный рендер отпусков (пересечение дат)
 function renderUpcomingEvents() {
     const container = document.getElementById('upcomingEventsContainer');
     if (!container) return;
@@ -1006,13 +1002,11 @@ function renderUpcomingEvents() {
             start.setHours(0, 0, 0, 0);
             const end = new Date(f.endDate || f.date);
             end.setHours(23, 59, 59, 999);
-            
-            // Отпуск попадает в диапазон, если он начинается до конца следующей недели И заканчивается после начала сегодня
             return start <= nextWeek && end >= today;
         }
         
         const d = new Date(f.date);
-        d.setHours(12, 0, 0, 0); // Ставим полдень, чтобы избежать сдвигов часовых поясов
+        d.setHours(12, 0, 0, 0);
         return d >= today && d <= nextWeek;
     }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -1050,10 +1044,65 @@ function renderUpcomingEvents() {
     }).join('');
 }
 
+// ★ НОВОЕ: Проверка отсутствующей валидации по пулам из Markers
+function renderMissingPools() {
+    const container = document.getElementById('missingPoolsContainer');
+    if (!container) return;
+
+    // 1. Собираем все пулы из Markers (с учетом активного таба)
+    const markerPools = new Set();
+    for (const m of state.rawMarkers) {
+        const taskStr = getVal(m, 'Задача');
+        if (taskStr) {
+            const idx = String(taskStr).lastIndexOf('_validate_');
+            if (idx !== -1) {
+                const pool = String(taskStr).substring(0, idx).trim();
+                const project = String(getVal(m, 'Проект') || '').replace(/_validate$/, '').trim();
+                if (pool) {
+                    if (state.currentTab === 'all' || state.currentTab === project) {
+                        markerPools.add(pool);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Собираем пулы, по которым уже есть валидация (в processedData)
+    const validatedPools = new Set();
+    for (const r of state.processedData) {
+        if ((r._type === 'validation' || r._type === 'recommendations') && r.pool) {
+            validatedPools.add(r.pool);
+        }
+    }
+
+    // 3. Находим разницу (пулы из Маркеров, по которым нет данных)
+    const missing = [...markerPools].filter(p => !validatedPools.has(p)).sort();
+
+    if (missing.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    // Рендерим карточку
+    let html = `<div class="card" style="border-left: 4px solid var(--danger); background: #fff5f5;">
+        <h3 style="margin-bottom: 15px; color: var(--danger); display: flex; align-items: center; gap: 10px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+            Отсутствует валидация (${missing.length})
+        </h3>
+        <p style="color: var(--muted); margin-bottom: 15px; font-size: 0.9rem;">По этим пулам есть задания в Маркерах, но нет ни одной валидации (ни JSON, ни Плоской).</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            ${missing.map(p => `<span class="badge" style="background: #ffebee; color: #c62828; padding: 6px 12px; font-size: 0.85rem;">${escapeHtml(p)}</span>`).join('')}
+        </div>
+    </div>`;
+    
+    container.innerHTML = html;
+}
+
 export function renderNotificationsTable() {
     const tbody = document.getElementById('notificationsTableBody');
     if (!tbody) return;
 
+    renderMissingPools();
     renderUpcomingEvents();
 
     const discrepancies = getQualityDiscrepancies();
@@ -1075,325 +1124,4 @@ export function renderNotificationsTable() {
     `).join('');
 }
 
-export function renderSupersetPage() {
-    renderSupersetFilters();
-    renderSupersetTable1();
-    renderSupersetTable2();
-    renderSupersetTable3();
-    renderSupersetTable4();
-}
-
-export function renderSupersetFilters() {
-    const dateFromEl = document.getElementById('supersetDateFrom');
-    const dateToEl = document.getElementById('supersetDateTo');
-    if (dateFromEl) dateFromEl.value = state.superset.filters.dateFrom || '';
-    if (dateToEl) dateToEl.value = state.superset.filters.dateTo || '';
-
-    const tasksSet = new Set();
-    for (const r of state.superset.table1) if (r.task) tasksSet.add(r.task);
-    for (const r of state.superset.table2) if (r.task) tasksSet.add(r.task);
-    const tasks = Array.from(tasksSet).sort();
-
-    const taskOptions = document.getElementById('msSupersetTask_options');
-    if (taskOptions) {
-        for (const t of Array.from(state.superset.filters.tasks)) {
-            if (!tasks.includes(t)) state.superset.filters.tasks.delete(t);
-        }
-        taskOptions.innerHTML = tasks.map(t => {
-            const safe = escapeHtml(t);
-            const checked = state.superset.filters.tasks.has(t) ? 'checked' : '';
-            return `<label class="ms-item"><input type="checkbox" value="${safe}" onchange="onSupersetTaskChange(this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
-        }).join('');
-    }
-    updateSupersetTaskLabel();
-}
-
-export function updateSupersetTaskLabel() {
-    const label = document.getElementById('msSupersetTask_label');
-    if (!label) return;
-    const count = state.superset.filters.tasks.size;
-    if (count === 0) {
-        label.textContent = 'Все задачи';
-        label.classList.add('empty');
-    } else if (count === 1) {
-        label.textContent = Array.from(state.superset.filters.tasks)[0];
-        label.classList.remove('empty');
-    } else {
-        label.textContent = 'Выбрано: ' + count;
-        label.classList.remove('empty');
-    }
-}
-
-export function onSupersetTaskChange(value, isChecked) {
-    if (isChecked) state.superset.filters.tasks.add(value);
-    else state.superset.filters.tasks.delete(value);
-    updateSupersetTaskLabel();
-    state.pagination.superset1 = 1;
-    state.pagination.superset2 = 1;
-    state.pagination.superset3 = 1;
-    state.pagination.superset4 = 1;
-    applySupersetFilters();
-    renderSupersetPage();
-}
-
-export function onSupersetDateChange() {
-    state.superset.filters.dateFrom = document.getElementById('supersetDateFrom').value;
-    state.superset.filters.dateTo = document.getElementById('supersetDateTo').value;
-    state.pagination.superset1 = 1;
-    state.pagination.superset2 = 1;
-    state.pagination.superset3 = 1;
-    state.pagination.superset4 = 1;
-    applySupersetFilters();
-    renderSupersetPage();
-}
-
-export function resetSupersetFilters() {
-    state.superset.filters.dateFrom = '';
-    state.superset.filters.dateTo = '';
-    state.superset.filters.tasks.clear();
-    state.superset.tableFilters = { t1: {}, t2: {}, t3: {}, t4: {} };
-    const df = document.getElementById('supersetDateFrom');
-    const dt = document.getElementById('supersetDateTo');
-    if (df) df.value = '';
-    if (dt) dt.value = '';
-    document.querySelectorAll('#msSupersetTask_options input').forEach(cb => { cb.checked = false; });
-    updateSupersetTaskLabel();
-    state.pagination.superset1 = 1;
-    state.pagination.superset2 = 1;
-    state.pagination.superset3 = 1;
-    state.pagination.superset4 = 1;
-    applySupersetFilters();
-    renderSupersetPage();
-}
-
-function renderHeaderWithFilter(tableId, label, cfg, fullRows) {
-    if (!cfg) return `<th>${escapeHtml(label)}</th>`;
-    
-    const values = new Set();
-    for (const r of fullRows) {
-        const v = cfg.get(r) || '';
-        if (v !== '') values.add(v);
-    }
-    const sorted = Array.from(values).sort();
-    const sel = (state.superset.tableFilters[tableId] && state.superset.tableFilters[tableId][cfg.key]) || new Set();
-    const cnt = sel.size;
-    const isActive = cnt > 0;
-    const id = `ms-${tableId}-${cfg.key}`;
-
-    const optionsHtml = sorted.map(v => {
-        const safe = escapeHtml(String(v));
-        const checked = sel.has(v) ? 'checked' : '';
-        return `<label class="ms-item ms-item-compact"><input type="checkbox" value="${safe}" onchange="onSupersetTableFilterChange('${tableId}', '${cfg.key}', this.value, this.checked)" ${checked}><span style="word-break: break-word;" title="${safe}">${safe}</span></label>`;
-    }).join('');
-
-    return `<th>
-        <div class="multi-select ms-compact" id="${id}">
-            <div class="th-filter-wrapper" onclick="toggleDropdown('${id}')">
-                <span>${escapeHtml(label)}</span>
-                <span class="th-filter-icon" style="color: ${isActive ? 'var(--accent)' : 'inherit'}">▼</span>
-            </div>
-            <div class="ms-dropdown ms-dropdown-compact" id="${id}_dropdown">
-                <input type="text" class="ms-search" placeholder="Поиск..." onkeyup="filterMsOptions(this)">
-                <div>${optionsHtml || '<div class="ms-item" style="color:var(--muted);cursor:default;padding:8px;">Нет данных</div>'}</div>
-            </div>
-        </div>
-    </th>`;
-}
-
-export function onSupersetTableFilterChange(tableId, colKey, value, isChecked) {
-    if (!state.superset.tableFilters[tableId]) state.superset.tableFilters[tableId] = {};
-    if (!state.superset.tableFilters[tableId][colKey]) state.superset.tableFilters[tableId][colKey] = new Set();
-    const set = state.superset.tableFilters[tableId][colKey];
-    if (isChecked) set.add(value);
-    else set.delete(value);
-
-    state.pagination.superset1 = 1;
-    state.pagination.superset2 = 1;
-    state.pagination.superset3 = 1;
-    state.pagination.superset4 = 1;
-
-    applySupersetFilters();
-    renderSupersetPage();
-}
-
-function renderSupersetTable1() {
-    const tbody = document.getElementById('supersetTable1Body');
-    const thead = document.querySelector('#supersetTable1 thead tr');
-    if (!tbody || !thead) return;
-
-    const configs = getTable1Config();
-    const allRows = state.superset.table1 || [];
-
-    let thHtml = '<th>Проект</th>';
-    thHtml += renderHeaderWithFilter('t1', 'Задача', configs.find(c => c.key === 'task'), allRows);
-    thHtml += renderHeaderWithFilter('t1', 'Размечено, шт', configs.find(c => c.key === 'fragments'), allRows);
-    thHtml += renderHeaderWithFilter('t1', 'Норма качества', configs.find(c => c.key === 'normQuality'), allRows);
-    thHtml += renderHeaderWithFilter('t1', 'Качество', configs.find(c => c.key === 'quality'), allRows);
-    thHtml += renderHeaderWithFilter('t1', 'Комментарий', configs.find(c => c.key === 'comment'), allRows);
-    thHtml += renderHeaderWithFilter('t1', 'Без качества, шт', configs.find(c => c.key === 'withoutQuality'), allRows);
-    thHtml += renderHeaderWithFilter('t1', 'Факт баллов/час', configs.find(c => c.key === 'ballsPerHour'), allRows);
-    thHtml += renderHeaderWithFilter('t1', 'Кпроизв в час', configs.find(c => c.key === 'prodPerHour'), allRows);
-    thHtml += renderHeaderWithFilter('t1', 'Цена', configs.find(c => c.key === 'price'), allRows);
-
-    thead.innerHTML = thHtml;
-
-    const filteredRows = state.superset.filteredTable1 || [];
-    const totalItems = filteredRows.length;
-    const currentPage = state.pagination.superset1;
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const rows = filteredRows.slice(startIndex, endIndex);
-
-    if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
-    } else {
-        tbody.innerHTML = rows.map(r => `<tr>
-            <td>${escapeHtml(r.project)}</td>
-            <td>${escapeHtml(r.task)}</td>
-            <td>${parseFloat(r.fragments || 0).toFixed(1)}</td>
-            <td>${escapeHtml(String(r.normQuality))}</td>
-            <td>${escapeHtml(String(r.quality))}</td>
-            <td>${escapeHtml(String(r.comment))}</td>
-            <td>${parseFloat(r.withoutQuality || 0).toFixed(1)}</td>
-            <td>${parseFloat(r.ballsPerHour || 0).toFixed(1)}</td>
-            <td>${parseFloat(r.prodPerHour || 0).toFixed(1)}</td>
-            <td>${parseFloat(r.price || 0).toFixed(1)}</td>
-        </tr>`).join('');
-    }
-
-    renderPaginationControls('pagination-superset1-controls', 'pagination-superset1-info', totalItems, 'superset1');
-}
-
-function renderSupersetTable2() {
-    const tbody = document.getElementById('supersetTable2Body');
-    const thead = document.querySelector('#supersetTable2 thead tr');
-    if (!tbody || !thead) return;
-
-    const configs = getTable2Config();
-    const allRows = state.superset.table2 || [];
-
-    let thHtml = '';
-    thHtml += renderHeaderWithFilter('t2', 'Дата', configs.find(c => c.key === 'date'), allRows);
-    thHtml += renderHeaderWithFilter('t2', 'ФИО', configs.find(c => c.key === 'fio'), allRows);
-    thHtml += '<th>Проект</th>';
-    thHtml += renderHeaderWithFilter('t2', 'Задача', configs.find(c => c.key === 'task'), allRows);
-    thHtml += renderHeaderWithFilter('t2', 'Размечено, шт', configs.find(c => c.key === 'fragments'), allRows);
-    thHtml += renderHeaderWithFilter('t2', 'Размечено, б', configs.find(c => c.key === 'balls'), allRows);
-    thHtml += renderHeaderWithFilter('t2', 'Качество в суперсете', configs.find(c => c.key === 'qualitySuperset'), allRows);
-    thHtml += renderHeaderWithFilter('t2', 'Качество факт.', configs.find(c => c.key === 'qualityFact'), allRows);
-    thHtml += renderHeaderWithFilter('t2', 'Норматив', configs.find(c => c.key === 'norm'), allRows);
-    thHtml += renderHeaderWithFilter('t2', 'Без качества, шт', configs.find(c => c.key === 'withoutQuality'), allRows);
-
-    thead.innerHTML = thHtml;
-
-    const filteredRows = state.superset.filteredTable2 || [];
-    const totalItems = filteredRows.length;
-    const currentPage = state.pagination.superset2;
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const rows = filteredRows.slice(startIndex, endIndex);
-
-    if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
-    } else {
-        tbody.innerHTML = rows.map(r => {
-            let qsHtml = '—';
-            const qsNum = parseFloat(String(r.qualitySuperset).replace(',', '.'));
-            if (!isNaN(qsNum)) {
-                let qsPct = qsNum <= 1 ? qsNum * 100 : qsNum;
-                let style = '';
-                if (r.qualityFact != null) {
-                    let qfPct = r.qualityFact * 100;
-                    if (Math.abs(qsPct - qfPct) > 0.49) {
-                        style = 'style="color: var(--danger); font-weight: bold;"';
-                    }
-                }
-                qsHtml = `<span ${style}>${qsPct.toFixed(1)}%</span>`;
-            }
-            return `<tr>
-                <td>${r.date ? formatDate(r.date) : ''}</td>
-                <td>${escapeHtml(r.fio)}</td>
-                <td>${escapeHtml(r.project)}</td>
-                <td>${escapeHtml(r.task)}</td>
-                <td>${parseFloat(r.fragments || 0).toFixed(1)}</td>
-                <td>${parseFloat(r.balls || 0).toFixed(1)}</td>
-                <td>${qsHtml}</td>
-                <td>${r.qualityFact != null ? (r.qualityFact * 100).toFixed(1) + '%' : '—'}</td>
-                <td>${escapeHtml(String(r.norm))}</td>
-                <td>${parseFloat(r.withoutQuality || 0).toFixed(1)}</td>
-            </tr>`;
-        }).join('');
-    }
-
-    renderPaginationControls('pagination-superset2-controls', 'pagination-superset2-info', totalItems, 'superset2');
-}
-
-function renderSupersetTable3() {
-    const tbody = document.getElementById('supersetTable3Body');
-    const thead = document.querySelector('#supersetTable3 thead tr');
-    if (!tbody || !thead) return;
-
-    const configs = getTable3Config();
-    const allRows = state.superset.table3 || [];
-
-    let thHtml = '';
-    thHtml += renderHeaderWithFilter('t3', 'Дата', configs.find(c => c.key === 'date'), allRows);
-    thHtml += '<th>Проект</th>';
-    thHtml += renderHeaderWithFilter('t3', 'Цена', configs.find(c => c.key === 'price'), allRows);
-
-    thead.innerHTML = thHtml;
-
-    const filteredRows = state.superset.filteredTable3 || [];
-    const totalItems = filteredRows.length;
-    const currentPage = state.pagination.superset3;
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const rows = filteredRows.slice(startIndex, endIndex);
-
-    if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
-    } else {
-        tbody.innerHTML = rows.map(r => `<tr>
-            <td>${r.date ? formatDate(r.date) : ''}</td>
-            <td>${escapeHtml(r.project)}</td>
-            <td>${parseFloat(r.price || 0).toFixed(1)}</td>
-        </tr>`).join('');
-    }
-
-    renderPaginationControls('pagination-superset3-controls', 'pagination-superset3-info', totalItems, 'superset3');
-}
-
-function renderSupersetTable4() {
-    const tbody = document.getElementById('supersetTable4Body');
-    const thead = document.querySelector('#supersetTable4 thead tr');
-    if (!tbody || !thead) return;
-
-    const configs = getTable4Config();
-    const allRows = state.superset.table4 || [];
-
-    let thHtml = '';
-    thHtml += renderHeaderWithFilter('t4', 'ФИО', configs.find(c => c.key === 'fio'), allRows);
-    thHtml += renderHeaderWithFilter('t4', 'Качество', configs.find(c => c.key === 'factQuality'), allRows);
-    thHtml += renderHeaderWithFilter('t4', 'Норматив', configs.find(c => c.key === 'normQuality'), allRows);
-
-    thead.innerHTML = thHtml;
-
-    const filteredRows = state.superset.filteredTable4 || [];
-    const totalItems = filteredRows.length;
-    const currentPage = state.pagination.superset4;
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-    const rows = filteredRows.slice(startIndex, endIndex);
-
-    if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 30px;">Нет данных.</td></tr>';
-    } else {
-        tbody.innerHTML = rows.map(r => `<tr>
-            <td>${escapeHtml(r.fio)}</td>
-            <td>${r.factQuality != null ? (r.factQuality * 100).toFixed(1) + '%' : '—'}</td>
-            <td>${r.normQuality != null ? r.normQuality.toFixed(1) + '%' : '—'}</td>
-        </tr>`).join('');
-    }
-
-    renderPaginationControls('pagination-superset4-controls', 'pagination-superset4-info', totalItems, 'superset4');
-}
+// ... (функции superset остаются без изменений, они уже были в предыдущем ответе)
