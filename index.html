@@ -76,7 +76,6 @@
 
             <!-- ================= ПРОЕКТЫ ================= -->
             <section id="section-main" class="section active">
-                <!-- Заголовок вынесен наверх, над фильтрами -->
                 <h2 class="page-title">Проекты</h2>
 
                 <!-- ПАНЕЛЬ ФИЛЬТРОВ 1 (Для Статистики и Валидации) -->
@@ -199,7 +198,6 @@
                         </div>
 
                         <div class="table-card">
-                            <!-- Пагинация перенесена в шапку -->
                             <div class="table-header" style="flex-wrap: nowrap;">
                                 <h3>Результаты валидации</h3>
                                 <div class="pagination-container" id="pagination-data" style="margin: 0; border: none; padding: 0; background: transparent; width: auto;">
@@ -352,7 +350,9 @@
             <section id="section-notifications" class="section">
                 <h2 class="page-title">Уведомления</h2>
                 
-                <!-- ★ НОВОЕ: Карточки запланированных событий -->
+                <!-- ★ НОВОЕ: Контейнер для отсутствующих пулов валидации -->
+                <div id="missingPoolsContainer" style="margin-bottom: 20px;"></div>
+
                 <div id="upcomingEventsContainer" class="upcoming-events-grid"></div>
 
                 <p style="color: var(--muted); margin-bottom: 20px; margin-top: 20px;">Показаны записи, где качество в суперсете отличается от факта более чем на 0.49%.</p>
@@ -409,7 +409,6 @@
                     <div class="upload-desc">Импорт ранее сохранённого Excel</div>
                 </button>
                 
-                <!-- ★ НОВОЕ: Карточка с иконкой информации -->
                 <button class="upload-card" id="btnUploadSource">
                     <div class="info-tooltip-container" onclick="event.stopPropagation()">
                         <span class="info-icon">ⓘ</span>
@@ -521,7 +520,6 @@
                     </div>
                 </div>
             </div>
-            <!-- ★ ИЗМЕНЕНО: "группу" на "разметчиков", ID изменен на msFbMarkerFilter -->
             <div class="filter-group" style="margin-bottom: 0; min-width: 250px;">
                 <label>Выберите разметчиков</label>
                 <div class="multi-select" id="msFbMarkerFilter">
@@ -574,7 +572,6 @@
         
         <div id="conflictList" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;"></div>
         
-        <!-- ★ НОВОЕ: Кнопка "Объединить всё" -->
         <div style="display: flex; gap: 15px; justify-content: center; margin-top: 25px;">
             <button class="secondary" id="btnConflictKeepOld">Оставить всё старое</button>
             <button class="success" id="btnConflictMergeAll" style="background: var(--warning); color: #000;">Объединить данные</button>
@@ -583,7 +580,7 @@
     </div>
 </div>
 
-<!-- ★ 6. Окно выбора типа записи -->
+<!-- 6. Окно выбора типа записи -->
 <div class="modal-overlay" id="addTypeModal">
     <div class="modal-content" style="max-width: 600px;">
         <button class="modal-close-x" onclick="document.getElementById('addTypeModal').classList.remove('active')">&times;</button>
@@ -611,7 +608,7 @@
     </div>
 </div>
 
-<!-- ★ 7. Окно добавления Задачи/Отпуска (с динамическими полями) -->
+<!-- 7. Окно добавления Задачи/Отпуска -->
 <div class="modal-overlay" id="addEventModal">
     <div class="modal-content" style="max-width: 500px;">
         <button class="modal-close-x" onclick="document.getElementById('addEventModal').classList.remove('active')">&times;</button>
@@ -627,7 +624,6 @@
                 </select>
             </div>
             
-            <!-- Поля для Задачи -->
             <div id="eventFieldsTask" style="display:none; flex-direction:column; gap:15px;">
                 <div class="form-group">
                     <label>Задача</label>
@@ -653,7 +649,6 @@
                 </div>
             </div>
 
-            <!-- Поля для Отпуска -->
             <div id="eventFieldsVacation" style="display:none; flex-direction:column; gap:15px;">
                 <div style="display:flex; gap:10px;">
                     <div class="form-group" style="flex:1;">
@@ -683,7 +678,6 @@
                 <label>Проект</label>
                 <input type="text" id="fbModalProject" list="qualProjectList" placeholder="Проект">
             </div>
-            <!-- ★ НОВОЕ: Поле даты рядом с проектом -->
             <div class="form-group">
                 <label>Дата</label>
                 <input type="date" id="fbModalDate">
@@ -704,7 +698,6 @@
                 </div>
             </div>
             
-            <!-- ★ ИЗМЕНЕНО: Время на одной строке -->
             <div style="display:flex; gap:10px; grid-column: 1 / -1;">
                 <div class="form-group" style="flex:1;">
                     <label>Время начала</label>
@@ -759,7 +752,7 @@
     </div>
 </div>
 
-<!-- ★ 9. НОВОЕ: Окно подтверждения удаления -->
+<!-- 9. Окно подтверждения удаления -->
 <div class="modal-overlay" id="confirmDeleteModal">
     <div class="modal-content" style="max-width: 400px; text-align: center;">
         <h2 class="modal-title" style="color: var(--danger); margin-bottom: 15px;">Удалить запись?</h2>
